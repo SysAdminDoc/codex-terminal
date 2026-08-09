@@ -1,6 +1,6 @@
 # Codex Terminal
 
-[![Version](https://img.shields.io/badge/version-0.1.0-cba6f7?style=flat-square)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-0.2.0-cba6f7?style=flat-square)](CHANGELOG.md)
 [![License](https://img.shields.io/badge/license-MIT-89b4fa?style=flat-square)](LICENSE)
 [![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux-a6e3a1?style=flat-square)](#requirements)
 [![Editors](https://img.shields.io/badge/editors-VS%20Code%20%7C%20VSCodium-f9e2af?style=flat-square)](#requirements)
@@ -43,8 +43,13 @@ The real Codex TUI, started in the workspace folder:
 
 ## Usage
 
-- **Status bar** — click **✨ Codex** (bottom right).
-- **Editor title bar** — the ✨ button.
+- **Activity bar** — the `>_` icon opens a **Launch** panel with every action. This is the one
+  surface that is always present, so it is the reliable button.
+- **Status bar** — **✨ Codex**, bottom right. *Invisible if you have
+  `"workbench.statusBar.visible": false`* — no extension can render there, and nothing warns
+  you. Use the activity bar instead.
+- **Editor title bar** — the ✨ button. Needs a focused text editor, so it is absent on an
+  empty workspace (`"workbench.startupEditor": "none"`).
 - **Terminal `+` dropdown** — pick **Codex**.
 - **Command Palette** — `Codex Terminal: New Session`, `Resume Last Session`,
   `Resume Session (picker)`, `Fork Last Session`, `Focus Codex Terminal`,
@@ -99,22 +104,23 @@ VS Code, Insiders, Cursor).
 Command line:
 
 ```powershell
-codium --install-extension codex-terminal-0.1.0.vsix   # VSCodium
-code   --install-extension codex-terminal-0.1.0.vsix   # VS Code
+codium --install-extension codex-terminal-0.2.0.vsix   # VSCodium
+code   --install-extension codex-terminal-0.2.0.vsix   # VS Code
 ```
 
 Or from inside the editor: **Extensions** view → `...` menu (top of the sidebar) →
 **Install from VSIX…** → pick the file.
 
-Either way, reload the window afterwards (**Developer: Reload Window**) and the ✨ Codex
-button appears in the status bar.
+Either way, reload the window afterwards (**Developer: Reload Window**, or just open a new
+window) — a running extension host does not pick up a freshly installed extension. The `>_`
+Codex icon then appears in the activity bar.
 
 ## Build from source
 
 ```powershell
 npm install
 npm run check     # clean, compile, lint, test, bundle
-npm run package   # -> dist/codex-terminal-0.1.0.vsix
+npm run package   # -> dist/codex-terminal-0.2.0.vsix
 ```
 
 `npm run check` runs 21 unit tests over the shell-quoting rules — the part that is easy to get

@@ -2,7 +2,7 @@
   "name": "codex-terminal",
   "displayName": "Codex Terminal",
   "description": "One click opens Codex CLI in a real PowerShell tab. Pins the shell, contributes a native terminal profile, and adds resume/fork sessions.",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "publisher": "sysadmindoc",
   "license": "MIT",
   "author": "SysAdminDoc",
@@ -37,6 +37,24 @@
     "onStartupFinished"
   ],
   "contributes": {
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "codexTerminalContainer",
+          "title": "Codex Terminal",
+          "icon": "resources/activity-icon.svg"
+        }
+      ]
+    },
+    "views": {
+      "codexTerminalContainer": [
+        {
+          "id": "codexTerminal.actions",
+          "name": "Launch",
+          "icon": "resources/activity-icon.svg"
+        }
+      ]
+    },
     "terminal": {
       "profiles": [
         {
@@ -85,6 +103,13 @@
       }
     ],
     "menus": {
+      "view/title": [
+        {
+          "command": "codexTerminal.new",
+          "when": "view == codexTerminal.actions",
+          "group": "navigation@1"
+        }
+      ],
       "editor/title": [
         {
           "command": "codexTerminal.new",
@@ -230,7 +255,7 @@
     "lint": "eslint src --ext ts",
     "test": "npm run compile && node --test \"out/test/**/*.test.js\"",
     "check": "npm run clean && npm run compile && npm run lint && node --test \"out/test/**/*.test.js\" && npm run bundle",
-    "package": "npm run check && vsce package --out dist/codex-terminal-0.1.0.vsix",
+    "package": "npm run check && vsce package --out dist/codex-terminal-0.2.0.vsix",
     "vscode:prepublish": "npm run clean && npm run bundle"
   },
   "devDependencies": {

@@ -10,6 +10,7 @@ import {
   type ShellKind,
 } from './launcher';
 import { buildFileReference } from './reference';
+import { ActionsViewProvider } from './actionsView';
 
 const PWSH_PROBE = [
   'C:\\Program Files\\PowerShell\\7\\pwsh.exe',
@@ -245,8 +246,21 @@ export function activate(context: vscode.ExtensionContext): void {
     }),
   );
 
+  context.subscriptions.push(
+    vscode.window.registerTreeDataProvider('codexTerminal.actions', new ActionsViewProvider()),
+  );
+
   createStatusBarItem(context);
-  log.info('Codex Terminal activated');
+
+  // Worth logging: with `workbench.statusBar.visible: false` the status bar item is created
+  // successfully and is simply never rendered, with no error anywhere to explain it.
+  const statusBarVisible = vscode.workspace
+    .getConfiguration('workbench')
+    .get<boolean>('statusBar.visible', true);
+  log.info(
+    `Codex Terminal activated (workbench.statusBar.visible=${statusBarVisible}` +
+      `${statusBarVisible ? '' : ' — status bar button cannot render; use the activity bar'})`,
+  );
 }
 
 export function deactivate(): void {

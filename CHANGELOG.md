@@ -3,6 +3,21 @@
 All notable changes to Codex Terminal are documented here.
 This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.0] - 2026-08-09
+
+### Added
+
+- **Activity bar entry** with a *Launch* panel listing every action (new, resume last, resume
+  picker, fork last, send file reference). The status bar item is not a reliable button:
+  `"workbench.statusBar.visible": false` hides every extension's status bar contribution with
+  no error, and the editor title button needs a focused text editor, which a workspace opened
+  with `"workbench.startupEditor": "none"` does not have. The activity bar is always present.
+- Activation now logs the value of `workbench.statusBar.visible`, so a missing status bar
+  button is diagnosable from *Codex Terminal: Show Log* instead of looking like a dead
+  extension.
+- `install.cmd` shipped as a release asset — double-clicking a `.vsix` on Windows hands it to
+  Visual Studio's VSIX Installer, which refuses VS Code extensions.
+
 ## [0.1.0] - 2026-08-09
 
 Initial release.
@@ -26,4 +41,5 @@ Initial release.
 - Errors surface as a notification with a *Show Log* action, backed by a `Codex Terminal`
   log output channel.
 
+[0.2.0]: https://github.com/SysAdminDoc/codex-terminal/releases/tag/v0.2.0
 [0.1.0]: https://github.com/SysAdminDoc/codex-terminal/releases/tag/v0.1.0
