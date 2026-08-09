@@ -3,7 +3,7 @@
   "displayName": "%extension.displayName%",
   "description": "%extension.description%",
   "l10n": "./l10n",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "publisher": "sysadmindoc",
   "license": "MIT",
   "author": "SysAdminDoc",
@@ -303,7 +303,7 @@
     "test": "npm run compile && node --test \"out/test/*.test.js\"",
     "test:integration": "npm run compile && npm run bundle && vscode-test --label hostile --jobs 1",
     "check": "npm run clean && npm run compile && npm run lint && node --test \"out/test/*.test.js\" && npm run bundle",
-    "package": "npm run check && vsce package --out dist/codex-terminal-0.2.0.vsix",
+    "package": "npm run check && vsce package --out dist/codex-terminal-0.3.0.vsix",
     "vscode:prepublish": "npm run clean && npm run bundle"
   },
   "devDependencies": {

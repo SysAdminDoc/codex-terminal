@@ -1,6 +1,6 @@
 # Codex Terminal
 
-[![Version](https://img.shields.io/badge/version-0.2.0-cba6f7?style=flat-square)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-0.3.0-cba6f7?style=flat-square)](CHANGELOG.md)
 [![License](https://img.shields.io/badge/license-MIT-89b4fa?style=flat-square)](LICENSE)
 [![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux-a6e3a1?style=flat-square)](#requirements)
 [![Editors](https://img.shields.io/badge/editors-VS%20Code%20%7C%20VSCodium-f9e2af?style=flat-square)](#requirements)
@@ -140,8 +140,8 @@ VS Code, Insiders, Cursor).
 Command line:
 
 ```powershell
-codium --install-extension codex-terminal-0.2.0.vsix   # VSCodium
-code   --install-extension codex-terminal-0.2.0.vsix   # VS Code
+codium --install-extension codex-terminal-0.3.0.vsix   # VSCodium
+code   --install-extension codex-terminal-0.3.0.vsix   # VS Code
 ```
 
 Or from inside the editor: **Extensions** view → `...` menu (top of the sidebar) →
@@ -157,10 +157,10 @@ Codex icon then appears in the activity bar.
 npm install
 npm run check     # clean, compile, lint, test, bundle
 npm run l10n:export # refresh the default English localization bundle
-npm run package   # -> dist/codex-terminal-0.2.0.vsix
+npm run package   # -> dist/codex-terminal-0.3.0.vsix
 ```
 
-`npm run check` runs 27 unit tests over shell quoting, command resolution, and diagnostics. Run
+`npm run check` runs 38 unit tests over shell quoting, command resolution, and diagnostics. Run
 `npm run test:integration` separately to boot the hostile-settings VS Code host suite.
 
 ## Unaffiliated

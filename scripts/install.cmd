@@ -7,7 +7,7 @@ rem Installer (the .vsix file association), which refuses VS Code extensions wit
 rem "not successful for all the selected products". A .vsix is an archive the editor
 rem unpacks, not an installer - it has to be passed to the editor's own CLI.
 rem
-rem Usage: double-click this file, or: install.cmd "C:\path\to\codex-terminal-0.1.0.vsix"
+rem Usage: double-click this file, or: install.cmd "C:\path\to\codex-terminal-0.3.0.vsix"
 
 title Codex Terminal - install
 
@@ -21,7 +21,7 @@ if "%VSIX%"=="" (
 
 if "%VSIX%"=="" (
     echo [ERROR] No .vsix found next to this script or in ..\dist.
-    echo         Pass one explicitly:  install.cmd "C:\path\to\codex-terminal-0.1.0.vsix"
+    echo         Pass one explicitly:  install.cmd "C:\path\to\codex-terminal-0.3.0.vsix"
     echo.
     pause
     exit /b 1
