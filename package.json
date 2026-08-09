@@ -271,8 +271,12 @@
     "@typescript-eslint/parser": "^8.18.0",
     "@vscode/test-cli": "^0.0.15",
     "@vscode/vsce": "^3.2.1",
-    "esbuild": "^0.24.0",
+    "esbuild": "^0.28.2",
     "eslint": "^8.57.1",
     "typescript": "^5.7.2"
+  },
+  "overrides": {
+    "diff": "^8.0.4",
+    "serialize-javascript": "^7.0.6"
   }
 }
