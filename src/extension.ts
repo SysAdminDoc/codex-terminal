@@ -5,6 +5,7 @@ import * as vscode from 'vscode';
 import {
   buildLaunchPlan,
   modeArgs,
+  resolveCommandPath,
   type LaunchMode,
   type LaunchRequest,
   type ShellKind,
@@ -17,6 +18,7 @@ const PWSH_PROBE = [
   'C:\\Program Files (x86)\\PowerShell\\7\\pwsh.exe',
   'C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe',
 ];
+const CODEX_INSTALL_URL = 'https://github.com/openai/codex#installation';
 
 let log: vscode.LogOutputChannel;
 /** Terminals this extension created, newest last. Pruned as they close. */
@@ -100,7 +102,37 @@ function terminalOptions(
       `args=${JSON.stringify(plan.shellArgs)} cwd=${options.cwd ?? '<none>'}` +
       (plan.sendTextFallback ? ` sendText=${JSON.stringify(plan.sendTextFallback)}` : ''),
   );
+  if (plan.shellResolutionReason) {
+    log.info(`shell resolution: ${plan.shellResolutionReason}`);
+  }
   return { options, plan };
+}
+
+function preflightCodexCommand(command: string): string | undefined {
+  const resolved = resolveCommandPath(command, {
+    platform: process.platform,
+    pathValue: process.env.PATH,
+    cwd: process.cwd(),
+  });
+  if (resolved) {
+    log.info(`Codex command preflight passed: ${JSON.stringify(command)} -> ${resolved}`);
+    return resolved;
+  }
+
+  const message =
+    `Codex CLI command ${JSON.stringify(command)} was not found. ` +
+    'Install @openai/codex or set codexTerminal.command to an executable path.';
+  log.error(message);
+  void vscode.window
+    .showErrorMessage(message, 'Show Log', 'Install Codex CLI')
+    .then((choice) => {
+      if (choice === 'Show Log') {
+        log.show(true);
+      } else if (choice === 'Install Codex CLI') {
+        void vscode.env.openExternal(vscode.Uri.parse(CODEX_INSTALL_URL));
+      }
+    });
+  return undefined;
 }
 
 function liveOwnedTerminal(): vscode.Terminal | undefined {
@@ -120,6 +152,11 @@ function launch(mode: LaunchMode): void {
         existing.show(false);
         return;
       }
+    }
+
+    const request = readLaunchRequest(mode);
+    if (!preflightCodexCommand(request.command)) {
+      return;
     }
 
     const { options, plan } = terminalOptions(mode, true);
@@ -232,6 +269,10 @@ export function activate(context: vscode.ExtensionContext): void {
     vscode.window.registerTerminalProfileProvider('codexTerminal.profile', {
       provideTerminalProfile: () => {
         // The terminal service owns placement for a profile launch, so no location.
+        const request = readLaunchRequest('new');
+        if (!preflightCodexCommand(request.command)) {
+          return undefined;
+        }
         return new vscode.TerminalProfile(terminalOptions('new', false).options);
       },
     }),

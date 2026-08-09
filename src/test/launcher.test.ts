@@ -8,6 +8,7 @@ import {
   quoteCmd,
   quotePosix,
   quotePowerShell,
+  resolveCommandPath,
   type LaunchRequest,
 } from '../launcher';
 
@@ -35,6 +36,17 @@ test('auto falls back to Windows PowerShell when pwsh 7 is absent', () => {
   const plan = buildLaunchPlan(req({ availableShells: [] }));
   assert.equal(plan.shellPath, 'C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe');
   assert.equal(plan.family, 'powershell');
+});
+
+test('pwsh uses Windows PowerShell when only the WindowsApps alias is available', () => {
+  const plan = buildLaunchPlan(
+    req({
+      shell: 'pwsh',
+      availableShells: ['C:\\Users\\matt\\AppData\\Local\\Microsoft\\WindowsApps\\pwsh.exe'],
+    }),
+  );
+  assert.equal(plan.shellPath, 'C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe');
+  assert.match(plan.shellResolutionReason ?? '', /WindowsApps execution alias/);
 });
 
 test('the command is passed as an argument, never typed', () => {
@@ -110,6 +122,40 @@ test('custom shell requires a path', () => {
 
 test('an empty command is rejected', () => {
   assert.throws(() => buildLaunchPlan(req({ command: '   ' })), /command is empty/);
+});
+
+test('a bare command resolves through a Windows PATH including .cmd files', () => {
+  const files = new Set(['C:\\tools\\codex.cmd']);
+  assert.equal(
+    resolveCommandPath('codex', {
+      platform: 'win32',
+      pathValue: 'C:\\tools;C:\\other',
+      fileExists: (candidate) => files.has(candidate),
+    }),
+    'C:\\tools\\codex.cmd',
+  );
+});
+
+test('an absolute command path containing spaces is validated without rewriting it', () => {
+  const command = 'C:\\Program Files\\OpenAI Codex\\codex.cmd';
+  assert.equal(
+    resolveCommandPath(command, {
+      platform: 'win32',
+      fileExists: (candidate) => candidate === command,
+    }),
+    command,
+  );
+});
+
+test('a missing command fails preflight resolution', () => {
+  assert.equal(
+    resolveCommandPath('codex', {
+      platform: 'win32',
+      pathValue: 'C:\\empty',
+      fileExists: () => false,
+    }),
+    undefined,
+  );
 });
 
 test('resume and fork map to real Codex subcommands', () => {

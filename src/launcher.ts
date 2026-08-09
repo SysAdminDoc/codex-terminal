@@ -1,3 +1,6 @@
+import { existsSync } from 'node:fs';
+import * as path from 'node:path';
+
 /**
  * Pure launch-plan construction. Deliberately free of any `vscode` import so the
  * quoting rules below can be unit tested with plain `node --test`.
@@ -35,11 +38,20 @@ export interface LaunchRequest {
   availableShells?: string[];
 }
 
+export interface CommandResolutionOptions {
+  platform?: NodeJS.Platform;
+  pathValue?: string;
+  cwd?: string;
+  fileExists?: (candidate: string) => boolean;
+}
+
 export interface LaunchPlan {
   /** Absolute path or bare name of the shell binary, or undefined for `editorDefault`. */
   shellPath?: string;
   shellArgs: string[];
   family: ShellFamily;
+  /** Why a configured shell was replaced with a safer fallback, if applicable. */
+  shellResolutionReason?: string;
   /**
    * Set only for `editorDefault`, where we have no shell to pass arguments to and
    * must fall back to typing the command. Documented as the racy mode.
@@ -111,20 +123,31 @@ function familyOf(shellPath: string): ShellFamily {
   return 'posix';
 }
 
-function resolvePwsh(req: LaunchRequest): string {
+interface ShellResolution {
+  path?: string;
+  reason?: string;
+}
+
+function resolvePwsh(req: LaunchRequest): ShellResolution {
   if (req.platform !== 'win32') {
-    return 'pwsh';
+    return { path: 'pwsh' };
   }
   const available = req.availableShells ?? [];
   const found = PWSH_WINDOWS_CANDIDATES.find((c) => available.includes(c));
-  return found ?? 'pwsh.exe';
+  if (found) {
+    return { path: found };
+  }
+  return {
+    path: WINDOWS_POWERSHELL,
+    reason:
+      'PowerShell 7 was not found in Program Files; using Windows PowerShell instead of bare pwsh.exe to avoid the WindowsApps execution alias.',
+  };
 }
 
-/** Resolve the configured shell to a concrete executable. */
-export function resolveShellPath(req: LaunchRequest): string | undefined {
+function resolveShell(req: LaunchRequest): ShellResolution {
   switch (req.shell) {
     case 'editorDefault':
-      return undefined;
+      return {};
     case 'custom': {
       const custom = req.customShellPath.trim();
       if (!custom) {
@@ -132,32 +155,90 @@ export function resolveShellPath(req: LaunchRequest): string | undefined {
           'codexTerminal.shell is "custom" but codexTerminal.customShellPath is empty.',
         );
       }
-      return custom;
+      return { path: custom };
     }
     case 'pwsh':
       return resolvePwsh(req);
     case 'powershell':
-      return req.platform === 'win32' ? WINDOWS_POWERSHELL : 'powershell';
+      return { path: req.platform === 'win32' ? WINDOWS_POWERSHELL : 'powershell' };
     case 'cmd':
-      return req.platform === 'win32' ? CMD : 'cmd.exe';
+      return { path: req.platform === 'win32' ? CMD : 'cmd.exe' };
     case 'bash':
-      return 'bash';
+      return { path: 'bash' };
     case 'zsh':
-      return 'zsh';
+      return { path: 'zsh' };
     case 'auto':
     default: {
       if (req.platform !== 'win32') {
-        return process.env.SHELL || 'bash';
+        return { path: process.env.SHELL || 'bash' };
       }
       const available = req.availableShells ?? [];
       const pwsh = PWSH_WINDOWS_CANDIDATES.find((c) => available.includes(c));
       if (pwsh) {
-        return pwsh;
+        return { path: pwsh };
       }
       // Windows PowerShell ships with the OS, so this always exists as a floor.
-      return WINDOWS_POWERSHELL;
+      return { path: WINDOWS_POWERSHELL };
     }
   }
+}
+
+/** Resolve the configured shell to a concrete executable. */
+export function resolveShellPath(req: LaunchRequest): string | undefined {
+  return resolveShell(req).path;
+}
+
+/** Explain a shell fallback without exposing the internal resolver. */
+export function shellResolutionReason(req: LaunchRequest): string | undefined {
+  return resolveShell(req).reason;
+}
+
+function commandCandidates(command: string, options: Required<CommandResolutionOptions>): string[] {
+  const platform = options.platform;
+  const pathApi = platform === 'win32' ? path.win32 : path.posix;
+  const extensions =
+    platform === 'win32'
+      ? (process.env.PATHEXT || '.COM;.EXE;.BAT;.CMD')
+          .split(';')
+          .filter(Boolean)
+          .map((extension) => extension.toLowerCase())
+      : [''];
+  const hasPath = platform === 'win32' ? /[\\/]/.test(command) : command.includes('/');
+  const isAbsolute = pathApi.isAbsolute(command);
+
+  if (hasPath || isAbsolute) {
+    const base = isAbsolute ? command : pathApi.resolve(options.cwd, command);
+    if (pathApi.extname(base)) {
+      return [base];
+    }
+    return extensions.map((extension) => `${base}${extension}`);
+  }
+
+  return options.pathValue
+    .split(platform === 'win32' ? ';' : ':')
+    .filter(Boolean)
+    .flatMap((directory) => {
+      const base = pathApi.join(directory, command);
+      return extensions.map((extension) => `${base}${extension}`);
+    });
+}
+
+/** Resolve a configured Codex command without invoking it. */
+export function resolveCommandPath(
+  command: string,
+  suppliedOptions: CommandResolutionOptions = {},
+): string | undefined {
+  const trimmed = command.trim();
+  if (!trimmed) {
+    return undefined;
+  }
+  const options: Required<CommandResolutionOptions> = {
+    platform: suppliedOptions.platform ?? process.platform,
+    pathValue: suppliedOptions.pathValue ?? process.env.PATH ?? '',
+    cwd: suppliedOptions.cwd ?? process.cwd(),
+    fileExists: suppliedOptions.fileExists ?? existsSync,
+  };
+  return commandCandidates(trimmed, options).find(options.fileExists);
 }
 
 /**
@@ -172,7 +253,8 @@ export function buildLaunchPlan(req: LaunchRequest): LaunchPlan {
     throw new Error('codexTerminal.command is empty.');
   }
 
-  const shellPath = resolveShellPath(req);
+  const shell = resolveShell(req);
+  const shellPath = shell.path;
 
   if (shellPath === undefined) {
     // editorDefault: no shell binary of our own, so the command has to be typed.
@@ -180,6 +262,7 @@ export function buildLaunchPlan(req: LaunchRequest): LaunchPlan {
       shellPath: undefined,
       shellArgs: [],
       family: req.platform === 'win32' ? 'powershell' : 'posix',
+      shellResolutionReason: shell.reason,
       sendTextFallback: buildCommandLine(
         command,
         req.args,
@@ -196,18 +279,28 @@ export function buildLaunchPlan(req: LaunchRequest): LaunchPlan {
     if (req.keepShellOpen) {
       flags.push('-NoExit');
     }
-    return { shellPath, shellArgs: [...flags, '-Command', commandLine], family };
+    return {
+      shellPath,
+      shellArgs: [...flags, '-Command', commandLine],
+      family,
+      shellResolutionReason: shell.reason,
+    };
   }
 
   if (family === 'cmd') {
-    return { shellPath, shellArgs: [req.keepShellOpen ? '/K' : '/C', commandLine], family };
+    return {
+      shellPath,
+      shellArgs: [req.keepShellOpen ? '/K' : '/C', commandLine],
+      family,
+      shellResolutionReason: shell.reason,
+    };
   }
 
   // POSIX: re-exec an interactive shell so the tab survives Codex exiting.
   const script = req.keepShellOpen
     ? `${commandLine}; exec ${quotePosix(shellPath)} -i`
     : commandLine;
-  return { shellPath, shellArgs: ['-c', script], family };
+  return { shellPath, shellArgs: ['-c', script], family, shellResolutionReason: shell.reason };
 }
 
 /** Codex subcommand for each launch mode the extension exposes. */

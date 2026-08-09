@@ -3,6 +3,15 @@
 All notable changes to Codex Terminal are documented here.
 This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Fixed
+
+- Preflight the configured Codex command and offer direct installation guidance when it is missing.
+- Fall back from the unusable WindowsApps `pwsh.exe` execution alias to Windows PowerShell, with
+  the fallback reason recorded in the extension log.
+- Resolve bare commands through `PATH` and validate absolute paths without rewriting them.
+
 ## [0.2.0] - 2026-08-09
 
 ### Added
