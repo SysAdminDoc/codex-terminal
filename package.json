@@ -107,6 +107,18 @@
         "category": "Codex Terminal"
       },
       {
+        "command": "codexTerminal.focusSession",
+        "title": "Focus Running Session",
+        "category": "Codex Terminal",
+        "icon": "$(terminal)"
+      },
+      {
+        "command": "codexTerminal.stopSession",
+        "title": "Stop Running Session",
+        "category": "Codex Terminal",
+        "icon": "$(debug-stop)"
+      },
+      {
         "command": "codexTerminal.showLog",
         "title": "Show Log",
         "category": "Codex Terminal"
@@ -132,6 +144,18 @@
           "command": "codexTerminal.sendFileReference",
           "group": "codexTerminal@1",
           "when": "resourceScheme == file"
+        }
+      ],
+      "view/item/context": [
+        {
+          "command": "codexTerminal.focusSession",
+          "when": "view == codexTerminal.actions && viewItem == codexTerminal.runningSession",
+          "group": "inline@1"
+        },
+        {
+          "command": "codexTerminal.stopSession",
+          "when": "view == codexTerminal.actions && viewItem == codexTerminal.runningSession",
+          "group": "inline@2"
         }
       ]
     },

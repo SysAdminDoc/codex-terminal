@@ -297,6 +297,16 @@ function sendFileReference(): void {
   log.info(`sent reference ${reference}`);
 }
 
+function focusSession(terminal: vscode.Terminal | undefined): void {
+  if (terminal && terminal.exitStatus === undefined) {
+    terminal.show(false);
+  }
+}
+
+function stopSession(terminal: vscode.Terminal | undefined): void {
+  terminal?.dispose();
+}
+
 function createStatusBarItem(context: vscode.ExtensionContext): void {
   const item = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 100);
   item.command = 'codexTerminal.new';
@@ -371,6 +381,10 @@ export function activate(context: vscode.ExtensionContext): CodexTerminalExtensi
   for (const [id, handler] of commands) {
     context.subscriptions.push(vscode.commands.registerCommand(id, handler));
   }
+  context.subscriptions.push(
+    vscode.commands.registerCommand('codexTerminal.focusSession', focusSession),
+    vscode.commands.registerCommand('codexTerminal.stopSession', stopSession),
+  );
 
   const provideTerminalProfile = (): vscode.TerminalProfile | undefined => {
     // The terminal service owns placement for a profile launch, so no location.
@@ -392,9 +406,10 @@ export function activate(context: vscode.ExtensionContext): CodexTerminalExtensi
     }),
   );
 
-  const actionsProvider = new ActionsViewProvider();
+  const actionsProvider = new ActionsViewProvider(terminalRegistry);
   context.subscriptions.push(
     vscode.window.registerTreeDataProvider('codexTerminal.actions', actionsProvider),
+    actionsProvider,
   );
 
   createStatusBarItem(context);

@@ -27,6 +27,8 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   including upstream issue links and plain-terminal checks.
 - Added `New Session with Profile…`, which discovers local Codex profile files, accepts a free-text
   profile name, passes `--profile`, and labels the resulting terminal tab.
+- The Launch panel now tracks live Codex tabs in a Running group with cwd, focus, and stop actions;
+  the group disappears when no sessions remain.
 
 ## [0.2.0] - 2026-08-09
 

@@ -45,6 +45,8 @@ The real Codex TUI, started in the workspace folder:
 
 - **Activity bar** — the `>_` icon opens a **Launch** panel with every action. This is the one
   surface that is always present, so it is the reliable button.
+- When Codex tabs are open, the Launch panel also shows a **Running** group with each tab's cwd;
+  click a row or use its inline focus/stop actions to manage that session.
 - **Status bar** — **✨ Codex**, bottom right. *Invisible if you have
   `"workbench.statusBar.visible": false`* — no extension can render there, and nothing warns
   you. Use the activity bar instead.
