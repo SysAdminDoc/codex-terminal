@@ -31,6 +31,8 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   the group disappears when no sessions remain.
 - Added `codexTerminal.cwd: "prompt"` for multi-root windows; it asks for a workspace folder only
   when the active editor cannot identify one.
+- Added a manifest test that guards the machine-overridable trust boundary for command-bearing
+  settings.
 
 ## [0.2.0] - 2026-08-09
 
