@@ -86,12 +86,24 @@ default profile they want honoured; prefer any other mode.
 
 ## Install
 
-From a `.vsix`:
+> **Do not double-click the `.vsix`.** It is not an installer — it is an archive the editor
+> unpacks. On Windows with Visual Studio installed, `.vsix` is associated with Visual
+> Studio's VSIX Installer, which will report *"The install of Codex Terminal was not
+> successful for all the selected products. One or more extensions are for Visual Studio
+> Code."* That message is the wrong program refusing the file, not a broken package.
+
+Command line:
 
 ```powershell
 codium --install-extension codex-terminal-0.1.0.vsix   # VSCodium
 code   --install-extension codex-terminal-0.1.0.vsix   # VS Code
 ```
+
+Or from inside the editor: **Extensions** view → `...` menu (top of the sidebar) →
+**Install from VSIX…** → pick the file.
+
+Either way, reload the window afterwards (**Developer: Reload Window**) and the ✨ Codex
+button appears in the status bar.
 
 ## Build from source
 
