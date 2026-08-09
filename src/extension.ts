@@ -1,10 +1,11 @@
-import { existsSync } from 'node:fs';
+import { existsSync, readdirSync } from 'node:fs';
 import * as path from 'node:path';
 import * as vscode from 'vscode';
 
 import {
   buildLaunchPlan,
   modeArgs,
+  profileArgs,
   resolveCommandPath,
   type LaunchMode,
   type LaunchRequest,
@@ -14,6 +15,7 @@ import { buildFileReference } from './reference';
 import { ActionsViewProvider } from './actionsView';
 import { TerminalRegistry } from './terminals';
 import { collectDoctorReport } from './doctor';
+import { codexProfilesDirectory, profileNamesFromFiles } from './profiles';
 
 const PWSH_PROBE = [
   'C:\\Program Files\\PowerShell\\7\\pwsh.exe',
@@ -34,13 +36,17 @@ function config(): vscode.WorkspaceConfiguration {
   return vscode.workspace.getConfiguration('codexTerminal');
 }
 
-function readLaunchRequest(mode: LaunchMode): LaunchRequest {
+function readLaunchRequest(mode: LaunchMode, profile?: string): LaunchRequest {
   const cfg = config();
   return {
     shell: cfg.get<ShellKind>('shell', 'auto'),
     customShellPath: cfg.get<string>('customShellPath', ''),
     command: cfg.get<string>('command', 'codex'),
-    args: [...modeArgs(mode), ...cfg.get<string[]>('args', [])],
+    args: [
+      ...modeArgs(mode),
+      ...(profile ? profileArgs(profile) : []),
+      ...cfg.get<string[]>('args', []),
+    ],
     keepShellOpen: cfg.get<boolean>('keepShellOpen', true),
     platform: process.platform,
     availableShells: PWSH_PROBE.filter((p) => existsSync(p)),
@@ -85,11 +91,14 @@ function iconColor(): vscode.ThemeColor | undefined {
 function terminalOptions(
   mode: LaunchMode,
   withLocation: boolean,
+  profile?: string,
 ): { options: vscode.TerminalOptions; plan: ReturnType<typeof buildLaunchPlan> } {
-  const plan = buildLaunchPlan(readLaunchRequest(mode));
+  const plan = buildLaunchPlan(readLaunchRequest(mode, profile));
   const cfg = config();
   const options: vscode.TerminalOptions = {
-    name: cfg.get<string>('terminalName', 'Codex'),
+    name: profile
+      ? `${cfg.get<string>('terminalName', 'Codex')} (${profile})`
+      : cfg.get<string>('terminalName', 'Codex'),
     cwd: resolveCwd(),
     env: cfg.get<Record<string, string>>('env', {}),
     iconPath: new vscode.ThemeIcon('sparkle'),
@@ -145,9 +154,9 @@ function liveOwnedTerminal(): vscode.Terminal | undefined {
   return terminalRegistry?.mostRecentLive()?.terminal;
 }
 
-function launch(mode: LaunchMode): void {
+function launch(mode: LaunchMode, profile?: string): void {
   try {
-    if (mode === 'new' && config().get<boolean>('reuseTerminal', false)) {
+    if (mode === 'new' && !profile && config().get<boolean>('reuseTerminal', false)) {
       const existing = liveOwnedTerminal();
       if (existing) {
         existing.show(false);
@@ -155,12 +164,12 @@ function launch(mode: LaunchMode): void {
       }
     }
 
-    const request = readLaunchRequest(mode);
+    const request = readLaunchRequest(mode, profile);
     if (!preflightCodexCommand(request.command)) {
       return;
     }
 
-    const { options, plan } = terminalOptions(mode, true);
+    const { options, plan } = terminalOptions(mode, true, profile);
     const terminal = vscode.window.createTerminal(options);
     terminalRegistry?.track(
       terminal,
@@ -175,6 +184,51 @@ function launch(mode: LaunchMode): void {
   } catch (error) {
     reportError(error, 'Could not start Codex');
   }
+}
+
+function discoveredProfiles(): string[] {
+  try {
+    return profileNamesFromFiles(
+      readdirSync(codexProfilesDirectory(), { withFileTypes: true })
+        .filter((entry) => entry.isFile())
+        .map((entry) => entry.name),
+    );
+  } catch {
+    return [];
+  }
+}
+
+async function launchWithProfile(): Promise<void> {
+  const freeTextItem: vscode.QuickPickItem = {
+    label: '$(edit) Enter a profile name…',
+    description: 'Use any profile name supported by Codex',
+  };
+  const items: vscode.QuickPickItem[] = [
+    ...discoveredProfiles().map((name) => ({
+      label: name,
+      description: `--profile ${name}`,
+    })),
+    freeTextItem,
+  ];
+  const selected = await vscode.window.showQuickPick(items, {
+    placeHolder: 'Choose a Codex profile',
+    ignoreFocusOut: true,
+  });
+  if (!selected) {
+    return;
+  }
+  const profile =
+    selected === freeTextItem
+      ? await vscode.window.showInputBox({
+          prompt: 'Codex profile name',
+          placeHolder: 'team-default',
+          ignoreFocusOut: true,
+        })
+      : selected.label;
+  if (!profile?.trim()) {
+    return;
+  }
+  launch('new', profile.trim());
 }
 
 function reportError(error: unknown, headline: string): void {
@@ -288,6 +342,12 @@ export function activate(context: vscode.ExtensionContext): CodexTerminalExtensi
     ['codexTerminal.resumeLast', () => launch('resumeLast')],
     ['codexTerminal.resumePicker', () => launch('resumePicker')],
     ['codexTerminal.forkLast', () => launch('forkLast')],
+    [
+      'codexTerminal.newWithProfile',
+      () => {
+        void launchWithProfile();
+      },
+    ],
     ['codexTerminal.sendFileReference', sendFileReference],
     [
       'codexTerminal.doctor',

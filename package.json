@@ -72,6 +72,11 @@
         "icon": "$(sparkle)"
       },
       {
+        "command": "codexTerminal.newWithProfile",
+        "title": "New Session with Profile…",
+        "category": "Codex Terminal"
+      },
+      {
         "command": "codexTerminal.resumeLast",
         "title": "Resume Last Session",
         "category": "Codex Terminal"

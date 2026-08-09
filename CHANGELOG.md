@@ -25,6 +25,8 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   integration runner; `npm audit` now reports zero vulnerabilities.
 - Added troubleshooting guidance for raw ANSI output, TUI flicker, and unexpected CLI exits,
   including upstream issue links and plain-terminal checks.
+- Added `New Session with Profile…`, which discovers local Codex profile files, accepts a free-text
+  profile name, passes `--profile`, and labels the resulting terminal tab.
 
 ## [0.2.0] - 2026-08-09
 

@@ -53,9 +53,12 @@ The real Codex TUI, started in the workspace folder:
 - **Terminal `+` dropdown** — pick **Codex**.
 - **Command Palette** — `Codex Terminal: New Session`, `Resume Last Session`,
   `Resume Session (picker)`, `Fork Last Session`, `Focus Codex Terminal`,
-  `Send File Reference to Codex`, `Doctor`, `Show Log`.
+  `New Session with Profile…`, `Send File Reference to Codex`, `Doctor`, `Show Log`.
 - **Right-click in the editor** — *Send File Reference to Codex* puts `@src/file.ts#L10-L20`
   on the Codex prompt without submitting it, so you can type the question after it.
+- **New Session with Profile…** — lists `~/.codex/<name>.config.toml` profiles, plus a free-text
+  entry for profiles that are not stored locally. The selected profile is passed as
+  `--profile <name>` and appended to the terminal tab name.
 
 ## Settings
 

@@ -319,3 +319,12 @@ export function modeArgs(mode: LaunchMode): string[] {
       return [];
   }
 }
+
+/** Arguments for the Codex profile selected by the profile picker. */
+export function profileArgs(profile: string): string[] {
+  const name = profile.trim();
+  if (!name) {
+    throw new Error('Codex profile name is empty.');
+  }
+  return ['--profile', name];
+}
