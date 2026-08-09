@@ -17,6 +17,7 @@ import { TerminalRegistry } from './terminals';
 import { collectDoctorReport } from './doctor';
 import { codexProfilesDirectory, profileNamesFromFiles } from './profiles';
 import { NotifyBridge } from './notify';
+import { discoverSessions, type SessionRecord } from './sessions';
 
 const PWSH_PROBE = [
   'C:\\Program Files\\PowerShell\\7\\pwsh.exe',
@@ -71,7 +72,7 @@ async function syncNotifyBridge(): Promise<void> {
   }
 }
 
-function readLaunchRequest(mode: LaunchMode, profile?: string): LaunchRequest {
+function readLaunchRequest(mode: LaunchMode, profile?: string, sessionId?: string): LaunchRequest {
   const cfg = config();
   return {
     shell: cfg.get<ShellKind>('shell', 'auto'),
@@ -79,6 +80,7 @@ function readLaunchRequest(mode: LaunchMode, profile?: string): LaunchRequest {
     command: cfg.get<string>('command', 'codex'),
     args: [
       ...modeArgs(mode),
+      ...(sessionId ? [sessionId] : []),
       ...(profile ? profileArgs(profile) : []),
       ...cfg.get<string[]>('args', []),
       ...(notifyBridge?.launchArgs() ?? []),
@@ -138,13 +140,15 @@ async function terminalOptions(
   mode: LaunchMode,
   withLocation: boolean,
   profile?: string,
+  sessionId?: string,
 ): Promise<{ options: vscode.TerminalOptions; plan: ReturnType<typeof buildLaunchPlan> }> {
-  const plan = buildLaunchPlan(readLaunchRequest(mode, profile));
+  const plan = buildLaunchPlan(readLaunchRequest(mode, profile, sessionId));
   const cfg = config();
+  const baseName = cfg.get<string>('terminalName', 'Codex');
   const options: vscode.TerminalOptions = {
-    name: profile
-      ? `${cfg.get<string>('terminalName', 'Codex')} (${profile})`
-      : cfg.get<string>('terminalName', 'Codex'),
+    name: [baseName, profile, sessionId ? `resume ${sessionId.slice(0, 8)}` : undefined]
+      .filter(Boolean)
+      .join(' — '),
     cwd: await resolveCwd(),
     env: cfg.get<Record<string, string>>('env', {}),
     iconPath: new vscode.ThemeIcon('sparkle'),
@@ -200,7 +204,7 @@ function liveOwnedTerminal(): vscode.Terminal | undefined {
   return terminalRegistry?.mostRecentLive()?.terminal;
 }
 
-async function launch(mode: LaunchMode, profile?: string): Promise<void> {
+async function launch(mode: LaunchMode, profile?: string, sessionId?: string): Promise<void> {
   try {
     await syncNotifyBridge();
     if (mode === 'new' && !profile && config().get<boolean>('reuseTerminal', false)) {
@@ -211,12 +215,12 @@ async function launch(mode: LaunchMode, profile?: string): Promise<void> {
       }
     }
 
-    const request = readLaunchRequest(mode, profile);
+    const request = readLaunchRequest(mode, profile, sessionId);
     if (!preflightCodexCommand(request.command)) {
       return;
     }
 
-    const { options, plan } = await terminalOptions(mode, true, profile);
+    const { options, plan } = await terminalOptions(mode, true, profile, sessionId);
     const terminal = vscode.window.createTerminal(options);
     terminalRegistry?.track(
       terminal,
@@ -276,6 +280,30 @@ async function launchWithProfile(): Promise<void> {
     return;
   }
   launch('new', profile.trim());
+}
+
+async function resumeFromSessionPicker(): Promise<void> {
+  const sessions = await discoverSessions();
+  if (sessions.length === 0) {
+    launch('resumePicker');
+    return;
+  }
+
+  const items = sessions.map((session: SessionRecord) => ({
+    label: `${new Date(session.timestamp).toLocaleString()} — ${session.id.slice(0, 8)}`,
+    description: session.cwd,
+    detail: session.timestamp,
+    session,
+  }));
+  const selected = await vscode.window.showQuickPick(items, {
+    placeHolder: 'Choose a recent Codex session to resume',
+    matchOnDescription: true,
+    matchOnDetail: true,
+    ignoreFocusOut: true,
+  });
+  if (selected) {
+    launch('resumePicker', undefined, selected.session.id);
+  }
 }
 
 function reportError(error: unknown, headline: string): void {
@@ -398,7 +426,12 @@ export function activate(context: vscode.ExtensionContext): CodexTerminalExtensi
   const commands: Array<[string, () => void]> = [
     ['codexTerminal.new', () => launch('new')],
     ['codexTerminal.resumeLast', () => launch('resumeLast')],
-    ['codexTerminal.resumePicker', () => launch('resumePicker')],
+    [
+      'codexTerminal.resumePicker',
+      () => {
+        void resumeFromSessionPicker();
+      },
+    ],
     ['codexTerminal.forkLast', () => launch('forkLast')],
     [
       'codexTerminal.newWithProfile',

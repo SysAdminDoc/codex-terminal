@@ -61,6 +61,8 @@ The real Codex TUI, started in the workspace folder:
 - **New Session with Profile…** — lists `~/.codex/<name>.config.toml` profiles, plus a free-text
   entry for profiles that are not stored locally. The selected profile is passed as
   `--profile <name>` and appended to the terminal tab name.
+- **Resume Session (picker)** — lists recent local session metadata with timestamp and cwd, then
+  launches `codex resume <id>`. If no readable metadata exists, it falls back to Codex's picker.
 - **Turn-completion notifications** — enable `codexTerminal.notifyOnCompletion` to install a
   per-launch notify hook in the extension's storage. The setting is opt-in and does not write to
   Codex's user configuration.
