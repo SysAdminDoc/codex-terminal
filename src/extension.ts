@@ -13,6 +13,7 @@ import {
 import { buildFileReference } from './reference';
 import { ActionsViewProvider } from './actionsView';
 import { TerminalRegistry } from './terminals';
+import { collectDoctorReport } from './doctor';
 
 const PWSH_PROBE = [
   'C:\\Program Files\\PowerShell\\7\\pwsh.exe',
@@ -188,6 +189,31 @@ function reportError(error: unknown, headline: string): void {
     });
 }
 
+async function runDoctor(): Promise<void> {
+  try {
+    const request = readLaunchRequest('new');
+    const statusBarVisible = vscode.workspace
+      .getConfiguration('workbench')
+      .get<boolean>('statusBar.visible', true);
+    const editorTitleButtonCanRender =
+      config().get<boolean>('showEditorTitleButton', true) &&
+      vscode.window.activeTextEditor !== undefined;
+    const report = await collectDoctorReport({
+      request,
+      cwd: resolveCwd(),
+      statusBarVisible,
+      editorTitleButtonCanRender,
+    });
+    log.info(report.text);
+    const choice = await vscode.window.showInformationMessage(report.text, 'Show Log');
+    if (choice === 'Show Log') {
+      log.show(true);
+    }
+  } catch (error) {
+    reportError(error, 'Could not run Codex Doctor');
+  }
+}
+
 function sendFileReference(): void {
   const editor = vscode.window.activeTextEditor;
   if (!editor) {
@@ -263,6 +289,12 @@ export function activate(context: vscode.ExtensionContext): CodexTerminalExtensi
     ['codexTerminal.resumePicker', () => launch('resumePicker')],
     ['codexTerminal.forkLast', () => launch('forkLast')],
     ['codexTerminal.sendFileReference', sendFileReference],
+    [
+      'codexTerminal.doctor',
+      () => {
+        void runDoctor();
+      },
+    ],
     ['codexTerminal.showLog', () => log.show(true)],
     [
       'codexTerminal.focus',

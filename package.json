@@ -97,6 +97,11 @@
         "category": "Codex Terminal"
       },
       {
+        "command": "codexTerminal.doctor",
+        "title": "Doctor",
+        "category": "Codex Terminal"
+      },
+      {
         "command": "codexTerminal.showLog",
         "title": "Show Log",
         "category": "Codex Terminal"
