@@ -92,6 +92,10 @@ default profile they want honoured; prefer any other mode.
 > successful for all the selected products. One or more extensions are for Visual Studio
 > Code."* That message is the wrong program refusing the file, not a broken package.
 
+**Easiest:** download `install.cmd` next to the `.vsix` and double-click *that*. It finds the
+`.vsix` beside it and installs into every VS Code family editor on your `PATH` (VSCodium,
+VS Code, Insiders, Cursor).
+
 Command line:
 
 ```powershell
