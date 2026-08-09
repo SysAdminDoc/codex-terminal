@@ -73,7 +73,7 @@ The real Codex TUI, started in the workspace folder:
 | `codexTerminal.keepShellOpen` | `true` | Adds `-NoExit` / `/K` / `exec $SHELL -i`. |
 | `codexTerminal.location` | `editor` | `editor`, `editorBeside`, `panel`. |
 | `codexTerminal.reuseTerminal` | `false` | `true` focuses the existing Codex tab instead of opening a new one. |
-| `codexTerminal.cwd` | `activeFileWorkspaceFolder` | Also `activeFileFolder`, `firstWorkspaceFolder`. |
+| `codexTerminal.cwd` | `activeFileWorkspaceFolder` | Also `activeFileFolder`, `firstWorkspaceFolder`, `prompt` (choose in multi-root workspaces). |
 | `codexTerminal.env` | `{}` | Extra environment variables. |
 | `codexTerminal.terminalName` | `Codex` | Tab label. |
 | `codexTerminal.iconColor` | `terminal.ansiMagenta` | Theme color id, or `""` for the default. |

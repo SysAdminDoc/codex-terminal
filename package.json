@@ -240,13 +240,15 @@
           "enum": [
             "activeFileFolder",
             "activeFileWorkspaceFolder",
-            "firstWorkspaceFolder"
+            "firstWorkspaceFolder",
+            "prompt"
           ],
           "default": "activeFileWorkspaceFolder",
           "enumDescriptions": [
             "The directory containing the active file.",
             "The workspace folder containing the active file, falling back to the first workspace folder.",
-            "Always the first workspace folder."
+            "Always the first workspace folder.",
+            "Prompt when a multi-root workspace has no active file to disambiguate the folder."
           ],
           "description": "Working directory Codex starts in."
         },

@@ -6,7 +6,7 @@ import { suite, test } from 'mocha';
 
 interface TestApi {
   getActionCount: () => number;
-  getTerminalProfileOptions: () => vscode.TerminalOptions | undefined;
+  getTerminalProfileOptions: () => Promise<vscode.TerminalOptions | undefined>;
 }
 
 suite('Codex Terminal hostile settings integration', () => {
@@ -42,7 +42,7 @@ suite('Codex Terminal hostile settings integration', () => {
     const extension = vscode.extensions.getExtension<TestApi>('sysadmindoc.codex-terminal');
     assert.ok(extension);
     const api = await extension.activate();
-    const options = api.getTerminalProfileOptions();
+    const options = await api.getTerminalProfileOptions();
     assert.ok(options?.shellPath);
   });
 });

@@ -29,7 +29,7 @@ let terminalRegistry: TerminalRegistry | undefined;
 
 export interface CodexTerminalExtensionApi {
   getActionCount: () => number;
-  getTerminalProfileOptions: () => vscode.TerminalOptions | undefined;
+  getTerminalProfileOptions: () => Promise<vscode.TerminalOptions | undefined>;
 }
 
 function config(): vscode.WorkspaceConfiguration {
@@ -53,7 +53,7 @@ function readLaunchRequest(mode: LaunchMode, profile?: string): LaunchRequest {
   };
 }
 
-function resolveCwd(): string | undefined {
+async function resolveCwd(): Promise<string | undefined> {
   const mode = config().get<string>('cwd', 'activeFileWorkspaceFolder');
   const folders = vscode.workspace.workspaceFolders;
   const activeUri = vscode.window.activeTextEditor?.document.uri;
@@ -66,6 +66,16 @@ function resolveCwd(): string | undefined {
     if (folder) {
       return folder.uri.fsPath;
     }
+  }
+  if (mode === 'prompt' && folders && folders.length > 1) {
+    const selected = await vscode.window.showQuickPick(
+      folders.map((folder) => ({ label: folder.name, description: folder.uri.fsPath, folder })),
+      {
+        placeHolder: 'Choose the workspace folder for Codex',
+        ignoreFocusOut: true,
+      },
+    );
+    return selected?.folder.uri.fsPath;
   }
   return folders?.[0]?.uri.fsPath;
 }
@@ -88,18 +98,18 @@ function iconColor(): vscode.ThemeColor | undefined {
 }
 
 /** Shared between the commands and the contributed terminal profile. */
-function terminalOptions(
+async function terminalOptions(
   mode: LaunchMode,
   withLocation: boolean,
   profile?: string,
-): { options: vscode.TerminalOptions; plan: ReturnType<typeof buildLaunchPlan> } {
+): Promise<{ options: vscode.TerminalOptions; plan: ReturnType<typeof buildLaunchPlan> }> {
   const plan = buildLaunchPlan(readLaunchRequest(mode, profile));
   const cfg = config();
   const options: vscode.TerminalOptions = {
     name: profile
       ? `${cfg.get<string>('terminalName', 'Codex')} (${profile})`
       : cfg.get<string>('terminalName', 'Codex'),
-    cwd: resolveCwd(),
+    cwd: await resolveCwd(),
     env: cfg.get<Record<string, string>>('env', {}),
     iconPath: new vscode.ThemeIcon('sparkle'),
     color: iconColor(),
@@ -154,7 +164,7 @@ function liveOwnedTerminal(): vscode.Terminal | undefined {
   return terminalRegistry?.mostRecentLive()?.terminal;
 }
 
-function launch(mode: LaunchMode, profile?: string): void {
+async function launch(mode: LaunchMode, profile?: string): Promise<void> {
   try {
     if (mode === 'new' && !profile && config().get<boolean>('reuseTerminal', false)) {
       const existing = liveOwnedTerminal();
@@ -169,7 +179,7 @@ function launch(mode: LaunchMode, profile?: string): void {
       return;
     }
 
-    const { options, plan } = terminalOptions(mode, true, profile);
+    const { options, plan } = await terminalOptions(mode, true, profile);
     const terminal = vscode.window.createTerminal(options);
     terminalRegistry?.track(
       terminal,
@@ -254,7 +264,7 @@ async function runDoctor(): Promise<void> {
       vscode.window.activeTextEditor !== undefined;
     const report = await collectDoctorReport({
       request,
-      cwd: resolveCwd(),
+      cwd: await resolveCwd(),
       statusBarVisible,
       editorTitleButtonCanRender,
     });
@@ -386,13 +396,14 @@ export function activate(context: vscode.ExtensionContext): CodexTerminalExtensi
     vscode.commands.registerCommand('codexTerminal.stopSession', stopSession),
   );
 
-  const provideTerminalProfile = (): vscode.TerminalProfile | undefined => {
+  const provideTerminalProfile = async (): Promise<vscode.TerminalProfile | undefined> => {
     // The terminal service owns placement for a profile launch, so no location.
     const request = readLaunchRequest('new');
     if (!preflightCodexCommand(request.command)) {
       return undefined;
     }
-    return new vscode.TerminalProfile(terminalOptions('new', false).options);
+    const { options } = await terminalOptions('new', false);
+    return new vscode.TerminalProfile(options);
   };
   context.subscriptions.push(
     vscode.window.registerTerminalProfileProvider('codexTerminal.profile', {
@@ -426,7 +437,7 @@ export function activate(context: vscode.ExtensionContext): CodexTerminalExtensi
 
   return {
     getActionCount: () => actionsProvider.getChildren().length,
-    getTerminalProfileOptions: () => provideTerminalProfile()?.options,
+    getTerminalProfileOptions: async () => (await provideTerminalProfile())?.options,
   };
 }
 

@@ -29,6 +29,8 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   profile name, passes `--profile`, and labels the resulting terminal tab.
 - The Launch panel now tracks live Codex tabs in a Running group with cwd, focus, and stop actions;
   the group disappears when no sessions remain.
+- Added `codexTerminal.cwd: "prompt"` for multi-root windows; it asks for a workspace folder only
+  when the active editor cannot identify one.
 
 ## [0.2.0] - 2026-08-09
 
