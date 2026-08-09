@@ -17,6 +17,8 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - A hostile-settings integration suite driven by `@vscode/test-cli`, including a seeded workspace
   with the status bar hidden and startup editor disabled.
 - Explicit accessibility labels for the status bar button and every Launch-panel action.
+- Reload-safe terminal ownership that adopts live Codex tabs and keeps focus and file-reference
+  commands pointed at the surviving session.
 
 ## [0.2.0] - 2026-08-09
 

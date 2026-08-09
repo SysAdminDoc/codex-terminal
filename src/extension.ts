@@ -12,6 +12,7 @@ import {
 } from './launcher';
 import { buildFileReference } from './reference';
 import { ActionsViewProvider } from './actionsView';
+import { TerminalRegistry } from './terminals';
 
 const PWSH_PROBE = [
   'C:\\Program Files\\PowerShell\\7\\pwsh.exe',
@@ -21,8 +22,7 @@ const PWSH_PROBE = [
 const CODEX_INSTALL_URL = 'https://github.com/openai/codex#installation';
 
 let log: vscode.LogOutputChannel;
-/** Terminals this extension created, newest last. Pruned as they close. */
-const owned: vscode.Terminal[] = [];
+let terminalRegistry: TerminalRegistry | undefined;
 
 export interface CodexTerminalExtensionApi {
   getActionCount: () => number;
@@ -141,12 +141,7 @@ function preflightCodexCommand(command: string): string | undefined {
 }
 
 function liveOwnedTerminal(): vscode.Terminal | undefined {
-  for (let i = owned.length - 1; i >= 0; i -= 1) {
-    if (owned[i].exitStatus === undefined) {
-      return owned[i];
-    }
-  }
-  return undefined;
+  return terminalRegistry?.mostRecentLive()?.terminal;
 }
 
 function launch(mode: LaunchMode): void {
@@ -166,7 +161,10 @@ function launch(mode: LaunchMode): void {
 
     const { options, plan } = terminalOptions(mode, true);
     const terminal = vscode.window.createTerminal(options);
-    owned.push(terminal);
+    terminalRegistry?.track(
+      terminal,
+      typeof options.cwd === 'string' ? options.cwd : options.cwd?.fsPath,
+    );
     terminal.show(false);
 
     if (plan.sendTextFallback) {
@@ -250,6 +248,14 @@ function createStatusBarItem(context: vscode.ExtensionContext): void {
 export function activate(context: vscode.ExtensionContext): CodexTerminalExtensionApi {
   log = vscode.window.createOutputChannel('Codex Terminal', { log: true });
   context.subscriptions.push(log);
+  terminalRegistry = new TerminalRegistry();
+  const adopted = terminalRegistry.adopt(
+    vscode.window.terminals,
+    config().get<string>('terminalName', 'Codex'),
+  );
+  if (adopted > 0) {
+    log.info(`adopted ${adopted} surviving Codex terminal${adopted === 1 ? '' : 's'}`);
+  }
 
   const commands: Array<[string, () => void]> = [
     ['codexTerminal.new', () => launch('new')],
@@ -290,10 +296,7 @@ export function activate(context: vscode.ExtensionContext): CodexTerminalExtensi
 
   context.subscriptions.push(
     vscode.window.onDidCloseTerminal((closed) => {
-      const index = owned.indexOf(closed);
-      if (index !== -1) {
-        owned.splice(index, 1);
-      }
+      terminalRegistry?.remove(closed);
     }),
   );
 
@@ -321,5 +324,6 @@ export function activate(context: vscode.ExtensionContext): CodexTerminalExtensi
 }
 
 export function deactivate(): void {
-  owned.length = 0;
+  terminalRegistry?.dispose();
+  terminalRegistry = undefined;
 }
