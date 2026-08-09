@@ -19,6 +19,7 @@ import { codexProfilesDirectory, profileNamesFromFiles } from './profiles';
 import { NotifyBridge } from './notify';
 import { discoverSessions, type SessionRecord } from './sessions';
 import { strings } from './strings';
+import { migrateSettings, type MigrationTarget } from './migrate';
 
 const PWSH_PROBE = [
   'C:\\Program Files\\PowerShell\\7\\pwsh.exe',
@@ -402,7 +403,7 @@ function createStatusBarItem(context: vscode.ExtensionContext): void {
   context.subscriptions.push(item);
 
   const sync = (): void => {
-    if (config().get<boolean>('showStatusBarItem', true)) {
+    if (config().get<boolean>('showStatusBarButton', true)) {
       item.show();
     } else {
       item.hide();
@@ -411,17 +412,54 @@ function createStatusBarItem(context: vscode.ExtensionContext): void {
   sync();
   context.subscriptions.push(
     vscode.workspace.onDidChangeConfiguration((event) => {
-      if (event.affectsConfiguration('codexTerminal.showStatusBarItem')) {
+      if (event.affectsConfiguration('codexTerminal.showStatusBarButton')) {
         sync();
       }
     }),
   );
 }
 
-export function activate(context: vscode.ExtensionContext): CodexTerminalExtensionApi {
+async function runSettingsMigrations(context: vscode.ExtensionContext): Promise<void> {
+  const configuration = vscode.workspace.getConfiguration('codexTerminal');
+  const events = await migrateSettings(
+    String(context.extension.packageJSON.version),
+    context.globalState,
+    {
+      inspect: (key) => {
+        const inspection = configuration.inspect<unknown>(key);
+        return inspection
+          ? {
+              globalValue: inspection.globalValue,
+              workspaceValue: inspection.workspaceValue,
+              workspaceFolderValue: inspection.workspaceFolderValue,
+            }
+          : undefined;
+      },
+      update: async (key, value, target: MigrationTarget) => {
+        const targets: Record<MigrationTarget, vscode.ConfigurationTarget> = {
+          global: vscode.ConfigurationTarget.Global,
+          workspace: vscode.ConfigurationTarget.Workspace,
+          workspaceFolder: vscode.ConfigurationTarget.WorkspaceFolder,
+        };
+        await configuration.update(key, value, targets[target]);
+      },
+    },
+  );
+  for (const event of events) {
+    log.info(strings.migration.event(event));
+  }
+}
+
+export async function activate(context: vscode.ExtensionContext): Promise<CodexTerminalExtensionApi> {
   log = vscode.window.createOutputChannel('Codex Terminal', { log: true });
   context.subscriptions.push(log);
   extensionContext = context;
+  try {
+    await runSettingsMigrations(context);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    log.error(strings.migration.failed(message));
+  }
   terminalRegistry = new TerminalRegistry();
   const adopted = terminalRegistry.adopt(
     vscode.window.terminals,

@@ -39,6 +39,8 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   selected UUID directly while retaining Codex's picker as the empty-store fallback.
 - Externalized extension-host strings through `vscode.l10n`, added the generated English bundle,
   and localized manifest labels and settings descriptions through `package.nls.json`.
+- Renamed the status-bar visibility setting to `codexTerminal.showStatusBarButton` with a one-time,
+  per-version migration from the deprecated `showStatusBarItem` key.
 
 ## [0.2.0] - 2026-08-09
 

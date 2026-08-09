@@ -82,7 +82,7 @@ The real Codex TUI, started in the workspace folder:
 | `codexTerminal.env` | `{}` | Extra environment variables. |
 | `codexTerminal.terminalName` | `Codex` | Tab label. |
 | `codexTerminal.iconColor` | `terminal.ansiMagenta` | Theme color id, or `""` for the default. |
-| `codexTerminal.showStatusBarItem` | `true` | |
+| `codexTerminal.showStatusBarButton` | `true` | The old `showStatusBarItem` key is migrated once per extension version. |
 | `codexTerminal.showEditorTitleButton` | `true` | |
 | `codexTerminal.notifyOnCompletion` | `false` | Opt in to turn-completion notifications without modifying `~/.codex/config.toml`. |
 

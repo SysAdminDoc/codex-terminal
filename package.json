@@ -272,10 +272,16 @@
           "default": "terminal.ansiMagenta",
           "description": "%setting.iconColor.description%"
         },
+        "codexTerminal.showStatusBarButton": {
+          "type": "boolean",
+          "default": true,
+          "description": "%setting.showStatusBarButton.description%"
+        },
         "codexTerminal.showStatusBarItem": {
           "type": "boolean",
           "default": true,
-          "description": "%setting.showStatusBarItem.description%"
+          "description": "%setting.showStatusBarItem.description%",
+          "deprecationMessage": "%setting.showStatusBarItem.deprecation%"
         },
         "codexTerminal.showEditorTitleButton": {
           "type": "boolean",

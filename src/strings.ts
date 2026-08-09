@@ -1,5 +1,6 @@
 import * as vscode from 'vscode';
 import type { DoctorReport } from './doctor';
+import type { MigrationEvent } from './migrate';
 
 /** All extension-host text goes through vscode.l10n so the default English build stays intact. */
 export const strings = {
@@ -146,5 +147,22 @@ export const strings = {
           : []),
       ].join('\n');
     },
+  },
+  migration: {
+    event: (event: MigrationEvent): string =>
+      event.result === 'migrated'
+        ? vscode.l10n.t(
+            'Migrated codexTerminal.{0} to codexTerminal.{1} at {2} scope.',
+            event.from,
+            event.to,
+            event.target,
+          )
+        : vscode.l10n.t(
+            'Skipped codexTerminal.{0} to codexTerminal.{1} at {2} scope because the new setting is already set.',
+            event.from,
+            event.to,
+            event.target,
+          ),
+    failed: (message: string): string => vscode.l10n.t('Settings migration failed: {0}', message),
   },
 };
