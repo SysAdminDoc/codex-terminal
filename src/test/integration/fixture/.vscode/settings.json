@@ -1,0 +1,6 @@
+{
+  "workbench.statusBar.visible": false,
+  "workbench.startupEditor": "none",
+  "codexTerminal.command": "node",
+  "codexTerminal.shell": "auto"
+}

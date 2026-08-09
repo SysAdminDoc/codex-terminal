@@ -24,6 +24,11 @@ let log: vscode.LogOutputChannel;
 /** Terminals this extension created, newest last. Pruned as they close. */
 const owned: vscode.Terminal[] = [];
 
+export interface CodexTerminalExtensionApi {
+  getActionCount: () => number;
+  getTerminalProfileOptions: () => vscode.TerminalOptions | undefined;
+}
+
 function config(): vscode.WorkspaceConfiguration {
   return vscode.workspace.getConfiguration('codexTerminal');
 }
@@ -219,6 +224,10 @@ function createStatusBarItem(context: vscode.ExtensionContext): void {
   item.command = 'codexTerminal.new';
   item.text = '$(sparkle) Codex';
   item.tooltip = 'Open Codex CLI in a terminal';
+  item.accessibilityInformation = {
+    label: 'Codex Terminal: Open Codex CLI in a terminal',
+    role: 'button',
+  };
   context.subscriptions.push(item);
 
   const sync = (): void => {
@@ -238,7 +247,7 @@ function createStatusBarItem(context: vscode.ExtensionContext): void {
   );
 }
 
-export function activate(context: vscode.ExtensionContext): void {
+export function activate(context: vscode.ExtensionContext): CodexTerminalExtensionApi {
   log = vscode.window.createOutputChannel('Codex Terminal', { log: true });
   context.subscriptions.push(log);
 
@@ -265,16 +274,17 @@ export function activate(context: vscode.ExtensionContext): void {
     context.subscriptions.push(vscode.commands.registerCommand(id, handler));
   }
 
+  const provideTerminalProfile = (): vscode.TerminalProfile | undefined => {
+    // The terminal service owns placement for a profile launch, so no location.
+    const request = readLaunchRequest('new');
+    if (!preflightCodexCommand(request.command)) {
+      return undefined;
+    }
+    return new vscode.TerminalProfile(terminalOptions('new', false).options);
+  };
   context.subscriptions.push(
     vscode.window.registerTerminalProfileProvider('codexTerminal.profile', {
-      provideTerminalProfile: () => {
-        // The terminal service owns placement for a profile launch, so no location.
-        const request = readLaunchRequest('new');
-        if (!preflightCodexCommand(request.command)) {
-          return undefined;
-        }
-        return new vscode.TerminalProfile(terminalOptions('new', false).options);
-      },
+      provideTerminalProfile,
     }),
   );
 
@@ -287,8 +297,9 @@ export function activate(context: vscode.ExtensionContext): void {
     }),
   );
 
+  const actionsProvider = new ActionsViewProvider();
   context.subscriptions.push(
-    vscode.window.registerTreeDataProvider('codexTerminal.actions', new ActionsViewProvider()),
+    vscode.window.registerTreeDataProvider('codexTerminal.actions', actionsProvider),
   );
 
   createStatusBarItem(context);
@@ -302,6 +313,11 @@ export function activate(context: vscode.ExtensionContext): void {
     `Codex Terminal activated (workbench.statusBar.visible=${statusBarVisible}` +
       `${statusBarVisible ? '' : ' — status bar button cannot render; use the activity bar'})`,
   );
+
+  return {
+    getActionCount: () => actionsProvider.getChildren().length,
+    getTerminalProfileOptions: () => provideTerminalProfile()?.options,
+  };
 }
 
 export function deactivate(): void {

@@ -12,6 +12,12 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   the fallback reason recorded in the extension log.
 - Resolve bare commands through `PATH` and validate absolute paths without rewriting them.
 
+### Added
+
+- A hostile-settings integration suite driven by `@vscode/test-cli`, including a seeded workspace
+  with the status bar hidden and startup editor disabled.
+- Explicit accessibility labels for the status bar button and every Launch-panel action.
+
 ## [0.2.0] - 2026-08-09
 
 ### Added

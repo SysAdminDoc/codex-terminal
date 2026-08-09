@@ -10,7 +10,7 @@ import * as vscode from 'vscode';
  * surface that is present regardless.
  */
 
-interface Action {
+export interface Action {
   label: string;
   description: string;
   command: string;
@@ -50,11 +50,19 @@ const ACTIONS: Action[] = [
   },
 ];
 
+export function getActions(): readonly Action[] {
+  return ACTIONS;
+}
+
 class ActionItem extends vscode.TreeItem {
   constructor(action: Action) {
     super(action.label, vscode.TreeItemCollapsibleState.None);
     this.description = action.description;
     this.tooltip = `${action.label} — ${action.description}`;
+    this.accessibilityInformation = {
+      label: `${action.label}: ${action.description}. Runs ${action.command}.`,
+      role: 'button',
+    };
     this.iconPath = new vscode.ThemeIcon(action.icon);
     this.command = { command: action.command, title: action.label };
   }
