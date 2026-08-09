@@ -1,0 +1,15 @@
+.vscode/**
+.github/**
+src/**
+out/**
+node_modules/**
+docs/screenshots/**
+resources/make_icon.py
+**/*.ts
+**/*.map
+.eslintrc.json
+.gitignore
+esbuild.mjs
+tsconfig.json
+CLAUDE.md
+CODEX_CHANGELOG.md

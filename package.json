@@ -1,0 +1,246 @@
+{
+  "name": "codex-terminal",
+  "displayName": "Codex Terminal",
+  "description": "One click opens Codex CLI in a real PowerShell tab. Pins the shell, contributes a native terminal profile, and adds resume/fork sessions.",
+  "version": "0.1.0",
+  "publisher": "sysadmindoc",
+  "license": "MIT",
+  "author": "SysAdminDoc",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/SysAdminDoc/codex-terminal.git"
+  },
+  "bugs": {
+    "url": "https://github.com/SysAdminDoc/codex-terminal/issues"
+  },
+  "homepage": "https://github.com/SysAdminDoc/codex-terminal#readme",
+  "icon": "resources/icon.png",
+  "galleryBanner": {
+    "color": "#11111b",
+    "theme": "dark"
+  },
+  "engines": {
+    "vscode": "^1.90.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "keywords": [
+    "codex",
+    "cli",
+    "terminal",
+    "powershell",
+    "agent"
+  ],
+  "main": "./dist/extension.js",
+  "activationEvents": [
+    "onStartupFinished"
+  ],
+  "contributes": {
+    "terminal": {
+      "profiles": [
+        {
+          "id": "codexTerminal.profile",
+          "title": "Codex",
+          "icon": "sparkle"
+        }
+      ]
+    },
+    "commands": [
+      {
+        "command": "codexTerminal.new",
+        "title": "New Session",
+        "category": "Codex Terminal",
+        "icon": "$(sparkle)"
+      },
+      {
+        "command": "codexTerminal.resumeLast",
+        "title": "Resume Last Session",
+        "category": "Codex Terminal"
+      },
+      {
+        "command": "codexTerminal.resumePicker",
+        "title": "Resume Session (picker)",
+        "category": "Codex Terminal"
+      },
+      {
+        "command": "codexTerminal.forkLast",
+        "title": "Fork Last Session",
+        "category": "Codex Terminal"
+      },
+      {
+        "command": "codexTerminal.focus",
+        "title": "Focus Codex Terminal",
+        "category": "Codex Terminal"
+      },
+      {
+        "command": "codexTerminal.sendFileReference",
+        "title": "Send File Reference to Codex",
+        "category": "Codex Terminal"
+      },
+      {
+        "command": "codexTerminal.showLog",
+        "title": "Show Log",
+        "category": "Codex Terminal"
+      }
+    ],
+    "menus": {
+      "editor/title": [
+        {
+          "command": "codexTerminal.new",
+          "group": "navigation@100",
+          "when": "config.codexTerminal.showEditorTitleButton"
+        }
+      ],
+      "editor/context": [
+        {
+          "command": "codexTerminal.sendFileReference",
+          "group": "codexTerminal@1",
+          "when": "resourceScheme == file"
+        }
+      ]
+    },
+    "configuration": {
+      "title": "Codex Terminal",
+      "properties": {
+        "codexTerminal.shell": {
+          "type": "string",
+          "enum": [
+            "auto",
+            "pwsh",
+            "powershell",
+            "cmd",
+            "bash",
+            "zsh",
+            "custom",
+            "editorDefault"
+          ],
+          "enumDescriptions": [
+            "PowerShell 7 (pwsh) on Windows, falling back to Windows PowerShell; the login shell elsewhere.",
+            "PowerShell 7 (pwsh.exe).",
+            "Windows PowerShell (powershell.exe).",
+            "Command Prompt (cmd.exe).",
+            "bash.",
+            "zsh.",
+            "The executable in codexTerminal.customShellPath.",
+            "Whatever VS Code's default terminal profile is. This is the only mode that types the command into the shell instead of passing it as an argument."
+          ],
+          "default": "auto",
+          "markdownDescription": "Shell that hosts Codex. Every mode except `editorDefault` passes the command as a shell argument, so nothing is typed into the prompt and the launch cannot race shell startup.",
+          "scope": "machine-overridable"
+        },
+        "codexTerminal.customShellPath": {
+          "type": "string",
+          "default": "",
+          "description": "Absolute path to the shell executable. Used only when codexTerminal.shell is 'custom'.",
+          "scope": "machine-overridable"
+        },
+        "codexTerminal.command": {
+          "type": "string",
+          "default": "codex",
+          "description": "Codex CLI command or absolute path to its executable. Paths containing spaces are quoted for you.",
+          "scope": "machine-overridable"
+        },
+        "codexTerminal.args": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": [],
+          "description": "Extra arguments appended to every Codex launch, for example [\"--model\", \"gpt-5.1-codex\"].",
+          "scope": "machine-overridable"
+        },
+        "codexTerminal.keepShellOpen": {
+          "type": "boolean",
+          "default": true,
+          "description": "Stay at a live shell prompt after Codex exits instead of closing the tab.",
+          "scope": "machine-overridable"
+        },
+        "codexTerminal.location": {
+          "type": "string",
+          "enum": [
+            "editor",
+            "editorBeside",
+            "panel"
+          ],
+          "default": "editor",
+          "enumDescriptions": [
+            "A tab in the editor area, next to your file tabs.",
+            "A tab in the editor area, split beside the active editor.",
+            "The integrated terminal panel."
+          ],
+          "description": "Where the Codex tab opens."
+        },
+        "codexTerminal.reuseTerminal": {
+          "type": "boolean",
+          "default": false,
+          "description": "Focus the existing Codex terminal instead of opening a new tab."
+        },
+        "codexTerminal.cwd": {
+          "type": "string",
+          "enum": [
+            "activeFileFolder",
+            "activeFileWorkspaceFolder",
+            "firstWorkspaceFolder"
+          ],
+          "default": "activeFileWorkspaceFolder",
+          "enumDescriptions": [
+            "The directory containing the active file.",
+            "The workspace folder containing the active file, falling back to the first workspace folder.",
+            "Always the first workspace folder."
+          ],
+          "description": "Working directory Codex starts in."
+        },
+        "codexTerminal.env": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          },
+          "default": {},
+          "description": "Environment variables added to the Codex terminal.",
+          "scope": "machine-overridable"
+        },
+        "codexTerminal.terminalName": {
+          "type": "string",
+          "default": "Codex",
+          "description": "Name shown on the terminal tab."
+        },
+        "codexTerminal.iconColor": {
+          "type": "string",
+          "default": "terminal.ansiMagenta",
+          "description": "Theme color id used to tint the tab icon. Empty string uses the default foreground."
+        },
+        "codexTerminal.showStatusBarItem": {
+          "type": "boolean",
+          "default": true,
+          "description": "Show a Codex button in the status bar."
+        },
+        "codexTerminal.showEditorTitleButton": {
+          "type": "boolean",
+          "default": true,
+          "description": "Show a Codex button in the editor title bar."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "clean": "node -e \"require('node:fs').rmSync('dist',{recursive:true,force:true});require('node:fs').rmSync('out',{recursive:true,force:true})\"",
+    "compile": "tsc -p tsconfig.json",
+    "bundle": "node esbuild.mjs",
+    "lint": "eslint src --ext ts",
+    "test": "npm run compile && node --test \"out/test/**/*.test.js\"",
+    "check": "npm run clean && npm run compile && npm run lint && node --test \"out/test/**/*.test.js\" && npm run bundle",
+    "package": "npm run check && vsce package --out dist/codex-terminal-0.1.0.vsix",
+    "vscode:prepublish": "npm run clean && npm run bundle"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "@types/vscode": "^1.90.0",
+    "@typescript-eslint/eslint-plugin": "^8.18.0",
+    "@typescript-eslint/parser": "^8.18.0",
+    "@vscode/vsce": "^3.2.1",
+    "esbuild": "^0.24.0",
+    "eslint": "^8.57.1",
+    "typescript": "^5.7.2"
+  }
+}

@@ -1,0 +1,18 @@
+# Build output
+dist/
+out/
+*.vsix
+
+# Dependencies
+node_modules/
+
+# Agent working notes — never published
+CLAUDE.md
+CODEX_CHANGELOG.md
+.claude/
+
+# Editor / OS
+.vscode-test/
+.DS_Store
+Thumbs.db
+*.log
