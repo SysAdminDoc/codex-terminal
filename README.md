@@ -61,6 +61,9 @@ The real Codex TUI, started in the workspace folder:
 - **New Session with Profile…** — lists `~/.codex/<name>.config.toml` profiles, plus a free-text
   entry for profiles that are not stored locally. The selected profile is passed as
   `--profile <name>` and appended to the terminal tab name.
+- **Turn-completion notifications** — enable `codexTerminal.notifyOnCompletion` to install a
+  per-launch notify hook in the extension's storage. The setting is opt-in and does not write to
+  Codex's user configuration.
 
 ## Settings
 
@@ -79,6 +82,7 @@ The real Codex TUI, started in the workspace folder:
 | `codexTerminal.iconColor` | `terminal.ansiMagenta` | Theme color id, or `""` for the default. |
 | `codexTerminal.showStatusBarItem` | `true` | |
 | `codexTerminal.showEditorTitleButton` | `true` | |
+| `codexTerminal.notifyOnCompletion` | `false` | Opt in to turn-completion notifications without modifying `~/.codex/config.toml`. |
 
 ### `editorDefault` is the one racy mode
 

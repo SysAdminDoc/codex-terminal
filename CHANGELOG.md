@@ -33,6 +33,8 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   when the active editor cannot identify one.
 - Added a manifest test that guards the machine-overridable trust boundary for command-bearing
   settings.
+- Added opt-in turn-completion notifications through an invocation-scoped Codex `notify` hook;
+  the hook is stored under extension storage and never edits `~/.codex/config.toml`.
 
 ## [0.2.0] - 2026-08-09
 

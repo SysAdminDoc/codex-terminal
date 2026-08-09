@@ -16,6 +16,7 @@ import { ActionsViewProvider } from './actionsView';
 import { TerminalRegistry } from './terminals';
 import { collectDoctorReport } from './doctor';
 import { codexProfilesDirectory, profileNamesFromFiles } from './profiles';
+import { NotifyBridge } from './notify';
 
 const PWSH_PROBE = [
   'C:\\Program Files\\PowerShell\\7\\pwsh.exe',
@@ -26,6 +27,8 @@ const CODEX_INSTALL_URL = 'https://github.com/openai/codex#installation';
 
 let log: vscode.LogOutputChannel;
 let terminalRegistry: TerminalRegistry | undefined;
+let extensionContext: vscode.ExtensionContext | undefined;
+let notifyBridge: NotifyBridge | undefined;
 
 export interface CodexTerminalExtensionApi {
   getActionCount: () => number;
@@ -34,6 +37,38 @@ export interface CodexTerminalExtensionApi {
 
 function config(): vscode.WorkspaceConfiguration {
   return vscode.workspace.getConfiguration('codexTerminal');
+}
+
+async function syncNotifyBridge(): Promise<void> {
+  const enabled = config().get<boolean>('notifyOnCompletion', false);
+  if (!enabled) {
+    notifyBridge?.dispose();
+    notifyBridge = undefined;
+    return;
+  }
+  if (notifyBridge || !extensionContext) {
+    return;
+  }
+
+  const workspaceName =
+    vscode.workspace.name ?? vscode.workspace.workspaceFolders?.[0]?.name ?? 'workspace';
+  const bridge = new NotifyBridge({
+    directory: path.join(extensionContext.globalStorageUri.fsPath, 'notify'),
+    executable: process.execPath,
+    workspaceName,
+    onTurnEnded: (event) => {
+      void vscode.window.showInformationMessage(`Codex turn completed in ${event.workspace}.`);
+    },
+  });
+  try {
+    await bridge.start();
+    notifyBridge = bridge;
+    log.info(`turn-completion notifications enabled for ${workspaceName}`);
+  } catch (error) {
+    bridge.dispose();
+    const message = error instanceof Error ? error.message : String(error);
+    log.error(`Could not enable turn-completion notifications: ${message}`);
+  }
 }
 
 function readLaunchRequest(mode: LaunchMode, profile?: string): LaunchRequest {
@@ -46,6 +81,7 @@ function readLaunchRequest(mode: LaunchMode, profile?: string): LaunchRequest {
       ...modeArgs(mode),
       ...(profile ? profileArgs(profile) : []),
       ...cfg.get<string[]>('args', []),
+      ...(notifyBridge?.launchArgs() ?? []),
     ],
     keepShellOpen: cfg.get<boolean>('keepShellOpen', true),
     platform: process.platform,
@@ -166,6 +202,7 @@ function liveOwnedTerminal(): vscode.Terminal | undefined {
 
 async function launch(mode: LaunchMode, profile?: string): Promise<void> {
   try {
+    await syncNotifyBridge();
     if (mode === 'new' && !profile && config().get<boolean>('reuseTerminal', false)) {
       const existing = liveOwnedTerminal();
       if (existing) {
@@ -348,6 +385,7 @@ function createStatusBarItem(context: vscode.ExtensionContext): void {
 export function activate(context: vscode.ExtensionContext): CodexTerminalExtensionApi {
   log = vscode.window.createOutputChannel('Codex Terminal', { log: true });
   context.subscriptions.push(log);
+  extensionContext = context;
   terminalRegistry = new TerminalRegistry();
   const adopted = terminalRegistry.adopt(
     vscode.window.terminals,
@@ -398,6 +436,7 @@ export function activate(context: vscode.ExtensionContext): CodexTerminalExtensi
 
   const provideTerminalProfile = async (): Promise<vscode.TerminalProfile | undefined> => {
     // The terminal service owns placement for a profile launch, so no location.
+    await syncNotifyBridge();
     const request = readLaunchRequest('new');
     if (!preflightCodexCommand(request.command)) {
       return undefined;
@@ -434,6 +473,21 @@ export function activate(context: vscode.ExtensionContext): CodexTerminalExtensi
     `Codex Terminal activated (workbench.statusBar.visible=${statusBarVisible}` +
       `${statusBarVisible ? '' : ' — status bar button cannot render; use the activity bar'})`,
   );
+  context.subscriptions.push(
+    vscode.workspace.onDidChangeConfiguration((event) => {
+      if (event.affectsConfiguration('codexTerminal.notifyOnCompletion')) {
+        void syncNotifyBridge();
+      }
+    }),
+    {
+      dispose: () => {
+        notifyBridge?.dispose();
+        notifyBridge = undefined;
+        extensionContext = undefined;
+      },
+    },
+  );
+  void syncNotifyBridge();
 
   return {
     getActionCount: () => actionsProvider.getChildren().length,
@@ -442,6 +496,9 @@ export function activate(context: vscode.ExtensionContext): CodexTerminalExtensi
 }
 
 export function deactivate(): void {
+  notifyBridge?.dispose();
+  notifyBridge = undefined;
+  extensionContext = undefined;
   terminalRegistry?.dispose();
   terminalRegistry = undefined;
 }
