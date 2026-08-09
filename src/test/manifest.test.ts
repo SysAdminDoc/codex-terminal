@@ -4,6 +4,7 @@ import * as path from 'node:path';
 import { test } from 'node:test';
 
 interface Manifest {
+  activationEvents?: string[];
   contributes?: {
     configuration?: {
       properties?: Record<string, { scope?: string }>;
@@ -28,4 +29,10 @@ test('command-bearing settings stay machine-overridable', () => {
       `${key} must remain machine-overridable so workspace settings cannot inject commands`,
     );
   }
+});
+
+test('the extension does not force activation in every window at startup', () => {
+  const manifestPath = path.resolve(__dirname, '../../package.json');
+  const manifest = JSON.parse(readFileSync(manifestPath, 'utf8')) as Manifest;
+  assert.ok(!manifest.activationEvents?.includes('onStartupFinished'));
 });

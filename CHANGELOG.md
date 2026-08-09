@@ -41,6 +41,8 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   and localized manifest labels and settings descriptions through `package.nls.json`.
 - Renamed the status-bar visibility setting to `codexTerminal.showStatusBarButton` with a one-time,
   per-version migration from the deprecated `showStatusBarItem` key.
+- Removed the unconditional `onStartupFinished` activation trigger; contribution-driven activation
+  now starts the extension when a Codex command, view, or terminal profile is used.
 
 ## [0.2.0] - 2026-08-09
 
