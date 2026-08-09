@@ -53,7 +53,7 @@ The real Codex TUI, started in the workspace folder:
 - **Terminal `+` dropdown** — pick **Codex**.
 - **Command Palette** — `Codex Terminal: New Session`, `Resume Last Session`,
   `Resume Session (picker)`, `Fork Last Session`, `Focus Codex Terminal`,
-  `Send File Reference to Codex`, `Show Log`.
+  `Send File Reference to Codex`, `Doctor`, `Show Log`.
 - **Right-click in the editor** — *Send File Reference to Codex* puts `@src/file.ts#L10-L20`
   on the Codex prompt without submitting it, so you can type the question after it.
 
@@ -89,6 +89,31 @@ default profile they want honoured; prefer any other mode.
   `codexTerminal.command`. Verify with `codex --version`.
 - Codex authentication is interactive: run `codex login` once in a terminal.
 
+## Troubleshooting
+
+The extension supplies the shell, working directory, and Codex arguments; Codex itself still
+owns the TUI. If the same symptom appears when you run `codex` in a plain terminal, it is a CLI
+issue rather than an extension launch issue. Start with:
+
+```powershell
+codex --version
+codex
+```
+
+- **Raw ANSI escape sequences instead of the TUI** — reported upstream after Codex CLI 0.130.0
+  in [openai/codex#23740](https://github.com/openai/codex/issues/23740). Compare the output of
+  `codex --version` and `codex` in a plain terminal before changing extension settings.
+- **TUI flickers or redraws incorrectly** — tracked upstream in
+  [openai/codex#22953](https://github.com/openai/codex/issues/22953). Reproduce with `codex` in
+  a plain terminal; identical flicker there is outside this extension.
+- **Codex exits back to PowerShell immediately** — tracked upstream in
+  [openai/codex#14709](https://github.com/openai/codex/issues/14709). Run `codex --version` and
+  then `codex` outside VS Code. This extension keeps the shell open after an exit so the error
+  remains readable, but it cannot repair a CLI that exits on its own.
+- **No Codex terminal opens** — run `Codex Terminal: Doctor` and inspect the report for the
+  resolved command and `--version` output. A missing or misspelled command offers an install link;
+  an absolute path in `codexTerminal.command` must point to an existing executable.
+
 ## Install
 
 > **Do not double-click the `.vsix`.** It is not an installer — it is an archive the editor
@@ -123,8 +148,8 @@ npm run check     # clean, compile, lint, test, bundle
 npm run package   # -> dist/codex-terminal-0.2.0.vsix
 ```
 
-`npm run check` runs 21 unit tests over the shell-quoting rules — the part that is easy to get
-wrong and impossible to eyeball on Windows.
+`npm run check` runs 27 unit tests over shell quoting, command resolution, and diagnostics. Run
+`npm run test:integration` separately to boot the hostile-settings VS Code host suite.
 
 ## Unaffiliated
 

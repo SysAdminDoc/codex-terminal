@@ -23,6 +23,8 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   version output, cwd, and the visibility of the extension's UI surfaces.
 - Upgraded the build toolchain to esbuild 0.28.2 and pinned compatible audit overrides for the
   integration runner; `npm audit` now reports zero vulnerabilities.
+- Added troubleshooting guidance for raw ANSI output, TUI flicker, and unexpected CLI exits,
+  including upstream issue links and plain-terminal checks.
 
 ## [0.2.0] - 2026-08-09
 
