@@ -18,6 +18,7 @@ import { collectDoctorReport } from './doctor';
 import { codexProfilesDirectory, profileNamesFromFiles } from './profiles';
 import { NotifyBridge } from './notify';
 import { discoverSessions, type SessionRecord } from './sessions';
+import { strings } from './strings';
 
 const PWSH_PROBE = [
   'C:\\Program Files\\PowerShell\\7\\pwsh.exe',
@@ -58,17 +59,17 @@ async function syncNotifyBridge(): Promise<void> {
     executable: process.execPath,
     workspaceName,
     onTurnEnded: (event) => {
-      void vscode.window.showInformationMessage(`Codex turn completed in ${event.workspace}.`);
+      void vscode.window.showInformationMessage(strings.notifications.turnCompleted(event.workspace));
     },
   });
   try {
     await bridge.start();
     notifyBridge = bridge;
-    log.info(`turn-completion notifications enabled for ${workspaceName}`);
+    log.info(strings.notifications.notificationsEnabled(workspaceName));
   } catch (error) {
     bridge.dispose();
     const message = error instanceof Error ? error.message : String(error);
-    log.error(`Could not enable turn-completion notifications: ${message}`);
+    log.error(strings.notifications.enableFailed(message));
   }
 }
 
@@ -109,7 +110,7 @@ async function resolveCwd(): Promise<string | undefined> {
     const selected = await vscode.window.showQuickPick(
       folders.map((folder) => ({ label: folder.name, description: folder.uri.fsPath, folder })),
       {
-        placeHolder: 'Choose the workspace folder for Codex',
+        placeHolder: strings.folders.prompt(),
         ignoreFocusOut: true,
       },
     );
@@ -163,12 +164,16 @@ async function terminalOptions(
     options.shellArgs = plan.shellArgs;
   }
   log.info(
-    `launch mode=${mode} shell=${plan.shellPath ?? '<editor default>'} ` +
-      `args=${JSON.stringify(plan.shellArgs)} cwd=${options.cwd ?? '<none>'}` +
-      (plan.sendTextFallback ? ` sendText=${JSON.stringify(plan.sendTextFallback)}` : ''),
+    strings.logs.launch(
+      mode,
+      plan.shellPath ?? '<editor default>',
+      JSON.stringify(plan.shellArgs),
+      String(options.cwd ?? '<none>'),
+      plan.sendTextFallback ? JSON.stringify(plan.sendTextFallback) : '',
+    ),
   );
   if (plan.shellResolutionReason) {
-    log.info(`shell resolution: ${plan.shellResolutionReason}`);
+    log.info(strings.logs.shellResolution(plan.shellResolutionReason));
   }
   return { options, plan };
 }
@@ -180,20 +185,18 @@ function preflightCodexCommand(command: string): string | undefined {
     cwd: process.cwd(),
   });
   if (resolved) {
-    log.info(`Codex command preflight passed: ${JSON.stringify(command)} -> ${resolved}`);
+    log.info(strings.logs.commandPreflightPassed(JSON.stringify(command), resolved));
     return resolved;
   }
 
-  const message =
-    `Codex CLI command ${JSON.stringify(command)} was not found. ` +
-    'Install @openai/codex or set codexTerminal.command to an executable path.';
+  const message = strings.errors.missingCommand(command);
   log.error(message);
   void vscode.window
-    .showErrorMessage(message, 'Show Log', 'Install Codex CLI')
+    .showErrorMessage(message, strings.errors.showLog(), strings.errors.install())
     .then((choice) => {
-      if (choice === 'Show Log') {
+      if (choice === strings.errors.showLog()) {
         log.show(true);
-      } else if (choice === 'Install Codex CLI') {
+      } else if (choice === strings.errors.install()) {
         void vscode.env.openExternal(vscode.Uri.parse(CODEX_INSTALL_URL));
       }
     });
@@ -233,7 +236,7 @@ async function launch(mode: LaunchMode, profile?: string, sessionId?: string): P
       terminal.sendText(plan.sendTextFallback, true);
     }
   } catch (error) {
-    reportError(error, 'Could not start Codex');
+    reportError(error, strings.errors.couldNotStart());
   }
 }
 
@@ -251,18 +254,18 @@ function discoveredProfiles(): string[] {
 
 async function launchWithProfile(): Promise<void> {
   const freeTextItem: vscode.QuickPickItem = {
-    label: '$(edit) Enter a profile name…',
-    description: 'Use any profile name supported by Codex',
+    label: strings.profiles.freeText(),
+    description: strings.profiles.freeTextDescription(),
   };
   const items: vscode.QuickPickItem[] = [
     ...discoveredProfiles().map((name) => ({
       label: name,
-      description: `--profile ${name}`,
+      description: strings.profiles.argument(name),
     })),
     freeTextItem,
   ];
   const selected = await vscode.window.showQuickPick(items, {
-    placeHolder: 'Choose a Codex profile',
+    placeHolder: strings.profiles.prompt(),
     ignoreFocusOut: true,
   });
   if (!selected) {
@@ -271,8 +274,8 @@ async function launchWithProfile(): Promise<void> {
   const profile =
     selected === freeTextItem
       ? await vscode.window.showInputBox({
-          prompt: 'Codex profile name',
-          placeHolder: 'team-default',
+          prompt: strings.profiles.inputPrompt(),
+          placeHolder: strings.profiles.inputPlaceholder(),
           ignoreFocusOut: true,
         })
       : selected.label;
@@ -290,13 +293,16 @@ async function resumeFromSessionPicker(): Promise<void> {
   }
 
   const items = sessions.map((session: SessionRecord) => ({
-    label: `${new Date(session.timestamp).toLocaleString()} — ${session.id.slice(0, 8)}`,
+    label: strings.sessions.resumeLabel(
+      new Date(session.timestamp).toLocaleString(),
+      session.id.slice(0, 8),
+    ),
     description: session.cwd,
     detail: session.timestamp,
     session,
   }));
   const selected = await vscode.window.showQuickPick(items, {
-    placeHolder: 'Choose a recent Codex session to resume',
+    placeHolder: strings.sessions.prompt(),
     matchOnDescription: true,
     matchOnDetail: true,
     ignoreFocusOut: true,
@@ -308,11 +314,12 @@ async function resumeFromSessionPicker(): Promise<void> {
 
 function reportError(error: unknown, headline: string): void {
   const message = error instanceof Error ? error.message : String(error);
-  log.error(`${headline}: ${message}`);
+  const report = strings.errors.withDetail(headline, message);
+  log.error(report);
   void vscode.window
-    .showErrorMessage(`${headline}: ${message}`, 'Show Log')
+    .showErrorMessage(report, strings.errors.showLog())
     .then((choice) => {
-      if (choice === 'Show Log') {
+      if (choice === strings.errors.showLog()) {
         log.show(true);
       }
     });
@@ -333,25 +340,26 @@ async function runDoctor(): Promise<void> {
       statusBarVisible,
       editorTitleButtonCanRender,
     });
-    log.info(report.text);
-    const choice = await vscode.window.showInformationMessage(report.text, 'Show Log');
-    if (choice === 'Show Log') {
+    const text = strings.doctor.report(report);
+    log.info(text);
+    const choice = await vscode.window.showInformationMessage(text, strings.errors.showLog());
+    if (choice === strings.errors.showLog()) {
       log.show(true);
     }
   } catch (error) {
-    reportError(error, 'Could not run Codex Doctor');
+    reportError(error, strings.errors.couldNotRunDoctor());
   }
 }
 
 function sendFileReference(): void {
   const editor = vscode.window.activeTextEditor;
   if (!editor) {
-    void vscode.window.showWarningMessage('Codex Terminal: no active editor to reference.');
+    void vscode.window.showWarningMessage(strings.warnings.noEditor());
     return;
   }
   const terminal = liveOwnedTerminal() ?? vscode.window.activeTerminal;
   if (!terminal) {
-    void vscode.window.showWarningMessage('Codex Terminal: no terminal to send the reference to.');
+    void vscode.window.showWarningMessage(strings.warnings.noTerminal());
     return;
   }
 
@@ -369,7 +377,7 @@ function sendFileReference(): void {
   terminal.show(false);
   // `false` leaves the reference on the prompt so a question can be typed after it.
   terminal.sendText(`${reference} `, false);
-  log.info(`sent reference ${reference}`);
+  log.info(strings.logs.sentReference(reference));
 }
 
 function focusSession(terminal: vscode.Terminal | undefined): void {
@@ -385,10 +393,10 @@ function stopSession(terminal: vscode.Terminal | undefined): void {
 function createStatusBarItem(context: vscode.ExtensionContext): void {
   const item = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 100);
   item.command = 'codexTerminal.new';
-  item.text = '$(sparkle) Codex';
-  item.tooltip = 'Open Codex CLI in a terminal';
+  item.text = strings.status.text();
+  item.tooltip = strings.status.tooltip();
   item.accessibilityInformation = {
-    label: 'Codex Terminal: Open Codex CLI in a terminal',
+    label: strings.status.accessibility(),
     role: 'button',
   };
   context.subscriptions.push(item);
@@ -420,7 +428,7 @@ export function activate(context: vscode.ExtensionContext): CodexTerminalExtensi
     config().get<string>('terminalName', 'Codex'),
   );
   if (adopted > 0) {
-    log.info(`adopted ${adopted} surviving Codex terminal${adopted === 1 ? '' : 's'}`);
+    log.info(strings.logs.adopted(adopted));
   }
 
   const commands: Array<[string, () => void]> = [
@@ -503,8 +511,7 @@ export function activate(context: vscode.ExtensionContext): CodexTerminalExtensi
     .getConfiguration('workbench')
     .get<boolean>('statusBar.visible', true);
   log.info(
-    `Codex Terminal activated (workbench.statusBar.visible=${statusBarVisible}` +
-      `${statusBarVisible ? '' : ' — status bar button cannot render; use the activity bar'})`,
+    strings.logs.activation(statusBarVisible),
   );
   context.subscriptions.push(
     vscode.workspace.onDidChangeConfiguration((event) => {

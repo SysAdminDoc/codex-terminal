@@ -18,11 +18,14 @@ export interface DoctorInput {
 }
 
 export interface DoctorReport {
-  text: string;
   plan: LaunchPlan;
   shellExists: boolean | undefined;
+  command: string;
   commandPath: string | undefined;
   version: string;
+  cwd: string | undefined;
+  statusBarVisible: boolean;
+  editorTitleButtonCanRender: boolean;
 }
 
 function commandInvocation(command: string, platform: NodeJS.Platform): {
@@ -97,20 +100,16 @@ export async function collectDoctorReport(input: DoctorInput): Promise<DoctorRep
   const commandPath = resolveCommandPath(input.request.command, resolveOptions);
   const version = commandPath
     ? await (input.runVersion ?? runCommandVersion)(commandPath, input.request.platform)
-    : 'not run (command not found)';
+    : '';
   const shellExists = shellPath ? shellResolved !== undefined : undefined;
-  const text = [
-    'Codex Terminal Doctor',
-    `shell: ${shellPath ?? '<editor default>'}`,
-    `shell exists: ${shellExists === undefined ? 'n/a' : shellExists}`,
-    `Codex command: ${input.request.command}`,
-    `resolved Codex command: ${commandPath ?? '<not found>'}`,
-    `Codex --version: ${version}`,
-    `cwd: ${input.cwd ?? '<none>'}`,
-    `workbench.statusBar.visible: ${input.statusBarVisible}`,
-    `editor-title button can render: ${input.editorTitleButtonCanRender}`,
-    ...(plan.shellResolutionReason ? [`shell resolution: ${plan.shellResolutionReason}`] : []),
-  ].join('\n');
-
-  return { text, plan, shellExists, commandPath, version };
+  return {
+    plan,
+    shellExists,
+    command: input.request.command,
+    commandPath,
+    version,
+    cwd: input.cwd,
+    statusBarVisible: input.statusBarVisible,
+    editorTitleButtonCanRender: input.editorTitleButtonCanRender,
+  };
 }

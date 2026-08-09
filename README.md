@@ -156,6 +156,7 @@ Codex icon then appears in the activity bar.
 ```powershell
 npm install
 npm run check     # clean, compile, lint, test, bundle
+npm run l10n:export # refresh the default English localization bundle
 npm run package   # -> dist/codex-terminal-0.2.0.vsix
 ```
 

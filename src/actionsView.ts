@@ -1,6 +1,7 @@
 import * as vscode from 'vscode';
 
 import { TerminalRegistry, type TrackedTerminal } from './terminals';
+import { strings } from './strings';
 
 /**
  * Activity bar entry listing the launch actions.
@@ -33,32 +34,32 @@ const RUNNING_GROUP: RunningGroup = { kind: 'running-group' };
 
 const ACTIONS: Action[] = [
   {
-    label: 'New Session',
-    description: 'codex',
+    label: strings.actions.newSession(),
+    description: strings.actions.codex(),
     command: 'codexTerminal.new',
     icon: 'sparkle',
   },
   {
-    label: 'Resume Last Session',
-    description: 'codex resume --last',
+    label: strings.actions.resumeLast(),
+    description: strings.actions.resumeLastCommand(),
     command: 'codexTerminal.resumeLast',
     icon: 'history',
   },
   {
-    label: 'Resume Session…',
-    description: 'codex resume',
+    label: strings.actions.resumePicker(),
+    description: strings.actions.resumeCommand(),
     command: 'codexTerminal.resumePicker',
     icon: 'list-selection',
   },
   {
-    label: 'Fork Last Session',
-    description: 'codex fork --last',
+    label: strings.actions.forkLast(),
+    description: strings.actions.forkLastCommand(),
     command: 'codexTerminal.forkLast',
     icon: 'git-branch',
   },
   {
-    label: 'Send File Reference',
-    description: '@path#L1-L2',
+    label: strings.actions.sendReference(),
+    description: strings.actions.referenceExample(),
     command: 'codexTerminal.sendFileReference',
     icon: 'file-code',
   },
@@ -72,9 +73,9 @@ class ActionItem extends vscode.TreeItem {
   constructor(action: Action) {
     super(action.label, vscode.TreeItemCollapsibleState.None);
     this.description = action.description;
-    this.tooltip = `${action.label} — ${action.description}`;
+    this.tooltip = strings.actions.tooltip(action.label, action.description);
     this.accessibilityInformation = {
-      label: `${action.label}: ${action.description}. Runs ${action.command}.`,
+      label: strings.actions.accessibility(action.label, action.description, action.command),
       role: 'button',
     };
     this.iconPath = new vscode.ThemeIcon(action.icon);
@@ -84,12 +85,12 @@ class ActionItem extends vscode.TreeItem {
 
 class RunningGroupItem extends vscode.TreeItem {
   constructor(count: number) {
-    super('Running', vscode.TreeItemCollapsibleState.Expanded);
-    this.description = `${count} session${count === 1 ? '' : 's'}`;
-    this.tooltip = 'Live Codex terminal sessions';
+    super(strings.running.group(), vscode.TreeItemCollapsibleState.Expanded);
+    this.description = strings.running.sessionCount(count);
+    this.tooltip = strings.running.tooltip();
     this.iconPath = new vscode.ThemeIcon('pulse');
     this.accessibilityInformation = {
-      label: `Running: ${count} live Codex session${count === 1 ? '' : 's'}`,
+      label: strings.running.accessibilityGroup(count),
       role: 'treeitem',
     };
   }
@@ -98,18 +99,18 @@ class RunningGroupItem extends vscode.TreeItem {
 class RunningSessionItem extends vscode.TreeItem {
   constructor(readonly session: RunningSession) {
     super(session.tracked.terminal.name, vscode.TreeItemCollapsibleState.None);
-    const cwd = session.tracked.cwd ?? 'working directory unavailable';
+    const cwd = session.tracked.cwd ?? strings.running.unavailableCwd();
     this.description = cwd;
-    this.tooltip = `${session.tracked.terminal.name} — ${cwd}`;
+    this.tooltip = strings.running.tooltipSession(session.tracked.terminal.name, cwd);
     this.iconPath = new vscode.ThemeIcon('terminal');
     this.contextValue = 'codexTerminal.runningSession';
     this.command = {
       command: 'codexTerminal.focusSession',
-      title: 'Focus Running Codex Session',
+      title: strings.running.focusTitle(),
       arguments: [session.tracked.terminal],
     };
     this.accessibilityInformation = {
-      label: `${session.tracked.terminal.name}, working directory ${cwd}. Click to focus; use the inline actions to focus or stop.`,
+      label: strings.running.accessibilitySession(session.tracked.terminal.name, cwd),
       role: 'button',
     };
   }

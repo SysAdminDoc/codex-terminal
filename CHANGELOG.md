@@ -37,6 +37,8 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   the hook is stored under extension storage and never edits `~/.codex/config.toml`.
 - The resume picker now reads recent session metadata locally, shows timestamp/cwd, and resumes a
   selected UUID directly while retaining Codex's picker as the empty-store fallback.
+- Externalized extension-host strings through `vscode.l10n`, added the generated English bundle,
+  and localized manifest labels and settings descriptions through `package.nls.json`.
 
 ## [0.2.0] - 2026-08-09
 

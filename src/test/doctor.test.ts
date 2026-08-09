@@ -34,10 +34,10 @@ test('doctor reports shell, command, version, cwd, and UI visibility', async () 
 
   assert.equal(report.shellExists, true);
   assert.equal(report.commandPath, 'C:\\tools\\codex.cmd');
-  assert.match(report.text, /Codex --version: C:\\tools\\codex\.cmd 0\.147\.0/);
-  assert.match(report.text, /cwd: C:\\workspace/);
-  assert.match(report.text, /workbench\.statusBar\.visible: false/);
-  assert.match(report.text, /editor-title button can render: false/);
+  assert.equal(report.version, 'C:\\tools\\codex.cmd 0.147.0');
+  assert.equal(report.cwd, 'C:\\workspace');
+  assert.equal(report.statusBarVisible, false);
+  assert.equal(report.editorTitleButtonCanRender, false);
 });
 
 test('doctor does not run a missing command', async () => {
@@ -56,5 +56,5 @@ test('doctor does not run a missing command', async () => {
 
   assert.equal(versionProbes, 0);
   assert.equal(report.commandPath, undefined);
-  assert.match(report.text, /not run \(command not found\)/);
+  assert.equal(report.version, '');
 });
