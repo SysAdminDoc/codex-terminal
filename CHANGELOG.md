@@ -3,6 +3,28 @@
 All notable changes to Codex Terminal are documented here.
 This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Fixed
+
+- **Naming a session was unreachable from the UI.** Both context menu entries for
+  *Name Codex Session* referenced a command the manifest never declared, so VS Code dropped the
+  menu items and logged the reason where nobody was looking. The command was registered and
+  working the whole time; only the manifest entry was missing. A manifest test now asserts that
+  every command a menu offers is a command the manifest declares.
+
+### Changed
+
+- **A running session no longer re-announces itself to a screen reader on every refresh.** Its
+  accessible name had been the same string as the visible row, which carries elapsed time, a
+  token total and a context percentage — three values that change constantly. The name now
+  carries only the status, whether the session has gone quiet, and the number of completed
+  turns, so it is spoken on real transitions instead of once a second. The visible row and the
+  tooltip are unchanged.
+- The status bar item now says how many sessions are open once none of them are working, so
+  the end of the last turn is an audible transition rather than a silent fall back to the
+  idle label.
+
 ## [0.8.0] - 2026-08-10
 
 ### Added

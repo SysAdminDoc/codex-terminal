@@ -18,6 +18,7 @@ interface Manifest {
   contributes?: {
     views?: Record<string, Array<{ id?: string }>>;
     commands?: Array<{ command?: string }>;
+    menus?: Record<string, Array<{ command?: string; when?: string }>>;
     terminal?: { profiles?: Array<{ id?: string; titleTemplate?: string }> };
     configuration?: {
       properties?: Record<string, { scope?: string; default?: unknown }>;
@@ -113,6 +114,27 @@ test('every recovery command reaches the manifest', () => {
   ]) {
     assert.ok(commands.has(id), `${id} must be contributed or the tree item cannot invoke it`);
   }
+});
+
+test('every command a menu offers is a command the manifest declares', () => {
+  // Found in the running editor, not here: VS Code silently drops a menu item whose command
+  // is undeclared and logs `Menu item references a command … which is not defined in the
+  // 'commands' section`. `codexTerminal.nameSession` was registered at runtime and wired into
+  // two context menus, so the code was complete and the tests were green — and the feature was
+  // unreachable through the UI for two releases because the manifest never named the command.
+  const manifest = readManifest();
+  const declared = new Set((manifest.contributes?.commands ?? []).map((entry) => entry.command));
+  const referenced = new Set<string>();
+  for (const items of Object.values(manifest.contributes?.menus ?? {})) {
+    for (const item of items) {
+      if (item.command) {
+        referenced.add(item.command);
+      }
+    }
+  }
+  assert.ok(referenced.size > 0, 'the manifest must contribute menu items');
+  const undeclared = [...referenced].filter((command) => !declared.has(command));
+  assert.deepEqual(undeclared, [], `menu commands missing from contributes.commands: ${undeclared.join(', ')}`);
 });
 
 test('the extension declares how it behaves in an untrusted workspace', () => {

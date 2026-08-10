@@ -207,6 +207,12 @@
         "icon": "$(archive)"
       },
       {
+        "command": "codexTerminal.nameSession",
+        "title": "%command.nameSession.title%",
+        "category": "%category.codexTerminal%",
+        "icon": "$(edit)"
+      },
+      {
         "command": "codexTerminal.deleteSession",
         "title": "%command.deleteSession.title%",
         "category": "%category.codexTerminal%",
