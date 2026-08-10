@@ -180,6 +180,11 @@ export class SessionMonitor implements vscode.Disposable {
     this.reschedule();
   }
 
+  /** Redraw the views without a state change, e.g. after a session was renamed. */
+  refreshViews(): void {
+    this.changes.fire();
+  }
+
   live(): LiveSession[] {
     return this.liveTracked();
   }

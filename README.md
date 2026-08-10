@@ -77,6 +77,10 @@ The real Codex TUI, started in the workspace folder:
   own state database stays in step. **Expand a session** to list the files it changed — added,
   edited or deleted — read back from the rollout; click one to open it. Deleted files are shown
   without a link. The scan runs when you expand the row, not during the listing.
+- **Naming a session** — *Name Session…* on a row in either sidebar. The name replaces that
+  row's label everywhere the extension draws it. It is stored by this extension, not by Codex:
+  the Codex CLI accepts a session name wherever it accepts an id, but offers no way to set one,
+  so a name given here does not reach Codex's own tab title.
 - **Interrupted sessions** — if a window closes without shutting down cleanly, the next window
   offers the Codex sessions it had open under an **Interrupted sessions** group at the top of the
   History view. Restoring one resumes that conversation where it stopped. Sessions that never

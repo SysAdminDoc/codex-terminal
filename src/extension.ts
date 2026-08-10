@@ -35,6 +35,7 @@ import {
   sessionProject,
   type SessionRecord,
 } from './sessions';
+import { idForName, setSessionName, type SessionNames } from './names';
 import { strings } from './strings';
 import { migrateSettings, type MigrationTarget } from './migrate';
 import {
@@ -61,6 +62,7 @@ import {
   type SettingChange,
 } from './workbench';
 import { HistoryViewProvider, isRecoveryNode, isSessionNode } from './historyView';
+import { isRunningSessionNode } from './actionsView';
 import {
   TRANSCRIPT_SCHEME,
   TranscriptContentProvider,
@@ -75,6 +77,8 @@ const PWSH_PROBE = [
 const CODEX_INSTALL_URL = 'https://github.com/openai/codex#installation';
 /** `globalState` key holding what the workbench settings looked like before we touched them. */
 const OVERRIDE_LEDGER_KEY = 'codexTerminal.workbenchOverrides';
+/** `globalState` key for the operator's own names, keyed by Codex session id. */
+const SESSION_NAMES_KEY = 'codexTerminal.sessionNames';
 
 let log: vscode.LogOutputChannel;
 let terminalRegistry: TerminalRegistry | undefined;
@@ -619,6 +623,52 @@ async function askAboutSelection(): Promise<void> {
   target.terminal.show(false);
   target.terminal.sendText(line, true);
   log.info(strings.logs.sentReference(line));
+}
+
+function sessionNames(): SessionNames {
+  return extensionContext?.globalState.get<SessionNames>(SESSION_NAMES_KEY) ?? {};
+}
+
+/**
+ * Name a session, from either tree.
+ *
+ * The name is the extension's own: Codex accepts a session name wherever it accepts an id,
+ * but its CLI has no way to *set* one (0.147 has no rename subcommand and no flag), so the
+ * only writer is `app-server`'s `thread/name/set`, which is not yet spoken here. A local name
+ * still does the job names are for — telling several running agents apart — and resume works
+ * because the name resolves to an id before the command is built.
+ */
+async function nameSession(node: unknown): Promise<void> {
+  const session = isSessionNode(node)
+    ? { id: node.session.id, fallback: node.session.preview ?? node.project }
+    : isRunningSessionNode(node) && node.session.sessionId
+      ? { id: node.session.sessionId, fallback: node.session.project || node.session.label }
+      : undefined;
+  if (!session) {
+    void vscode.window.showWarningMessage(strings.names.notBound());
+    return;
+  }
+
+  const names = sessionNames();
+  const typed = await vscode.window.showInputBox({
+    prompt: strings.names.prompt(session.fallback),
+    placeHolder: strings.names.placeholder(),
+    value: names[session.id] ?? '',
+    ignoreFocusOut: true,
+  });
+  if (typed === undefined) {
+    return;
+  }
+
+  const clash = idForName(names, typed);
+  if (clash && clash !== session.id) {
+    void vscode.window.showWarningMessage(strings.names.duplicate(typed.trim()));
+    return;
+  }
+
+  await extensionContext?.globalState.update(SESSION_NAMES_KEY, setSessionName(names, session.id, typed));
+  historyViewProvider?.refresh();
+  sessionMonitor?.refreshViews();
 }
 
 function focusSession(terminal: vscode.Terminal | undefined): void {
@@ -1169,6 +1219,9 @@ export async function activate(context: vscode.ExtensionContext): Promise<CodexT
     context.subscriptions.push(vscode.commands.registerCommand(id, handler));
   }
   context.subscriptions.push(
+    vscode.commands.registerCommand('codexTerminal.nameSession', (node: unknown) => {
+      void nameSession(node);
+    }),
     vscode.commands.registerCommand('codexTerminal.focusSession', focusSession),
     vscode.commands.registerCommand('codexTerminal.stopSession', stopSession),
     vscode.commands.registerCommand('codexTerminal.openTranscript', openTranscript),
@@ -1212,9 +1265,12 @@ export async function activate(context: vscode.ExtensionContext): Promise<CodexT
     monitor,
     () => config().get<number>('stallSeconds', DEFAULT_STALL_SECONDS),
     animationAllowed,
+    sessionNames,
   );
-  historyViewProvider = new HistoryViewProvider(() =>
-    config().get<number>('history.maxSessions', 200),
+  historyViewProvider = new HistoryViewProvider(
+    () => config().get<number>('history.maxSessions', 200),
+    () => codexHomeDirectory(),
+    sessionNames,
   );
   const actionsView = vscode.window.createTreeView('codexTerminal.actions', {
     treeDataProvider: actionsProvider,

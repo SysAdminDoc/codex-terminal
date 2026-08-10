@@ -263,6 +263,16 @@
           "group": "inline@2"
         },
         {
+          "command": "codexTerminal.nameSession",
+          "when": "view == codexTerminal.actions && viewItem == codexTerminal.runningSession.bound",
+          "group": "codexTerminal@1"
+        },
+        {
+          "command": "codexTerminal.nameSession",
+          "when": "view == codexTerminal.history && viewItem == codexTerminal.historySession",
+          "group": "codexTerminal@0"
+        },
+        {
           "command": "codexTerminal.openTranscript",
           "when": "view == codexTerminal.history && viewItem == codexTerminal.historySession",
           "group": "inline@1"

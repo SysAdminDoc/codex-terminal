@@ -10,6 +10,7 @@ import {
   formatTokens,
   presentStatus,
 } from './present';
+import { displayName, type SessionNames } from './names';
 import { strings } from './strings';
 
 /**
@@ -39,6 +40,15 @@ interface RunningSession {
 }
 
 type ActionNode = Action | RunningGroup | RunningSession;
+
+/** Narrow a tree node handed back by a context-menu command. */
+export function isRunningSessionNode(node: unknown): node is RunningSession {
+  return (
+    typeof node === 'object' &&
+    node !== null &&
+    (node as RunningSession).kind === 'running-session'
+  );
+}
 const RUNNING_GROUP: RunningGroup = { kind: 'running-group' };
 
 const ACTIONS: Action[] = [
@@ -113,9 +123,18 @@ class RunningGroupItem extends vscode.TreeItem {
 }
 
 class RunningSessionItem extends vscode.TreeItem {
-  constructor(node: RunningSession, now: number, stallSeconds: number, animate: boolean) {
+  constructor(
+    node: RunningSession,
+    now: number,
+    stallSeconds: number,
+    animate: boolean,
+    names: SessionNames,
+  ) {
     const { session } = node;
-    super(session.project || session.label, vscode.TreeItemCollapsibleState.None);
+    super(
+      displayName(names, session.sessionId, session.project || session.label),
+      vscode.TreeItemCollapsibleState.None,
+    );
     const presentation = presentStatus(session.activity, animate);
     this.description = describeActivity(session.activity, now, stallSeconds);
     this.iconPath = new vscode.ThemeIcon(
@@ -132,10 +151,7 @@ class RunningSessionItem extends vscode.TreeItem {
       arguments: [session.terminal],
     };
     this.accessibilityInformation = {
-      label: strings.running.accessibilitySession(
-        session.project || session.label,
-        this.description,
-      ),
+      label: strings.running.accessibilitySession(String(this.label), this.description),
       role: 'button',
     };
   }
@@ -200,6 +216,7 @@ export class ActionsViewProvider implements vscode.TreeDataProvider<ActionNode>,
     private readonly monitor: SessionMonitor,
     private readonly stallSeconds: () => number = () => DEFAULT_STALL_SECONDS,
     private readonly animate: () => boolean = () => true,
+    private readonly names: () => SessionNames = () => ({}),
   ) {
     this.monitorSubscription = monitor.onDidChange(() => this.changes.fire());
   }
@@ -213,7 +230,13 @@ export class ActionsViewProvider implements vscode.TreeDataProvider<ActionNode>,
       );
     }
     if ('kind' in node && node.kind === 'running-session') {
-      return new RunningSessionItem(node, Date.now(), this.stallSeconds(), this.animate());
+      return new RunningSessionItem(
+        node,
+        Date.now(),
+        this.stallSeconds(),
+        this.animate(),
+        this.names(),
+      );
     }
     return new ActionItem(node);
   }

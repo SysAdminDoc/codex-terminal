@@ -14,6 +14,7 @@ import {
 } from './sessions';
 import type { JournalSession } from './journal';
 import type { FileChange } from './transcript';
+import { displayName, type SessionNames } from './names';
 import { strings } from './strings';
 
 /**
@@ -178,11 +179,13 @@ class ProjectItem extends vscode.TreeItem {
 }
 
 class SessionItem extends vscode.TreeItem {
-  constructor(node: SessionNode) {
+  constructor(node: SessionNode, names: SessionNames = {}) {
     // Collapsed, not None: expanding lists the files the session changed, which is read from
     // the rollout on demand rather than during the listing scan.
+    // A name, where one was given, replaces the prompt preview: it is what the operator chose
+    // to identify this conversation by.
     super(
-      node.session.preview || strings.history.noPrompt(),
+      displayName(names, node.session.id, node.session.preview || strings.history.noPrompt()),
       vscode.TreeItemCollapsibleState.Collapsed,
     );
     const { session } = node;
@@ -294,6 +297,7 @@ export class HistoryViewProvider
   constructor(
     private readonly limit: () => number,
     private readonly homeDirectory: () => string = () => codexHomeDirectory(),
+    private readonly names: () => SessionNames = () => ({}),
   ) {}
 
   /** Re-read the rollout directory. `hard` also drops the per-file preview cache. */
@@ -405,7 +409,7 @@ export class HistoryViewProvider
       case 'project':
         return new ProjectItem(node.group);
       case 'session':
-        return new SessionItem(node);
+        return new SessionItem(node, this.names());
       case 'usage':
         return new UsageItem(node);
       case 'changed-file':

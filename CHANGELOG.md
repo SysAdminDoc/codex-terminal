@@ -26,6 +26,14 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   any JSON parsing, since a rollout embeds the full contents of every file it writes — the
   largest here, 128 MB, lists its 48 files in 429 ms. If a cap is hit the list says so rather
   than passing a prefix off as the whole story.
+- **Sessions can be named**, from either sidebar, and the name replaces the row's label in
+  both. Six agents running against six repositories are told apart by the thing you called
+  them, not by a truncated first prompt. The name is the extension's own: Codex accepts a
+  session name wherever it accepts an id — `resume`, `archive`, `delete`, `unarchive` all take
+  one — but its CLI has no way to *set* one (0.147 has no rename subcommand and no flag), so
+  the only writer is `app-server`'s `thread/name/set`, which this extension does not yet
+  speak. Resuming still works, because a name resolves to an id before the command is built.
+  Codex's own `thread-title` tab item is the one place a name cannot reach.
 - **Ask Codex About Selection…** takes your question in an input box and submits it together
   with the `@path#L10-L20` reference. The existing reference-only command is unchanged — it
   stops at the prompt on purpose, which is the better path when the question is easier to type

@@ -187,6 +187,15 @@ export const strings = {
       vscode.l10n.t('Ask Codex about {0}', reference),
     askPlaceholder: (): string => vscode.l10n.t('What should Codex do with this?'),
   },
+  names: {
+    prompt: (fallback: string): string =>
+      vscode.l10n.t('Name this Codex session (currently shown as “{0}”)', fallback),
+    placeholder: (): string => vscode.l10n.t('e.g. auth refactor'),
+    duplicate: (name: string): string =>
+      vscode.l10n.t('Another session is already named “{0}”.', name),
+    notBound: (): string =>
+      vscode.l10n.t('This session has no Codex session id yet, so it cannot be named.'),
+  },
   warnings: {
     noEditor: (): string => vscode.l10n.t('Codex Terminal: no active editor to reference.'),
     noTerminal: (): string =>
