@@ -135,6 +135,7 @@
   "codexTerminal.appServer.enabled is on, but this editor has no WebSocket support (it needs one built on Node 22 or newer). Launching Codex without --remote.": "codexTerminal.appServer.enabled is on, but this editor has no WebSocket support (it needs one built on Node 22 or newer). Launching Codex without --remote.",
   "cannot host an app-server: {0} was not found on PATH": "cannot host an app-server: {0} was not found on PATH",
   "could not host an app-server ({0}); launching Codex without --remote": "could not host an app-server ({0}); launching Codex without --remote",
+  "Start One": "Start One",
   "Codex Terminal: no active editor to reference.": "Codex Terminal: no active editor to reference.",
   "Codex Terminal: no terminal to send the reference to.": "Codex Terminal: no terminal to send the reference to.",
   "$(sparkle) Codex": "$(sparkle) Codex",

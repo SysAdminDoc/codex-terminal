@@ -130,7 +130,15 @@ export function renderTerminalName(template: string, context: TerminalNameContex
  * shell processes survived. Names are templated now, so an equality test against
  * `terminalName` would adopt nothing; the constant part of the template is the marker.
  */
+/**
+ * Shortest `terminalName` that may be used to claim a terminal.
+ *
+ * The match is a substring, so a one-character name adopted every terminal in the window
+ * after a reload — a build, an SSH session, a REPL — and then tracked them as Codex sessions.
+ */
+export const MIN_OWNERSHIP_NAME_LENGTH = 3;
+
 export function isOwnedTerminalName(terminalName: string, baseName: string): boolean {
   const base = baseName.trim();
-  return base.length > 0 && terminalName.includes(base);
+  return base.length >= MIN_OWNERSHIP_NAME_LENGTH && terminalName.includes(base);
 }

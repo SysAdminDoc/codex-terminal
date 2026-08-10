@@ -24,6 +24,16 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- **Editor context could be typed into somebody else's terminal.** *Send File Reference* and
+  *Ask Codex about Selection* fell back to `window.activeTerminal` when no Codex session was
+  tracked — so with none running they typed the reference, and for the second command pressed
+  Enter, into whatever terminal happened to be focused: a running build, an SSH session, a
+  REPL. They now use only a terminal this extension owns, and offer to start one otherwise.
+  Ownership itself needed tightening too: it is a substring match on
+  `codexTerminal.terminalName`, so a one- or two-character name claimed every terminal in the
+  window after a reload. Three characters is now the minimum, in the setting's schema and in
+  the matcher.
+
 - **A launch that never matched a session retried forever, silently.** Only successful matches
   were logged, so a launch that never bound looked exactly like one that bound instantly — and
   it kept scanning every two seconds for the life of the window, over a directory range that

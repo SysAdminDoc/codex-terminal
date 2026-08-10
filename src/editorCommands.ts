@@ -55,9 +55,18 @@ function resolveReferenceTarget():
     void vscode.window.showWarningMessage(strings.warnings.noEditor());
     return undefined;
   }
-  const terminal = liveOwnedTerminal() ?? vscode.window.activeTerminal;
+  // Deliberately not `?? vscode.window.activeTerminal`. With no Codex session tracked, that
+  // typed the file reference — and, for "Ask Codex about selection", pressed Enter — into
+  // whatever terminal happened to be focused: a running build, an SSH session, a REPL.
+  const terminal = liveOwnedTerminal();
   if (!terminal) {
-    void vscode.window.showWarningMessage(strings.warnings.noTerminal());
+    void vscode.window
+      .showWarningMessage(strings.warnings.noTerminal(), strings.warnings.startSession())
+      .then((choice) => {
+        if (choice === strings.warnings.startSession()) {
+          void vscode.commands.executeCommand('codexTerminal.new');
+        }
+      });
     return undefined;
   }
 

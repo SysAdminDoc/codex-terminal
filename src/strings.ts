@@ -294,6 +294,7 @@ export const strings = {
       vscode.l10n.t('could not host an app-server ({0}); launching Codex without --remote', reason),
   },
   warnings: {
+    startSession: (): string => vscode.l10n.t('Start One'),
     noEditor: (): string => vscode.l10n.t('Codex Terminal: no active editor to reference.'),
     noTerminal: (): string =>
       vscode.l10n.t('Codex Terminal: no terminal to send the reference to.'),

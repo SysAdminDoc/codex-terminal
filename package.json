@@ -439,6 +439,7 @@
         },
         "codexTerminal.terminalName": {
           "type": "string",
+          "minLength": 3,
           "default": "Codex",
           "description": "%setting.terminalName.description%"
         },
