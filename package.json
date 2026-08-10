@@ -477,7 +477,7 @@
     "test": "npm run compile && node --test \"out/test/*.test.js\"",
     "test:integration": "npm run compile && npm run bundle && vscode-test --label hostile --jobs 1",
     "check": "npm run clean && npm run compile && npm run lint && node --test \"out/test/*.test.js\" && npm run bundle",
-    "package": "npm run check && vsce package --out dist/codex-terminal-0.4.0.vsix",
+    "package": "npm run check && node scripts/package.mjs",
     "vscode:prepublish": "npm run clean && npm run bundle"
   },
   "devDependencies": {
@@ -489,7 +489,7 @@
     "@vscode/l10n-dev": "^0.0.35",
     "@vscode/test-cli": "^0.0.15",
     "@vscode/test-electron": "3.1.0",
-    "@vscode/vsce": "^3.2.1",
+    "@vscode/vsce": "^3.9.2",
     "esbuild": "^0.28.2",
     "eslint": "10.8.1",
     "typescript": "^5.7.2"

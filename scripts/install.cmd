@@ -33,6 +33,28 @@ if not exist "%VSIX%" (
     exit /b 1
 )
 
+rem The release ships unsigned, so SHA256SUMS.txt is the only integrity check available.
+rem Verified when the file is present next to the .vsix; skipped, with a note, when it is not.
+set "SUMS=%~dp0SHA256SUMS.txt"
+if not exist "%SUMS%" set "SUMS=%~dp0..\dist\SHA256SUMS.txt"
+if exist "%SUMS%" (
+    for /f "usebackq delims=" %%H in (`powershell -NoProfile -Command ^
+        "(Get-FileHash -Algorithm SHA256 '%VSIX%').Hash.ToLower()"`) do set "ACTUAL=%%H"
+    findstr /i /c:"!ACTUAL!" "%SUMS%" >nul
+    if errorlevel 1 (
+        echo [ERROR] Checksum mismatch for %VSIX%
+        echo         Expected one of the hashes in %SUMS%
+        echo         Got: !ACTUAL!
+        echo         Do not install this file.
+        echo.
+        pause
+        exit /b 1
+    )
+    echo Checksum OK: !ACTUAL!
+) else (
+    echo [WARN] No SHA256SUMS.txt beside the .vsix; skipping the integrity check.
+)
+
 echo Installing: %VSIX%
 echo.
 

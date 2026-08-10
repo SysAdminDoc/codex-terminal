@@ -15,3 +15,11 @@ CLAUDE.md
 CODEX_CHANGELOG.md
 RESEARCH.md
 ROADMAP.md
+Roadmap_Blocked.md
+scripts/**
+.vscode-test.mjs
+.vscode-test/**
+**/.env*
+# The checksum describes the VSIX, so packaging it inside would make every rebuild depend on
+# the previous one's hash and destroy reproducibility.
+dist/SHA256SUMS.txt

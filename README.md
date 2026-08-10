@@ -205,6 +205,25 @@ npm run package   # -> dist/codex-terminal-0.4.0.vsix
 history, and diagnostics. Run
 `npm run test:integration` separately to boot the hostile-settings VS Code host suite.
 
+## Verifying the download
+
+Releases are unsigned — this project does not use code signing — so the check is a
+reproducible build instead. `npm run package` stamps the archive with the commit's timestamp
+via `SOURCE_DATE_EPOCH`, which makes the `.vsix` byte-identical for a given commit, and writes
+`dist/SHA256SUMS.txt`.
+
+To confirm a downloaded `.vsix` is what this repository builds:
+
+```powershell
+git checkout v0.4.0
+npm ci
+npm run package
+Get-FileHash -Algorithm SHA256 dist\codex-terminal-0.4.0.vsix
+```
+
+The hash must match `SHA256SUMS.txt` on the release. A mismatch means the file you downloaded
+is not the file this source produces.
+
 ## Unaffiliated
 
 Not affiliated with, endorsed by, or sponsored by OpenAI. "Codex" is used only to name the CLI

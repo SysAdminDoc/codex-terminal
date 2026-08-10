@@ -7,6 +7,12 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- Releases are now reproducible and checksummed. `npm run package` stamps the archive with the
+  commit timestamp, so a given commit builds a byte-identical `.vsix`, and writes
+  `dist/SHA256SUMS.txt`; `install.cmd` verifies the hash before installing and refuses on a
+  mismatch. This is the integrity check that replaces code signing, which this project does
+  not use. The packaged extension also dropped from 15 files to 11 — scripts, test config and
+  agent notes no longer ship.
 - The History view shows how much disk Codex's session store is using, and sessions can be
   archived or deleted from their context menu. Both delegate to `codex archive` / `codex
   delete` rather than unlinking files, because Codex keeps a state database beside the
