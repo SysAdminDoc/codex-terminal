@@ -232,6 +232,16 @@ export function parseJournal(text: string): JournalState | undefined {
 /** Filesystem wrapper. Writes are tmp-then-rename so a crash cannot leave torn JSON. */
 export class JournalStore {
   private readonly filePath: string;
+  /**
+   * Set by `writeSync`, after which nothing else may have the last word.
+   *
+   * The monitor already refuses to *start* a write once it has shut down, but that is not
+   * enough on its own: a write suspended between its `writeFile` and its `rename` resumes
+   * after the synchronous stamp has landed and renames an un-stamped journal over the top.
+   * Holding the sealed state here lets an in-flight write put it back, which makes the
+   * outcome independent of who finishes first.
+   */
+  private sealed: JournalState | undefined;
 
   constructor(
     private readonly directory: string,
@@ -246,10 +256,18 @@ export class JournalStore {
   }
 
   async write(state: JournalState): Promise<void> {
+    if (this.sealed) {
+      return;
+    }
     await mkdir(this.directory, { recursive: true });
-    const temporary = `${this.filePath}.tmp`;
+    const temporary = `${this.filePath}.async.tmp`;
     await writeFile(temporary, JSON.stringify(state), 'utf8');
     await rename(temporary, this.filePath);
+    if (this.sealed) {
+      // A shutdown stamp landed while this write was in flight, and this rename has just
+      // buried it. Put it back, synchronously, so the file agrees with the seal.
+      this.writeFileSync(this.sealed);
+    }
   }
 
   /**
@@ -265,8 +283,14 @@ export class JournalStore {
    * Same tmp-then-rename as the async path, so a kill mid-write still cannot tear the JSON.
    */
   writeSync(state: JournalState): void {
+    this.sealed = state;
+    this.writeFileSync(state);
+  }
+
+  /** Separate tmp name from the async path, so the two can never trample each other. */
+  private writeFileSync(state: JournalState): void {
     mkdirSync(this.directory, { recursive: true });
-    const temporary = `${this.filePath}.tmp`;
+    const temporary = `${this.filePath}.sync.tmp`;
     writeFileSync(temporary, JSON.stringify(state), 'utf8');
     renameSync(temporary, this.filePath);
   }

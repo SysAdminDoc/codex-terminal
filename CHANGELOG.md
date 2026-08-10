@@ -88,6 +88,11 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - `terminal.integrated.tabs.allowAgentCliTitle` is written as a boolean. It was being set to
   the *string* `"true"`, which happened to behave correctly while showing up as an invalid
   value in the settings editor.
+- The clean-shutdown stamp can no longer be buried by a journal write that was already in
+  flight. Refusing to *start* a write after shutdown was not enough: one suspended between its
+  temporary file and its rename resumed afterwards and renamed an un-stamped journal over the
+  top. The store now seals on the synchronous write, and a write that finishes late puts the
+  seal back. Found by the new monitor tests, not in the field.
 - Closing a window normally is no longer reported as a crash. The stamp that records a
   deliberate shutdown was written asynchronously from `deactivate`, which the editor does not
   wait for, so it often never landed — and the next window then offered to recover terminals
