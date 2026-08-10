@@ -83,6 +83,10 @@ export interface SessionMonitorOptions {
   log: vscode.LogOutputChannel;
   /** `codexTerminal.stallSeconds`, which sets the floor for giving up on a silent turn. */
   stallSeconds?: () => number;
+  /** `codexTerminal.monitor.enabled`. False stops all rollout reading. */
+  enabled?: () => boolean;
+  /** `codexTerminal.journal.storeMessages`. False keeps conversation text out of the journal. */
+  storeMessages?: () => boolean;
 }
 
 let keyCounter = 0;
@@ -156,7 +160,9 @@ export class SessionMonitor implements vscode.Disposable {
       bindable: details.bindable ?? true,
       closed: false,
     };
-    if (details.rolloutPath) {
+    // With monitoring off nothing reads a rollout, so a restored session is recorded but not
+    // followed: the tab still works, it simply reports no activity.
+    if (details.rolloutPath && this.enabled()) {
       // The first poll folds the file from the start, which is exactly what recovering the
       // activity state of a conversation already in progress requires.
       this.attach(entry, details.rolloutPath);
@@ -285,7 +291,8 @@ export class SessionMonitor implements vscode.Disposable {
     // A watched session does not need the fast tick: its appends arrive as events. The slow
     // tick still runs for everything, because `settleOne` is driven by the clock.
     const needsFastPoll = live.some((entry) => isWorking(entry.activity) && !entry.watcher);
-    const wanted = live.length === 0 ? 0 : needsFastPoll ? WORKING_POLL_MS : IDLE_POLL_MS;
+    const wanted =
+      live.length === 0 || !this.enabled() ? 0 : needsFastPoll ? WORKING_POLL_MS : IDLE_POLL_MS;
     if (wanted === this.currentInterval) {
       return;
     }
@@ -299,9 +306,13 @@ export class SessionMonitor implements vscode.Disposable {
     }
   }
 
+  private enabled(): boolean {
+    return this.options.enabled?.() ?? true;
+  }
+
   private async poll(): Promise<void> {
     const live = this.liveTracked();
-    if (live.length === 0) {
+    if (!this.enabled() || live.length === 0) {
       this.reschedule();
       return;
     }
@@ -403,7 +414,10 @@ export class SessionMonitor implements vscode.Disposable {
       lastActiveAt: Date.now(),
       ...(closedAt ? { closedAt } : {}),
       status: entry.activity.status,
-      lastMessage: entry.activity.lastMessage,
+      // Opt-out: the journal is a second copy of conversation text, outside $CODEX_HOME.
+      ...(this.options.storeMessages?.() === false
+        ? {}
+        : { lastMessage: entry.activity.lastMessage }),
       completedTurns: entry.activity.completedTurns,
     });
     void this.writeJournal();

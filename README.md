@@ -102,6 +102,17 @@ The real Codex TUI, started in the workspace folder:
   per-launch notify hook in the extension's storage. The setting is opt-in and does not write to
   Codex's user configuration.
 
+## What it reads and writes
+
+Everything stays on your machine; the extension makes no network requests and collects no
+telemetry. It **reads** Codex's own session files under `$CODEX_HOME/sessions` to show live
+activity, list history and export transcripts. It **writes** a small crash-recovery journal
+into its own extension storage — which sessions a window had open, their ids and timestamps,
+and by default Codex's closing message for each turn so an interrupted session is recognisable.
+Both are switchable: see `codexTerminal.monitor.enabled` and
+`codexTerminal.journal.storeMessages`. It also changes three workbench settings, which it
+announces and can revert.
+
 ## Settings
 
 | Setting | Default | Notes |
@@ -125,6 +136,8 @@ The real Codex TUI, started in the workspace folder:
 | `codexTerminal.tabTitle` | `live` | `live` leaves the tab name unset so Codex's own title — including its activity indicator — drives the tab. `static` shows a fixed `project — Codex` label and **cannot animate**; see below. |
 | `codexTerminal.titleItems` | `["activity", "project-name", "app-name"]` | Codex title items. The default gives the live activity indicator, the project name, and the constant `Codex` marker used to recognise our tabs after a window reload. |
 | `codexTerminal.history.maxSessions` | `200` | Maximum recent sessions shown in the History view. |
+| `codexTerminal.monitor.enabled` | `true` | Read Codex's session files for live activity and crash recovery. Off stops all reading of your conversations — and with it both the live status and interrupted-session recovery, since each needs to know which conversation a tab belongs to. Launching, resuming and history are unaffected. |
+| `codexTerminal.journal.storeMessages` | `true` | Keep Codex's closing message per turn in the crash journal. Off keeps conversation text out of it; identifiers and timestamps, which is all recovery needs, are still recorded. |
 | `codexTerminal.transcript.includeToolCalls` | `true` | Include the commands Codex ran and the patches it applied in an exported transcript. Each block is capped: an `apply_patch` call carries the entire new contents of every file it writes. |
 | `codexTerminal.transcript.includeToolOutput` | `false` | Also include what those commands printed back. Off by default — tool output is the bulk of a session and is rarely what you came back to read. |
 

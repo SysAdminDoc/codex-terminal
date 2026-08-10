@@ -497,6 +497,16 @@
           "description": "%setting.titleItems.description%",
           "scope": "machine-overridable"
         },
+        "codexTerminal.monitor.enabled": {
+          "type": "boolean",
+          "default": true,
+          "markdownDescription": "%setting.monitor.enabled.markdownDescription%"
+        },
+        "codexTerminal.journal.storeMessages": {
+          "type": "boolean",
+          "default": true,
+          "markdownDescription": "%setting.journal.storeMessages.markdownDescription%"
+        },
         "codexTerminal.transcript.includeToolCalls": {
           "type": "boolean",
           "default": true,

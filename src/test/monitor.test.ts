@@ -331,3 +331,83 @@ test('a rollout that cannot be watched still binds and falls back to polling', a
     assert.equal(monitor.live()[0].activity.status, 'working');
   });
 });
+
+test('monitoring can be turned off, and then nothing reads a rollout', async () => {
+  const directory = await mkdtemp(path.join(tmpdir(), 'codex-monitor-off-'));
+  const store = new JournalStore(path.join(directory, 'journal'), 'w');
+  const monitor = new SessionMonitor({
+    store,
+    windowId: 'w',
+    codexHome: () => directory,
+    log,
+    enabled: () => false,
+  });
+  try {
+    const rolloutPath = path.join(directory, 'rollout.jsonl');
+    await writeFile(rolloutPath, rollout(), 'utf8');
+    monitor.track(fakeTerminal(), {
+      cwd: directory,
+      project: 'fixture',
+      label: 'fixture',
+      mode: 'new',
+      key: 'k',
+      sessionId: 'session-abc',
+      rolloutPath,
+    });
+    await (monitor as unknown as { poll(): Promise<void> }).poll();
+
+    // The tab is still tracked and still works; it simply reports nothing, because nothing
+    // has read the conversation.
+    assert.equal(monitor.live().length, 1);
+    assert.equal(monitor.live()[0].activity.status, 'unknown');
+  } finally {
+    monitor.dispose();
+    await rm(directory, { recursive: true, force: true, maxRetries: 5, retryDelay: 20 });
+  }
+});
+
+test('the journal can be kept free of conversation text', async () => {
+  const directory = await mkdtemp(path.join(tmpdir(), 'codex-monitor-quiet-'));
+  const store = new JournalStore(path.join(directory, 'journal'), 'w');
+  const monitor = new SessionMonitor({
+    store,
+    windowId: 'w',
+    codexHome: () => directory,
+    log,
+    storeMessages: () => false,
+  });
+  try {
+    const rolloutPath = path.join(directory, 'rollout.jsonl');
+    await writeFile(
+      rolloutPath,
+      `${rollout()}${JSON.stringify({
+        timestamp: new Date().toISOString(),
+        ordinal: 9,
+        type: 'event_msg',
+        payload: { type: 'task_complete', turn_id: 't1', last_agent_message: 'SECRET SUMMARY' },
+      })}\n`,
+      'utf8',
+    );
+    monitor.track(fakeTerminal(), {
+      cwd: directory,
+      project: 'fixture',
+      label: 'fixture',
+      mode: 'new',
+      key: 'k',
+      sessionId: 'session-abc',
+      rolloutPath,
+    });
+    await (monitor as unknown as { poll(): Promise<void> }).poll();
+    await new Promise((resolve) => setTimeout(resolve, 30));
+
+    // The live view still knows it, because that is in memory; the file on disk must not.
+    assert.equal(monitor.live()[0].activity.lastMessage, 'SECRET SUMMARY');
+    const [journal] = await store.readAll();
+    assert.ok(journal, 'the journal is still written — recovery needs the identifiers');
+    assert.equal(journal.sessions[0].lastMessage, undefined);
+    assert.equal(journal.sessions[0].sessionId, 'session-abc');
+  } finally {
+    monitor.dispose();
+    await rm(directory, { recursive: true, force: true, maxRetries: 5, retryDelay: 20 });
+  }
+});

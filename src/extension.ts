@@ -1109,6 +1109,8 @@ export async function activate(context: vscode.ExtensionContext): Promise<CodexT
     codexHome: () => codexHomeDirectory(),
     log,
     stallSeconds: () => config().get<number>('stallSeconds', DEFAULT_STALL_SECONDS),
+    enabled: () => config().get<boolean>('monitor.enabled', true),
+    storeMessages: () => config().get<boolean>('journal.storeMessages', true),
   });
   sessionMonitor = monitor;
   context.subscriptions.push(monitor);

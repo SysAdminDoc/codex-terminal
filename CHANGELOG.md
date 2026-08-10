@@ -26,6 +26,14 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   any JSON parsing, since a rollout embeds the full contents of every file it writes — the
   largest here, 128 MB, lists its 48 files in 429 ms. If a cap is hit the list says so rather
   than passing a prefix off as the whole story.
+- Reading your conversations can be declined. The crash journal writes Codex's closing message
+  for each turn into extension storage — a second copy of conversation text, outside
+  `$CODEX_HOME` — and there was no way to say no. `codexTerminal.journal.storeMessages` keeps
+  the journal to identifiers and timestamps, which is all recovery actually needs, and
+  `codexTerminal.monitor.enabled` stops rollout reading altogether. The second is honest about
+  its cost: with it off there is no live status *and* no interrupted-session recovery, because
+  both depend on knowing which conversation a tab belongs to. The README now states plainly
+  what is read and what is written.
 - **Sessions can be named**, from either sidebar, and the name replaces the row's label in
   both. Six agents running against six repositories are told apart by the thing you called
   them, not by a truncated first prompt. The name is the extension's own: Codex accepts a
