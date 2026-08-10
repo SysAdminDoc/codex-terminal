@@ -3,6 +3,29 @@
 All notable changes to Codex Terminal are documented here.
 This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- **Experimental: attach launched terminals to a Codex app-server** — `codexTerminal.appServer.enabled`.
+  When on, the window hosts a `codex app-server` and every terminal it launches is handed
+  `--remote ws://127.0.0.1:<port>`, so Codex reports its own activity over a supported protocol
+  rather than having it inferred from session files.
+
+  The transport was not a free choice. `--listen` offers `stdio://`, `unix://` and `ws://`, and
+  a TUI can only attach to a server listening on a *socket*, which rules out stdio; `unix://`
+  produced no listener at all on Windows, and `app-server proxy` — the other stdio route — takes
+  a Unix socket path too. `ws://127.0.0.1:<port>` is the one transport that works on this
+  project's primary platform. Codex binds it to localhost only, the port is chosen per run so
+  two windows cannot collide, and readiness is polled on the server's own `/readyz` endpoint
+  rather than scraped from a banner whose wording is not a contract.
+
+  Every failure falls back to a plain `codex` launch and logs why: the setting off, no
+  WebSocket in the host editor (it became a Node global in 22, and this extension supports
+  editors older than that), `codex` not on PATH, or the server failing to come up. The server
+  starts on the first launch rather than at activation, so a window that never opens Codex
+  never pays for it.
+
 ## [0.7.0] - 2026-08-10
 
 ### Added

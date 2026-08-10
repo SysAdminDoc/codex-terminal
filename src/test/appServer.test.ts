@@ -1,7 +1,14 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
-import { decodeMessages, encodeMessage } from '../appServer';
+import {
+  appServerListenArgs,
+  decodeMessages,
+  encodeMessage,
+  findFreePort,
+  remoteArgs,
+  waitForReady,
+} from '../appServer';
 
 test('a request is framed as one line of JSON', () => {
   const encoded = encodeMessage({ jsonrpc: '2.0', id: 1, method: 'initialize' });
@@ -43,4 +50,30 @@ test('a line that is not JSON is dropped without taking the connection with it',
   const { messages } = decodeMessages('not json\n{"id":2,"result":{"ok":true}}\n\n');
   assert.equal(messages.length, 1);
   assert.equal(messages[0].id, 2);
+});
+
+test('the listen and remote endpoints agree on host and port', () => {
+  // A mismatch here is invisible in every other test: the server binds, the TUI dials
+  // somewhere else, and the only symptom is a session that never reports anything.
+  const [, flag, listen] = appServerListenArgs(8412);
+  const [remoteFlag, remote] = remoteArgs(8412);
+  assert.equal(flag, '--listen');
+  assert.equal(remoteFlag, '--remote');
+  assert.equal(listen, remote);
+  // Localhost only, and Codex says the same in its own banner.
+  assert.equal(listen, 'ws://127.0.0.1:8412');
+});
+
+test('a free port is a real one the OS just handed back', async () => {
+  const port = await findFreePort();
+  assert.ok(Number.isInteger(port) && port > 1024 && port < 65536, `implausible port ${port}`);
+  // Per run, not fixed: two windows hosting a server must not collide on one number.
+  assert.notEqual(port, await findFreePort());
+});
+
+test('readiness gives up rather than waiting forever on a port nothing is serving', async () => {
+  const port = await findFreePort();
+  let clock = 0;
+  const ready = await waitForReady(port, 500, () => (clock += 400));
+  assert.equal(ready, false);
 });

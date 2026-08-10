@@ -1,5 +1,6 @@
 import * as vscode from 'vscode';
 
+import type { HostedAppServer } from './appServer';
 import type { HistoryViewProvider } from './historyView';
 import type { SessionMonitor } from './monitor';
 import type { TabTitleMode } from './naming';
@@ -29,6 +30,11 @@ export interface ExtensionServices {
   transcript: TranscriptContentProvider;
   /** Created lazily, and torn down again whenever the setting is turned off. */
   notify?: NotifyBridge;
+  /**
+   * The `codex app-server` this window is hosting, when the experimental setting is on.
+   * Launched terminals are pointed at it with `--remote`.
+   */
+  appServer?: HostedAppServer;
 }
 
 let current: ExtensionServices | undefined;

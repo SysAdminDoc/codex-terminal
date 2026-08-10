@@ -502,6 +502,14 @@
           "description": "%setting.titleItems.description%",
           "scope": "machine-overridable"
         },
+        "codexTerminal.appServer.enabled": {
+          "type": "boolean",
+          "default": false,
+          "markdownDescription": "%setting.appServer.enabled.markdownDescription%",
+          "tags": [
+            "experimental"
+          ]
+        },
         "codexTerminal.monitor.enabled": {
           "type": "boolean",
           "default": true,

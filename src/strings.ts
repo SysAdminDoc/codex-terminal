@@ -207,6 +207,14 @@ export const strings = {
         os,
       ),
     failed: (): string => vscode.l10n.t('Could not reach codex app-server'),
+    noWebSocket: (): string =>
+      vscode.l10n.t(
+        'codexTerminal.appServer.enabled is on, but this editor has no WebSocket support (it needs one built on Node 22 or newer). Launching Codex without --remote.',
+      ),
+    unavailable: (command: string): string =>
+      vscode.l10n.t('cannot host an app-server: {0} was not found on PATH', command),
+    startFailed: (reason: string): string =>
+      vscode.l10n.t('could not host an app-server ({0}); launching Codex without --remote', reason),
   },
   warnings: {
     noEditor: (): string => vscode.l10n.t('Codex Terminal: no active editor to reference.'),

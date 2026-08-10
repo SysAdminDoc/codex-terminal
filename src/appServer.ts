@@ -1,4 +1,8 @@
-import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
+import { spawn, type ChildProcess, type ChildProcessWithoutNullStreams } from 'node:child_process';
+import { existsSync } from 'node:fs';
+import * as path from 'node:path';
+import { get as httpGet } from 'node:http';
+import { createServer } from 'node:net';
 import { StringDecoder } from 'node:string_decoder';
 
 /**
@@ -209,4 +213,164 @@ export class AppServerClient {
     this.child?.kill();
     this.child = undefined;
   }
+}
+
+/**
+ * A `codex app-server` this extension runs, listening on a local WebSocket.
+ *
+ * The transport is not a free choice. `app-server --listen` offers `stdio://`, `unix://` and
+ * `ws://IP:PORT`, and `codex --remote` accepts `unix://` or `ws://` — but a TUI can only
+ * attach to a server that is listening on a *socket*, which rules stdio out, and the unix
+ * transport produced no listener at all on Windows (probed 0.147, 2026-08-10: the banner that
+ * `ws://` prints immediately never appeared). `app-server proxy`, the other stdio route, takes
+ * `--sock <SOCKET_PATH>` and is therefore unix-only too.
+ *
+ * So `ws://127.0.0.1:<port>` is the one transport that works on this project's primary
+ * platform. Codex binds it to localhost only and says so in its own banner, and the port is
+ * chosen per run rather than fixed, so two windows do not fight over one.
+ */
+
+/** Codex prints its banner on stderr and serves this once it is accepting connections. */
+export const READY_PATH = '/readyz';
+export const READY_TIMEOUT_MS = 20_000;
+
+export function appServerListenArgs(port: number): string[] {
+  return ['app-server', '--listen', `ws://127.0.0.1:${port}`];
+}
+
+/** What a launched TUI is given so it attaches to the server above instead of running alone. */
+export function remoteArgs(port: number): string[] {
+  return ['--remote', `ws://127.0.0.1:${port}`];
+}
+
+/** An ephemeral port the OS has just confirmed is free. */
+export async function findFreePort(): Promise<number> {
+  return new Promise((resolve, reject) => {
+    const probe = createServer();
+    probe.on('error', reject);
+    // Port 0 asks the OS for any free port; reading it back before closing is the standard
+    // way to reserve one without a fixed number two windows could collide on.
+    probe.listen(0, '127.0.0.1', () => {
+      const address = probe.address();
+      const port = typeof address === 'object' && address ? address.port : 0;
+      probe.close(() => (port ? resolve(port) : reject(new Error('no free port'))));
+    });
+  });
+}
+
+function readyOnce(port: number): Promise<boolean> {
+  return new Promise((resolve) => {
+    const request = httpGet(`http://127.0.0.1:${port}${READY_PATH}`, (response) => {
+      response.resume();
+      resolve(response.statusCode === 200);
+    });
+    request.on('error', () => resolve(false));
+    request.setTimeout(1_000, () => {
+      request.destroy();
+      resolve(false);
+    });
+  });
+}
+
+/**
+ * Wait until the server answers `/readyz`.
+ *
+ * Polled rather than parsed out of the banner: the banner goes to stderr and its wording is
+ * not a contract, whereas the readiness endpoint is one. It answered within 250ms locally.
+ */
+export async function waitForReady(
+  port: number,
+  timeoutMs = READY_TIMEOUT_MS,
+  now: () => number = Date.now,
+): Promise<boolean> {
+  const deadline = now() + timeoutMs;
+  for (;;) {
+    if (await readyOnce(port)) {
+      return true;
+    }
+    if (now() >= deadline) {
+      return false;
+    }
+    await new Promise((resolve) => setTimeout(resolve, 200));
+  }
+}
+
+export interface HostedAppServerOptions {
+  command: string;
+  nodeExecutable?: string;
+  log: { info(message: string): void; warn(message: string): void };
+}
+
+/** The server process plus the port a TUI should be pointed at. */
+export class HostedAppServer {
+  private child: ChildProcess | undefined;
+
+  private constructor(
+    readonly port: number,
+    child: ChildProcess,
+  ) {
+    this.child = child;
+  }
+
+  static async start(options: HostedAppServerOptions): Promise<HostedAppServer> {
+    const port = await findFreePort();
+    const executable = options.nodeExecutable ?? options.command;
+    const args = options.nodeExecutable
+      ? [options.command, ...appServerListenArgs(port)]
+      : appServerListenArgs(port);
+    const child = spawn(executable, args, {
+      stdio: ['ignore', 'pipe', 'pipe'],
+      windowsHide: true,
+    });
+    // The banner lands on stderr, so this is the normal channel rather than a fault channel.
+    child.stderr?.on('data', (chunk: Buffer) => {
+      const text = chunk.toString('utf8').trim();
+      if (text) {
+        options.log.info(`app-server: ${text.slice(0, 500)}`);
+      }
+    });
+
+    if (!(await waitForReady(port))) {
+      child.kill();
+      throw new Error(`codex app-server did not become ready on port ${port}`);
+    }
+    options.log.info(`app-server listening on ws://127.0.0.1:${port}`);
+    return new HostedAppServer(port, child);
+  }
+
+  dispose(): void {
+    this.child?.kill();
+    this.child = undefined;
+  }
+}
+
+/**
+ * Whether this host can open a WebSocket at all.
+ *
+ * `WebSocket` became a Node global in 22, and this extension's declared engine floor reaches
+ * back to VS Code 1.90, which shipped Node 20. Probing beats declaring: the alternative is a
+ * feature that fails with a bare `ReferenceError` on the editors that predate it.
+ */
+export function webSocketAvailable(): boolean {
+  return typeof (globalThis as { WebSocket?: unknown }).WebSocket === 'function';
+}
+
+/**
+ * The JS entry behind an npm `codex.cmd` shim, if that is what was resolved.
+ *
+ * Returns undefined for a real executable, which is the normal case everywhere but Windows.
+ */
+export function nodeEntryFor(resolved: string): string | undefined {
+  if (!/\.cmd$/i.test(resolved)) {
+    return undefined;
+  }
+  const entry = path.join(
+    path.dirname(resolved),
+    'node_modules',
+    '@openai',
+    'codex',
+    'bin',
+    'codex.js',
+  );
+  return existsSync(entry) ? entry : undefined;
 }

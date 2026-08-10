@@ -364,6 +364,7 @@ export function deactivate(): void {
   // and throwing here would replace a startup error with a shutdown one.
   const state = peekServices();
   state?.notify?.dispose();
+  state?.appServer?.dispose();
   // Stamps the journal so the next window does not treat these sessions as crashed.
   // Synchronous on purpose: nothing waits for a promise returned from `deactivate`.
   state?.monitor.shutdown();

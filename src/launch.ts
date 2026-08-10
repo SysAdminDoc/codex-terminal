@@ -3,6 +3,12 @@ import * as path from 'node:path';
 import * as vscode from 'vscode';
 
 import {
+  HostedAppServer,
+  nodeEntryFor,
+  remoteArgs,
+  webSocketAvailable,
+} from './appServer';
+import {
   buildLaunchPlan,
   modeArgs,
   profileArgs,
@@ -59,6 +65,11 @@ const PWSH_PROBE = [
 ];
 const CODEX_INSTALL_URL = 'https://github.com/openai/codex#installation';
 
+/** Empty unless this window is hosting an app-server for launched terminals to attach to. */
+function remoteArgsFor(server: HostedAppServer | undefined): string[] {
+  return server ? remoteArgs(server.port) : [];
+}
+
 export function readLaunchRequest(mode: LaunchMode, profile?: string, sessionId?: string): LaunchRequest {
   const cfg = config();
   const titleItems = cfg.get<string[]>('titleItems', [...DEFAULT_TITLE_ITEMS]);
@@ -80,12 +91,67 @@ export function readLaunchRequest(mode: LaunchMode, profile?: string, sessionId?
       // Codex writes this title through OSC sequences. The activity item is a live
       // spinner while it is working and the project item is derived from the repo root.
       ...titleItemsArgs(titleItems),
+      // Attach the TUI to the app-server this window is hosting, so its turns are reported
+      // over the protocol instead of inferred from a rollout file. Absent unless the
+      // experimental setting is on and the server actually came up.
+      ...remoteArgsFor(services().appServer),
       ...(services().notify?.launchArgs() ?? []),
     ],
     keepShellOpen: cfg.get<boolean>('keepShellOpen', true),
     platform: process.platform,
     availableShells: PWSH_PROBE.filter((p) => existsSync(p)),
   };
+}
+
+/**
+ * Bring up this window's app-server, if the experimental setting asks for one.
+ *
+ * Started on demand rather than during activation: it is a subprocess, activation now runs in
+ * every window at startup, and a window that never launches Codex should never pay for it.
+ *
+ * Every failure path here falls back to a plain `codex` launch and says why. The feature is
+ * experimental and opt-in; refusing to start a terminal because an optional control plane did
+ * not come up would be the wrong trade.
+ */
+export async function ensureAppServer(): Promise<void> {
+  const state = services();
+  if (!config().get<boolean>('appServer.enabled', false)) {
+    state.appServer?.dispose();
+    state.appServer = undefined;
+    return;
+  }
+  if (state.appServer) {
+    return;
+  }
+  if (!webSocketAvailable()) {
+    // `WebSocket` became a Node global in 22; this extension's engine floor reaches back to
+    // editors built on Node 20, where the feature simply cannot work.
+    log().warn(strings.appServer.noWebSocket());
+    return;
+  }
+
+  const command = config().get<string>('command', 'codex');
+  const resolved = resolveCommandPath(command, {
+    platform: process.platform,
+    pathValue: process.env.PATH,
+    cwd: process.cwd(),
+  });
+  if (!resolved) {
+    log().warn(strings.appServer.unavailable(command));
+    return;
+  }
+  const entry = nodeEntryFor(resolved);
+  try {
+    state.appServer = await HostedAppServer.start({
+      command: entry ?? resolved,
+      ...(entry ? { nodeExecutable: process.execPath } : {}),
+      log: log(),
+    });
+  } catch (error) {
+    log().warn(
+      strings.appServer.startFailed(error instanceof Error ? error.message : String(error)),
+    );
+  }
 }
 
 export async function resolveCwd(): Promise<string | undefined> {
@@ -241,6 +307,7 @@ export function liveOwnedTerminal(): vscode.Terminal | undefined {
 export async function launch(request: LaunchOptions): Promise<void> {
   try {
     await syncNotifyBridge();
+    await ensureAppServer();
     if (
       request.mode === 'new' &&
       !request.profile &&

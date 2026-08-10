@@ -1,8 +1,7 @@
-import { existsSync } from 'node:fs';
 import * as path from 'node:path';
 import * as vscode from 'vscode';
 
-import { AppServerClient, type AppServerHandshake } from './appServer';
+import { AppServerClient, nodeEntryFor, type AppServerHandshake } from './appServer';
 import { collectDoctorReport } from './doctor';
 import { liveOwnedTerminal, preflightCodexCommand, readLaunchRequest, resolveCwd } from './launch';
 import { DEFAULT_TITLE_ITEMS } from './naming';
@@ -177,22 +176,3 @@ function describeHandshake(handshake: AppServerHandshake): string {
   );
 }
 
-/**
- * The JS entry behind an npm `codex.cmd` shim, if that is what was resolved.
- *
- * Returns undefined for a real executable, which is the normal case everywhere but Windows.
- */
-export function nodeEntryFor(resolved: string): string | undefined {
-  if (!/\.cmd$/i.test(resolved)) {
-    return undefined;
-  }
-  const entry = path.join(
-    path.dirname(resolved),
-    'node_modules',
-    '@openai',
-    'codex',
-    'bin',
-    'codex.js',
-  );
-  return existsSync(entry) ? entry : undefined;
-}
