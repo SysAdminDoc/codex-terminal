@@ -108,6 +108,7 @@ export const strings = {
     empty: (): string => vscode.l10n.t('No Codex sessions recorded yet'),
     noMatches: (filter: string): string => vscode.l10n.t('No sessions match “{0}”', filter),
     noPrompt: (): string => vscode.l10n.t('(no prompt recorded)'),
+    mainCheckout: (): string => vscode.l10n.t('main checkout'),
     changeKind: (kind: 'add' | 'update' | 'delete'): string =>
       kind === 'add'
         ? vscode.l10n.t('Added by this session')

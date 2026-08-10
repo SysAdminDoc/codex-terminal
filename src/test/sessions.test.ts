@@ -11,6 +11,7 @@ import {
   groupSessionsByProject,
   measureStore,
   selectNewestRollouts,
+  type SessionRecord,
 } from '../sessions';
 
 test('session discovery reads metadata headers, sorts newest first, and skips malformed files', async () => {
@@ -206,4 +207,54 @@ test('sizes stay readable from bytes to gigabytes', () => {
   assert.equal(formatBytes(5 * 1024 * 1024), '5.0 MB');
   // The measured local store was 2.01 GB; a store this size must not render as "2058 MB".
   assert.equal(formatBytes(2.01 * 1024 * 1024 * 1024), '2.01 GB');
+});
+
+function record(cwd: string, id: string): SessionRecord {
+  return {
+    id,
+    timestamp: '2026-08-10T10:00:00.000Z',
+    cwd,
+    filePath: `/rollouts/${id}.jsonl`,
+    sizeBytes: 1,
+    modifiedAt: Date.parse('2026-08-10T10:00:00.000Z'),
+  };
+}
+
+test('sessions in different worktrees group under one repository', () => {
+  const main = 'C:\\repos\\app';
+  const feature = 'C:\\repos\\app-feature';
+  const checkouts = new Map([
+    [main.toLowerCase(), { repositoryRoot: main, root: main }],
+    [feature.toLowerCase(), { repositoryRoot: main, root: feature, worktree: 'feature' }],
+  ]);
+
+  const [group, ...rest] = groupSessionsByProject(
+    [record(main, 'a'), record(feature, 'b'), record(feature, 'c')],
+    checkouts,
+  );
+  assert.deepEqual(rest, [], 'one repository means one group, however many worktrees');
+  assert.equal(group.project, 'app');
+  assert.equal(group.sessions.length, 3);
+  assert.deepEqual(
+    group.checkouts?.map((checkout) => `${checkout.worktree ?? 'main'}:${checkout.sessions.length}`),
+    ['main:1', 'feature:2'],
+  );
+});
+
+test('a repository used from one directory gains no extra level', () => {
+  const main = 'C:\\repos\\app';
+  const checkouts = new Map([[main.toLowerCase(), { repositoryRoot: main, root: main }]]);
+  const [group] = groupSessionsByProject([record(main, 'a'), record(main, 'b')], checkouts);
+  // An extra click that disambiguates nothing is worse than no extra click.
+  assert.equal(group.checkouts, undefined);
+  assert.equal(group.sessions.length, 2);
+});
+
+test('sessions outside any checkout still group by working directory', () => {
+  const groups = groupSessionsByProject(
+    [record('C:\\scratch\\one', 'a'), record('C:\\scratch\\two', 'b')],
+    new Map(),
+  );
+  assert.equal(groups.length, 2);
+  assert.deepEqual(groups.map((group) => group.project).sort(), ['one', 'two']);
 });

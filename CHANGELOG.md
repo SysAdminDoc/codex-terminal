@@ -5,6 +5,18 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+
+- **History groups by repository, and names the worktree.** Running several agents against one
+  repository with a worktree each is the case worktrees exist for, and grouping by working
+  directory scattered exactly those sessions across unrelated-looking projects. Sessions from
+  every checkout of a repository now sit under one entry, with a level naming each worktree —
+  added only where a repository actually has more than one checkout, since an extra click that
+  disambiguates nothing is worse than no extra click. The detection reads `.git` directly (a
+  linked worktree's `.git` is a file whose `gitdir:` line names both the parent repository and
+  the worktree), so it needs no `git` on PATH and costs one walk per distinct directory rather
+  than one per session. Sessions outside any checkout group by directory exactly as before.
+
 ### Changed
 
 - `src/extension.ts` is 361 lines instead of 1,376, and now contains only activation wiring.

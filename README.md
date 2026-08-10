@@ -68,7 +68,8 @@ The real Codex TUI, started in the workspace folder:
   records what each held beforehand; **Codex Terminal: Revert Workbench Settings** puts them
   back. A setting you have since changed yourself is left alone.
 - **History** — the **History** view in the Codex Terminal activity-bar container reads Codex's
-  local `.jsonl` rollouts, groups them by project, and keeps the first real prompt as a preview.
+  local `.jsonl` rollouts, groups them by **repository** — every git worktree of a repository
+  sits under one entry, with a level naming each worktree when there is more than one — and keeps the first real prompt as a preview.
   **Click a session to resume it** in a terminal, in the directory it was originally written in;
   the inline actions open a readable Markdown transcript or copy its id, and the context menu adds
   resume, fork, the raw rollout, and archive/delete. New and changed rollouts refresh the view

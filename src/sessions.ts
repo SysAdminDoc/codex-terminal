@@ -5,6 +5,7 @@ import * as path from 'node:path';
 import { createInterface } from 'node:readline';
 
 import { parseRolloutFileName } from './binder';
+import { findCheckout, type Checkout } from './worktree';
 import {
   isInjectedContext,
   netFileChanges,
@@ -289,29 +290,100 @@ export function formatBytes(bytes: number): string {
   return `${(bytes / (1024 * 1024 * 1024)).toFixed(2)} GB`;
 }
 
-export interface SessionGroup {
-  project: string;
+/** One checkout of a repository: the main one, or a linked worktree. */
+export interface SessionCheckout {
+  /** Worktree name, or undefined for the main checkout. */
+  worktree?: string;
   cwd: string;
   sessions: SessionRecord[];
 }
 
-/** Group by working directory, most recently used project first. */
-export function groupSessionsByProject(sessions: readonly SessionRecord[]): SessionGroup[] {
-  const groups = new Map<string, SessionGroup>();
+export interface SessionGroup {
+  project: string;
+  cwd: string;
+  sessions: SessionRecord[];
+  /**
+   * Present only when this repository has sessions in more than one checkout. A repository
+   * used from a single directory gains nothing from an extra level, so it does not get one.
+   */
+  checkouts?: SessionCheckout[];
+}
+
+/** Resolved repository for a working directory, keyed lowercase. Filled by the caller. */
+export type CheckoutIndex = Map<string, Checkout | undefined>;
+
+/**
+ * Resolve each distinct working directory to its checkout, once.
+ *
+ * Sessions repeat directories heavily — a project with forty sessions has one cwd — so the
+ * walk up to `.git` runs per directory rather than per session.
+ */
+export async function indexCheckouts(
+  sessions: readonly SessionRecord[],
+): Promise<CheckoutIndex> {
+  const index: CheckoutIndex = new Map();
   for (const session of sessions) {
     const key = session.cwd.toLowerCase();
-    const group = groups.get(key);
-    if (group) {
-      group.sessions.push(session);
+    if (!session.cwd || index.has(key)) {
+      continue;
+    }
+    index.set(key, await findCheckout(session.cwd));
+  }
+  return index;
+}
+
+/**
+ * Group by repository, falling back to working directory outside a checkout.
+ *
+ * Worktrees are the reason this is not simply "group by cwd": running several agents against
+ * one repository, one worktree each, is exactly the case where directory grouping scatters
+ * what belongs together.
+ */
+export function groupSessionsByProject(
+  sessions: readonly SessionRecord[],
+  checkouts?: CheckoutIndex,
+): SessionGroup[] {
+  const groups = new Map<string, SessionGroup & { byCheckout: Map<string, SessionCheckout> }>();
+  for (const session of sessions) {
+    const checkout = checkouts?.get(session.cwd.toLowerCase());
+    const groupKey = (checkout?.repositoryRoot ?? session.cwd).toLowerCase();
+    const checkoutKey = (checkout?.root ?? session.cwd).toLowerCase();
+
+    let group = groups.get(groupKey);
+    if (!group) {
+      group = {
+        project: checkout
+          ? sessionProject({ cwd: checkout.repositoryRoot }) || checkout.repositoryRoot
+          : sessionProject(session) || session.cwd,
+        cwd: checkout?.repositoryRoot ?? session.cwd,
+        sessions: [],
+        byCheckout: new Map(),
+      };
+      groups.set(groupKey, group);
+    }
+    group.sessions.push(session);
+
+    const existing = group.byCheckout.get(checkoutKey);
+    if (existing) {
+      existing.sessions.push(session);
     } else {
-      groups.set(key, {
-        project: sessionProject(session) || session.cwd,
-        cwd: session.cwd,
+      group.byCheckout.set(checkoutKey, {
+        ...(checkout?.worktree ? { worktree: checkout.worktree } : {}),
+        cwd: checkout?.root ?? session.cwd,
         sessions: [session],
       });
     }
   }
-  return [...groups.values()];
+
+  return [...groups.values()].map(({ byCheckout, ...group }) => {
+    const checkoutList = [...byCheckout.values()];
+    // Main checkout first, then worktrees by name, so the list does not reorder itself as
+    // sessions come and go.
+    checkoutList.sort((left, right) =>
+      (left.worktree ?? '').localeCompare(right.worktree ?? ''),
+    );
+    return checkoutList.length > 1 ? { ...group, checkouts: checkoutList } : group;
+  });
 }
 
 export interface TranscriptExportResult {

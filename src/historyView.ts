@@ -4,11 +4,13 @@ import {
   codexHomeDirectory,
   collectChangedFiles,
   discoverSessions,
+  indexCheckouts,
   formatBytes,
   measureStore,
   groupSessionsByProject,
   sessionProject,
   clearSessionCache,
+  type SessionCheckout,
   type SessionGroup,
   type SessionRecord,
 } from './sessions';
@@ -53,6 +55,13 @@ interface ProjectNode {
   group: SessionGroup;
 }
 
+/** One checkout of a repository. Only rendered where a repository has more than one. */
+interface CheckoutNode {
+  kind: 'checkout';
+  project: string;
+  checkout: SessionCheckout;
+}
+
 interface SessionNode {
   kind: 'session';
   session: SessionRecord;
@@ -81,6 +90,7 @@ export type HistoryNode =
   | RecoveryGroupNode
   | RecoveryNode
   | ProjectNode
+  | CheckoutNode
   | SessionNode
   | UsageNode
   | ChangedFileNode
@@ -175,6 +185,26 @@ class ProjectItem extends vscode.TreeItem {
     this.iconPath = new vscode.ThemeIcon('folder');
     this.contextValue = 'codexTerminal.historyProject';
     this.resourceUri = group.cwd ? vscode.Uri.file(group.cwd) : undefined;
+  }
+}
+
+class CheckoutItem extends vscode.TreeItem {
+  constructor(node: CheckoutNode) {
+    const { checkout } = node;
+    super(
+      checkout.worktree ?? strings.history.mainCheckout(),
+      vscode.TreeItemCollapsibleState.Collapsed,
+    );
+    this.description = strings.history.sessionCount(checkout.sessions.length);
+    this.tooltip = new vscode.MarkdownString(
+      `**${node.project}** — ${checkout.worktree ?? strings.history.mainCheckout()}
+
+\`${checkout.cwd}\``,
+    );
+    // `git-branch` for a worktree, `folder-opened` for the checkout the repository lives in.
+    this.iconPath = new vscode.ThemeIcon(checkout.worktree ? 'git-branch' : 'folder-opened');
+    this.contextValue = 'codexTerminal.historyCheckout';
+    this.resourceUri = checkout.cwd ? vscode.Uri.file(checkout.cwd) : undefined;
   }
 }
 
@@ -408,6 +438,8 @@ export class HistoryViewProvider
         return new RecoveryItem(node);
       case 'project':
         return new ProjectItem(node.group);
+      case 'checkout':
+        return new CheckoutItem(node);
       case 'session':
         return new SessionItem(node, this.names());
       case 'usage':
@@ -425,10 +457,27 @@ export class HistoryViewProvider
         return element.sessions.map((session) => ({ kind: 'recovery' as const, session }));
       }
       if (element.kind === 'project') {
-        return element.group.sessions.map((session) => ({
+        // The worktree level appears only where there is something to disambiguate; a
+        // repository used from one directory would gain nothing but an extra click.
+        return element.group.checkouts
+          ? element.group.checkouts.map((checkout) => ({
+              kind: 'checkout' as const,
+              project: element.group.project,
+              checkout,
+            }))
+          : element.group.sessions.map((session) => ({
+              kind: 'session' as const,
+              session,
+              project: element.group.project,
+            }));
+      }
+      if (element.kind === 'checkout') {
+        return element.checkout.sessions.map((session) => ({
           kind: 'session' as const,
           session,
-          project: element.group.project,
+          project: element.checkout.worktree
+            ? `${element.project} (${element.checkout.worktree})`
+            : element.project,
         }));
       }
       return element.kind === 'session' ? this.changedFiles(element) : [];
@@ -439,7 +488,9 @@ export class HistoryViewProvider
         homeDirectory: this.homeDirectory(),
         maxResults: this.limit(),
       });
-      this.groups = groupSessionsByProject(sessions);
+      // One `.git` walk per distinct directory, not per session: a project with forty
+      // sessions has one working directory.
+      this.groups = groupSessionsByProject(sessions, await indexCheckouts(sessions));
       // stat-only, and only on a real reload, so it never rides the debounced refresh path
       // more often than the listing itself.
       this.usage = await measureStore(this.homeDirectory());
