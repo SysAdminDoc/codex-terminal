@@ -193,6 +193,7 @@
   "codex doctor could not be read: {0}": "no se pudo leer codex doctor: {0}",
   "  [{0}] {1}: {2}": "  [{0}] {1}: {2}",
   "(no summary)": "(sin resumen)",
+  "Could not migrate codexTerminal.{0} to codexTerminal.{1} at {2} scope: {3}": "No se pudo migrar codexTerminal.{0} a codexTerminal.{1} en el ámbito {2}: {3}",
   "Migrated codexTerminal.{0} to codexTerminal.{1} at {2} scope.": "Se migró codexTerminal.{0} a codexTerminal.{1} en el ámbito {2}.",
   "Skipped codexTerminal.{0} to codexTerminal.{1} at {2} scope because the new setting is already set.": "Se omitió la migración de codexTerminal.{0} a codexTerminal.{1} en el ámbito {2} porque la nueva opción ya está definida.",
   "Settings migration failed: {0}": "Error al migrar las opciones: {0}",

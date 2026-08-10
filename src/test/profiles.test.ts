@@ -18,7 +18,11 @@ test('profile discovery strips only the Codex config suffix and sorts names', ()
 });
 
 test('profile discovery uses the Codex home directory', () => {
+  // The argument is the *user's* home. `codexHomeDirectory` takes the opposite - a Codex home
+  // - so feeding this function that one's output yields `~/.codex/.codex`. The parameter name
+  // is the guard; this asserts which of the two meanings is in force.
   assert.equal(codexProfilesDirectory('C:\\Users\\matt'), 'C:\\Users\\matt\\.codex');
+  assert.equal(codexProfilesDirectory('  '), codexProfilesDirectory());
 });
 
 test('profile names become explicit Codex profile arguments', () => {

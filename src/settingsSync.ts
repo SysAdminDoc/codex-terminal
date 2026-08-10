@@ -124,9 +124,16 @@ export async function revertWorkbenchPreferences(): Promise<void> {
       continue;
     }
     try {
-      // `undefined` removes the global override rather than writing an empty value.
-      await root.update(restore.key, restore.to, vscode.ConfigurationTarget.Global);
-      log().info(strings.workbench.reverted(restore.key, settingText(restore.to)));
+      // `undefined` removes the global override rather than writing an empty value — and a
+      // boolean setting has to be restored as a boolean. The ledger stores every previous
+      // value as a string, so reverting `allowAgentCliTitle` wrote the *string* `'false'`
+      // into a setting typed `boolean`.
+      const value =
+        restore.to !== undefined && restore.key === AGENT_CLI_TITLE_SETTING
+          ? restore.to === 'true'
+          : restore.to;
+      await root.update(restore.key, value, vscode.ConfigurationTarget.Global);
+      log().info(strings.workbench.reverted(restore.key, settingText(value)));
       reverted.push(restore.key);
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);

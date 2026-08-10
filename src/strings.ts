@@ -467,7 +467,15 @@ export const strings = {
   },
   migration: {
     event: (event: MigrationEvent): string =>
-      event.result === 'migrated'
+      event.result === 'failed'
+        ? vscode.l10n.t(
+            'Could not migrate codexTerminal.{0} to codexTerminal.{1} at {2} scope: {3}',
+            event.from,
+            event.to,
+            event.target,
+            event.detail ?? '',
+          )
+        : event.result === 'migrated'
         ? vscode.l10n.t(
             'Migrated codexTerminal.{0} to codexTerminal.{1} at {2} scope.',
             event.from,

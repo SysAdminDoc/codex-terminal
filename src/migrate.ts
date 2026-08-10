@@ -20,7 +20,9 @@ export interface MigrationEvent {
   from: string;
   to: string;
   target: MigrationTarget;
-  result: 'migrated' | 'skipped';
+  result: 'migrated' | 'skipped' | 'failed';
+  /** Present only on `failed`: what the editor refused to do, and why. */
+  detail?: string;
 }
 
 export const SETTING_MIGRATIONS = [
@@ -57,9 +59,22 @@ export async function migrateSettings(
         events.push({ ...migration, target, result: 'skipped' });
         continue;
       }
-      await configuration.update(migration.to, oldValue, target);
-      await configuration.update(migration.from, undefined, target);
-      events.push({ ...migration, target, result: 'migrated' });
+      try {
+        await configuration.update(migration.to, oldValue, target);
+        await configuration.update(migration.from, undefined, target);
+        events.push({ ...migration, target, result: 'migrated' });
+      } catch (error) {
+        // `ConfigurationTarget.WorkspaceFolder` throws on a configuration with no resource
+        // scope ("no resource is provided"). Letting that escape aborted the loop *before*
+        // the marker was written, so every activation retried the whole migration and threw
+        // again in the same place — and no other target ever got its turn.
+        events.push({
+          ...migration,
+          target,
+          result: 'failed',
+          detail: error instanceof Error ? error.message : String(error),
+        });
+      }
     }
   }
   await state.update(stateKey, true);

@@ -24,6 +24,16 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- **A settings migration that hit a scope the editor refuses lost its marker.** Writing at
+  workspace-folder scope on a configuration with no resource throws, and the throw escaped
+  before the "already migrated" marker was written — so every activation retried the whole
+  migration and threw in the same place, and no other scope ever got its turn. Each scope is
+  now attempted independently and a refusal is reported rather than fatal.
+
+- **Reverting `terminal.integrated.tabs.allowAgentCliTitle` wrote a string into a boolean.**
+  The override ledger stores every previous value as text, and the revert path wrote it back
+  verbatim, so the setting ended up holding `"false"` rather than `false`.
+
 - **Editor context could be typed into somebody else's terminal.** *Send File Reference* and
   *Ask Codex about Selection* fell back to `window.activeTerminal` when no Codex session was
   tracked — so with none running they typed the reference, and for the second command pressed
