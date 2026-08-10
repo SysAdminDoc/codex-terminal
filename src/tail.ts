@@ -67,12 +67,11 @@ export class RolloutTailer {
     const length = size - this.offset;
     const buffer = Buffer.alloc(length);
     const handle = await open(this.filePath, 'r');
-    let bytesRead = 0;
-    try {
-      ({ bytesRead } = await handle.read(buffer, 0, length, this.offset));
-    } finally {
-      await handle.close();
-    }
+    // `finally` on the promise closes the handle on both paths without needing a mutable
+    // binding that is written once and never read in its initial state.
+    const { bytesRead } = await handle
+      .read(buffer, 0, length, this.offset)
+      .finally(() => handle.close());
     this.offset += bytesRead;
 
     const text = this.remainder + this.decoder.write(buffer.subarray(0, bytesRead));

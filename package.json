@@ -472,7 +472,7 @@
     "clean": "node -e \"require('node:fs').rmSync('dist',{recursive:true,force:true});require('node:fs').rmSync('out',{recursive:true,force:true})\"",
     "compile": "tsc -p tsconfig.json",
     "bundle": "node esbuild.mjs",
-    "lint": "eslint src --ext ts",
+    "lint": "eslint src",
     "l10n:export": "vscode-l10n-dev export -o l10n ./src",
     "test": "npm run compile && node --test \"out/test/*.test.js\"",
     "test:integration": "npm run compile && npm run bundle && vscode-test --label hostile --jobs 1",
@@ -481,16 +481,17 @@
     "vscode:prepublish": "npm run clean && npm run bundle"
   },
   "devDependencies": {
+    "@eslint/js": "10.0.1",
     "@types/node": "^22.10.0",
     "@types/vscode": "^1.90.0",
-    "@typescript-eslint/eslint-plugin": "^8.18.0",
-    "@typescript-eslint/parser": "^8.18.0",
+    "@typescript-eslint/eslint-plugin": "8.67.0",
+    "@typescript-eslint/parser": "8.67.0",
     "@vscode/l10n-dev": "^0.0.35",
     "@vscode/test-cli": "^0.0.15",
     "@vscode/test-electron": "3.1.0",
     "@vscode/vsce": "^3.2.1",
     "esbuild": "^0.28.2",
-    "eslint": "^8.57.1",
+    "eslint": "10.8.1",
     "typescript": "^5.7.2"
   },
   "overrides": {

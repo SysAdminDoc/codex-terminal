@@ -7,7 +7,7 @@ docs/screenshots/**
 resources/make_icon.py
 **/*.ts
 **/*.map
-.eslintrc.json
+eslint.config.mjs
 .gitignore
 esbuild.mjs
 tsconfig.json

@@ -47,6 +47,8 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- A file handle in the rollout tailer is now closed through the read promise rather than a
+  mutable binding whose initial value was never read — found by the ESLint upgrade.
 - `codexTerminal.shell: "cmd"` could not launch at all. The Codex title override was emitted
   as a double-quoted TOML array, and cmd.exe has no escape for a double quote inside a quoted
   argument, so every launch threw. The override now uses TOML literal strings.
