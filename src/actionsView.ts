@@ -14,7 +14,13 @@ import {
   tightestWindow,
 } from './present';
 import { estimateCost, formatCost, type RateTable } from './cost';
-import { describeMcpServer, describePlugin, parseMcpList, parsePluginList } from './inventory';
+import {
+  describeMcpServer,
+  describePlugin,
+  parseMcpList,
+  parsePluginList,
+  redactSecrets,
+} from './inventory';
 import { displayName, type SessionNames } from './names';
 import { peekServices } from './services';
 import { strings } from './strings';
@@ -367,11 +373,18 @@ class Inventory {
  *
  * The rest is not thrown away — it goes to the log, because the first line of a failure is
  * routinely the least informative one (a stack frame, a shim's banner), and a row that says
- * "could not read" with no way to find out why is a dead end.
+ * "could not read" with no way to find out why is a dead end. It goes there **redacted**: the
+ * usual reason this path runs at all is that the CLI succeeded and printed a payload of an
+ * unexpected shape, and for `codex mcp list` that payload is every server's environment —
+ * which the UI drops on purpose because it carries API tokens. Writing it verbatim to a file
+ * on disk undid that.
  */
 function firstLine(output: string, what: string): string {
-  peekServices()?.log.warn(`codex ${what} could not be read:\n${output.slice(0, 4000)}`);
-  const line = output
+  const safe = redactSecrets(output);
+  peekServices()?.log.warn(
+    `codex ${what} could not be read (${output.length} bytes):\n${safe.slice(0, 4000)}`,
+  );
+  const line = safe
     .split('\n')
     .map((entry) => entry.trim())
     .find(Boolean);

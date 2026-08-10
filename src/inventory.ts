@@ -81,6 +81,40 @@ export function parsePluginList(output: string): CodexPlugin[] | undefined {
     .filter((entry): entry is CodexPlugin => entry !== undefined);
 }
 
+export const REDACTED = '«redacted»';
+
+/** Key names whose values are never worth seeing and frequently worth hiding. */
+const SENSITIVE_KEY = /(token|secret|key|password|passwd|auth|credential|cookie)/i;
+
+/**
+ * Blank out anything secret-shaped before text from the Codex CLI is shown or logged.
+ *
+ * The UI drops an MCP server's `env` precisely because it carries API tokens — and then the
+ * failure path wrote the raw output to the log file, which is the same payload with none of
+ * the care. A parse failure is exactly when that happens: the CLI succeeded, printed the
+ * environment, and only the *shape* was unexpected.
+ *
+ * Regex rather than a JSON walk, deliberately: this runs on output that failed to parse, so
+ * there is no object to walk. It is not a general-purpose scrubber and does not need to be —
+ * it needs to keep a token out of a log file while leaving the surrounding error legible.
+ */
+export function redactSecrets(text: string): string {
+  return (
+    text
+      // Every value inside an `env` object, which is the block the UI already refuses to show.
+      .replace(/("env"\s*:\s*)\{[^{}]*\}/gi, `$1{${JSON.stringify(REDACTED)}}`)
+      // `"anything_token": "value"`, whatever the surrounding structure turned out to be.
+      .replace(
+        /("[^"]*"\s*:\s*)"(?:[^"\\]|\\.)*"/g,
+        (match, prefix: string) =>
+          SENSITIVE_KEY.test(prefix) ? `${prefix}${JSON.stringify(REDACTED)}` : match,
+      )
+      // Bare credentials that never had a key: bearer tokens and provider-prefixed keys.
+      .replace(/\b(Bearer|Basic)\s+[A-Za-z0-9._~+/=-]{8,}/gi, `$1 ${REDACTED}`)
+      .replace(/\b(sk|pk|rk|ghp|gho|ghs|github_pat|xoxb|xoxp)[-_][A-Za-z0-9_-]{12,}/g, REDACTED)
+  );
+}
+
 /**
  * Parse `codex mcp list --json`, whose payload is a bare array.
  *

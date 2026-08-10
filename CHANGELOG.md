@@ -24,6 +24,15 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- **An unreadable MCP list wrote API tokens to the log file.** The Plugins and MCP sections
+  drop each server's `env` from the UI precisely because it carries tokens — and then the
+  failure path wrote 4,000 characters of the CLI's raw output to the extension log. That path
+  runs mostly when the CLI *succeeded* and printed a payload of an unexpected shape, which for
+  `codex mcp list --json` is every server's environment. Output is now redacted before it is
+  logged or shown: `env` blocks, values under secret-shaped keys, bearer tokens and
+  provider-prefixed keys. Ordinary diagnostics are untouched, so the log still explains the
+  failure, and the byte count is reported alongside.
+
 - **Turn-completion notifications never fired.** The notify hook was registered with
   `process.execPath`, which inside the extension host is the editor's own Electron binary — it
   behaves as a script runtime only while `ELECTRON_RUN_AS_NODE` is set, and the editor deletes
