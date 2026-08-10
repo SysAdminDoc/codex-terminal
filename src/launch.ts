@@ -37,6 +37,7 @@ import {
   animationAllowed,
   config,
   log,
+  peekServices,
   reportError,
   services,
   tabTitleMode,
@@ -120,9 +121,12 @@ export async function ensureAppServer(): Promise<void> {
     state.appServer = undefined;
     return;
   }
-  if (state.appServer) {
+  // `isAlive` rather than mere presence: a server that has exited leaves its handle behind,
+  // and returning here is what used to point every later launch at a closed port.
+  if (state.appServer?.isAlive()) {
     return;
   }
+  state.appServer = undefined;
   if (!webSocketAvailable()) {
     // `WebSocket` became a Node global in 22; this extension's engine floor reaches back to
     // editors built on Node 20, where the feature simply cannot work.
@@ -141,11 +145,34 @@ export async function ensureAppServer(): Promise<void> {
     return;
   }
   const entry = nodeEntryFor(resolved);
+  const nodeExecutable = entry
+    ? resolveNodeExecutable({
+        execPath: process.execPath,
+        pathValue: process.env.PATH,
+        isWindows: process.platform === 'win32',
+        exists: existsSync,
+      })
+    : undefined;
+  if (entry && !nodeExecutable) {
+    log().warn(strings.appServer.unavailable('node'));
+    return;
+  }
   try {
     state.appServer = await HostedAppServer.start({
       command: entry ?? resolved,
-      ...(entry ? { nodeExecutable: process.execPath } : {}),
+      // A resolved Node, not `process.execPath`: that is the editor's Electron binary, which
+      // only runs a script while `ELECTRON_RUN_AS_NODE` happens to be inherited.
+      ...(entry && nodeExecutable ? { nodeExecutable } : {}),
       log: log(),
+      onExit: () => {
+        // Drop the handle so the next launch starts a fresh server instead of attaching to
+        // a port nothing is listening on.
+        peekServices()?.appServer?.dispose();
+        const live = peekServices();
+        if (live) {
+          live.appServer = undefined;
+        }
+      },
     });
   } catch (error) {
     log().warn(

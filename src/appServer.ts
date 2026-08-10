@@ -299,17 +299,40 @@ export interface HostedAppServerOptions {
   command: string;
   nodeExecutable?: string;
   log: { info(message: string): void; warn(message: string): void };
+  /**
+   * Called when the server exits on its own. Without it a dead server stays installed and
+   * every later launch is handed `--remote` pointing at a port nobody is listening on.
+   */
+  onExit?: (detail: string) => void;
 }
 
 /** The server process plus the port a TUI should be pointed at. */
 export class HostedAppServer {
   private child: ChildProcess | undefined;
+  private disposed = false;
 
   private constructor(
     readonly port: number,
     child: ChildProcess,
+    options: HostedAppServerOptions,
   ) {
     this.child = child;
+    // A server that dies takes the port with it, and the extension has no other way to learn
+    // that: `spawn` reports failure through events, and an unlistened `'exit'` is silent.
+    child.once('exit', (code, signal) => {
+      this.child = undefined;
+      if (this.disposed) {
+        return;
+      }
+      const detail = signal ? `signal ${signal}` : `exit code ${code ?? 'unknown'}`;
+      options.log.warn(`app-server on port ${this.port} stopped (${detail})`);
+      options.onExit?.(detail);
+    });
+  }
+
+  /** False once the process has gone, so a stale handle is never handed to a launch. */
+  isAlive(): boolean {
+    return this.child !== undefined;
   }
 
   static async start(options: HostedAppServerOptions): Promise<HostedAppServer> {
@@ -322,6 +345,18 @@ export class HostedAppServer {
       stdio: ['ignore', 'pipe', 'pipe'],
       windowsHide: true,
     });
+    // `spawn` reports an `ENOENT`, `EACCES` or `EPERM` by emitting `'error'`, and an
+    // unlistened `'error'` on an EventEmitter is thrown — out of a callback, past the `try`
+    // around this call, and into the extension host as an unhandled exception. Listening is
+    // what turns it back into a rejection the caller can report.
+    const failure = new Promise<never>((_resolve, reject) => {
+      child.once('error', (error: unknown) =>
+        reject(error instanceof Error ? error : new Error(String(error))),
+      );
+    });
+    // If readiness wins the race the rejection still has to go somewhere.
+    failure.catch(() => undefined);
+
     // The banner lands on stderr, so this is the normal channel rather than a fault channel.
     child.stderr?.on('data', (chunk: Buffer) => {
       const text = chunk.toString('utf8').trim();
@@ -330,15 +365,17 @@ export class HostedAppServer {
       }
     });
 
-    if (!(await waitForReady(port))) {
+    const ready = await Promise.race([waitForReady(port), failure]);
+    if (!ready) {
       child.kill();
       throw new Error(`codex app-server did not become ready on port ${port}`);
     }
     options.log.info(`app-server listening on ws://127.0.0.1:${port}`);
-    return new HostedAppServer(port, child);
+    return new HostedAppServer(port, child, options);
   }
 
   dispose(): void {
+    this.disposed = true;
     this.child?.kill();
     this.child = undefined;
   }

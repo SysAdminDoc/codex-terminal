@@ -24,6 +24,17 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- **A hosted app-server could crash the extension host, or outlive its own port.** The spawn
+  had no `'error'` listener, and an unlistened `'error'` on a child process is *thrown* — out of
+  a callback, past the `try` around the call, and into the extension host as an unhandled
+  exception, so an `ENOENT` or `EACCES` took the host with it rather than producing a log line.
+  It had no `'exit'` listener either, so a server that died left its handle installed and every
+  later launch was handed `--remote` pointing at a closed port, silently. Both are now
+  observed: a spawn failure comes back as a rejection, an exit is logged with its code and
+  clears the handle so the next launch starts a fresh server, and a deliberate dispose is not
+  reported as a failure. The app-server's own Node is resolved from `PATH` for the same reason
+  the notify hook's is.
+
 - **An unreadable MCP list wrote API tokens to the log file.** The Plugins and MCP sections
   drop each server's `env` from the UI precisely because it carries tokens — and then the
   failure path wrote 4,000 characters of the CLI's raw output to the extension log. That path

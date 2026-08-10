@@ -1,7 +1,12 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
+import { mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import * as path from 'node:path';
+
 import {
+  HostedAppServer,
   appServerListenArgs,
   decodeMessages,
   encodeMessage,
@@ -9,6 +14,16 @@ import {
   remoteArgs,
   waitForReady,
 } from '../appServer';
+
+interface Recorder {
+  warn: string[];
+  log: { info(message: string): void; warn(message: string): void };
+}
+
+function recorder(): Recorder {
+  const warn: string[] = [];
+  return { warn, log: { info: () => undefined, warn: (message) => warn.push(message) } };
+}
 
 test('a request is framed as one line of JSON', () => {
   const encoded = encodeMessage({ jsonrpc: '2.0', id: 1, method: 'initialize' });
@@ -76,4 +91,102 @@ test('readiness gives up rather than waiting forever on a port nothing is servin
   let clock = 0;
   const ready = await waitForReady(port, 500, () => (clock += 400));
   assert.equal(ready, false);
+});
+
+
+/**
+ * The regression: `spawn` reports `ENOENT`, `EACCES` and `EPERM` by emitting `'error'`, and an
+ * unlistened `'error'` on an EventEmitter is *thrown* — out of a callback, past the `try`
+ * around this call, and into the extension host as an unhandled exception. This asserts it
+ * comes back as a rejection, which is the only form the caller can turn into a log line.
+ */
+test('a server that cannot be spawned rejects instead of throwing at the host', async () => {
+  const { log } = recorder();
+  await assert.rejects(
+    HostedAppServer.start({ command: 'codex-terminal-no-such-executable', log }),
+    (error: unknown) => error instanceof Error,
+  );
+});
+
+/**
+ * A server that dies used to leave its handle installed, so every later launch was handed
+ * `--remote` pointing at a port nobody was listening on, with nothing anywhere to say so.
+ */
+test('a server that exits says so, stops being alive, and tells its owner', async () => {
+  const directory = await mkdtemp(path.join(tmpdir(), 'codex-appserver-'));
+  try {
+    // Stands in for `codex app-server`: it is handed the real `--listen ws://127.0.0.1:<port>`
+    // argument, answers `/readyz` until it is found ready, then exits on its own.
+    const script = path.join(directory, 'fake-app-server.js');
+    await writeFile(
+      script,
+      [
+        'const http = require("node:http");',
+        'const listen = process.argv.find((a) => a.startsWith("ws://"));',
+        'const port = Number(new URL(listen.replace("ws://", "http://")).port);',
+        'const server = http.createServer((_req, res) => { res.statusCode = 200; res.end("ok"); });',
+        'server.listen(port, "127.0.0.1");',
+        'setTimeout(() => { server.close(); process.exit(3); }, 400);',
+      ].join('\n'),
+      'utf8',
+    );
+
+    const { log, warn } = recorder();
+    const exits: string[] = [];
+    const hosted = await HostedAppServer.start({
+      command: script,
+      nodeExecutable: process.execPath,
+      log,
+      onExit: (detail) => exits.push(detail),
+    });
+    assert.ok(hosted.isAlive());
+
+    await new Promise((resolve) => setTimeout(resolve, 1_200));
+
+    assert.equal(hosted.isAlive(), false);
+    assert.equal(exits.length, 1, `expected one exit callback, got ${exits.length}`);
+    assert.match(exits[0], /exit code 3/);
+    assert.ok(
+      warn.some((line) => line.includes(String(hosted.port)) && line.includes('stopped')),
+      warn.join(' | '),
+    );
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test('disposing a server on purpose is not reported as an unexpected exit', async () => {
+  const directory = await mkdtemp(path.join(tmpdir(), 'codex-appserver-'));
+  try {
+    const script = path.join(directory, 'fake-app-server.js');
+    await writeFile(
+      script,
+      [
+        'const http = require("node:http");',
+        'const listen = process.argv.find((a) => a.startsWith("ws://"));',
+        'const port = Number(new URL(listen.replace("ws://", "http://")).port);',
+        'http.createServer((_req, res) => { res.statusCode = 200; res.end("ok"); })',
+        '  .listen(port, "127.0.0.1");',
+        'setInterval(() => undefined, 1000);',
+      ].join('\n'),
+      'utf8',
+    );
+
+    const { log, warn } = recorder();
+    const exits: string[] = [];
+    const hosted = await HostedAppServer.start({
+      command: script,
+      nodeExecutable: process.execPath,
+      log,
+      onExit: (detail) => exits.push(detail),
+    });
+    hosted.dispose();
+    await new Promise((resolve) => setTimeout(resolve, 500));
+
+    assert.equal(hosted.isAlive(), false);
+    assert.deepEqual(exits, []);
+    assert.deepEqual(warn, []);
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
 });
