@@ -3,10 +3,12 @@
 All notable changes to Codex Terminal are documented here.
 This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.5.0] - 2026-08-10
 
 ### Added
 
+- A History session can be forked from its context menu, starting a new session from that
+  conversation in the directory it was written in.
 - Releases are now reproducible and checksummed. `npm run package` stamps the archive with the
   commit timestamp, so a given commit builds a byte-identical `.vsix`, and writes
   `dist/SHA256SUMS.txt`; `install.cmd` verifies the hash before installing and refuses on a

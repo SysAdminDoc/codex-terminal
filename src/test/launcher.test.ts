@@ -174,3 +174,10 @@ test('mode args land ahead of the user args on the command line', () => {
     'codex resume --last --model gpt-5.1',
   ]);
 });
+
+test('forking a chosen session targets that id, not the last one', () => {
+  // `fork --last` ignores the session the user actually clicked in the sidebar; the id is
+  // appended by the caller, so the subcommand must not carry --last.
+  assert.deepEqual(modeArgs('forkPicker'), ['fork']);
+  assert.deepEqual(modeArgs('forkLast'), ['fork', '--last']);
+});

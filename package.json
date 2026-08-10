@@ -3,7 +3,7 @@
   "displayName": "%extension.displayName%",
   "description": "%extension.description%",
   "l10n": "./l10n",
-  "version": "0.4.0",
+  "version": "0.5.0",
   "publisher": "sysadmindoc",
   "license": "MIT",
   "author": "SysAdminDoc",
@@ -193,6 +193,12 @@
         "title": "%command.deleteSession.title%",
         "category": "%category.codexTerminal%",
         "icon": "$(trash)"
+      },
+      {
+        "command": "codexTerminal.forkHistorySession",
+        "title": "%command.forkHistory.title%",
+        "category": "%category.codexTerminal%",
+        "icon": "$(git-branch)"
       }
     ],
     "menus": {
@@ -282,6 +288,11 @@
           "command": "codexTerminal.deleteSession",
           "when": "view == codexTerminal.history && viewItem == codexTerminal.historySession",
           "group": "codexTerminal@4"
+        },
+        {
+          "command": "codexTerminal.forkHistorySession",
+          "when": "view == codexTerminal.history && viewItem == codexTerminal.historySession",
+          "group": "codexTerminal@2"
         }
       ]
     },

@@ -23,6 +23,7 @@
   "command.resumeHistory.title": "Resume This Codex Session",
   "command.copyHistoryId.title": "Copy Codex Session ID",
   "command.openRawHistory.title": "Open Raw Codex Rollout",
+  "command.forkHistory.title": "Fork This Codex Session",
   "command.archiveSession.title": "Archive Codex Session",
   "command.deleteSession.title": "Delete Codex Session",
   "command.restoreSession.title": "Restore Interrupted Session",

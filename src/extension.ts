@@ -590,6 +590,17 @@ function resumeHistorySession(node: unknown): void {
   }
 }
 
+/** Fork the chosen conversation into a new session, in the directory it was written in. */
+function forkHistorySession(node: unknown): void {
+  if (isSessionNode(node)) {
+    void launch({
+      mode: 'forkPicker',
+      sessionId: node.session.id,
+      cwd: node.session.cwd || undefined,
+    });
+  }
+}
+
 function restoreJournalSession(session: JournalSession): void {
   if (!session.sessionId) {
     return;
@@ -930,6 +941,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<CodexT
     vscode.commands.registerCommand('codexTerminal.copyHistorySessionId', copyHistorySessionId),
     vscode.commands.registerCommand('codexTerminal.openRawHistorySession', openRawHistorySession),
     vscode.commands.registerCommand('codexTerminal.restoreSession', restoreSession),
+    vscode.commands.registerCommand('codexTerminal.forkHistorySession', forkHistorySession),
     vscode.commands.registerCommand('codexTerminal.archiveSession', (node: unknown) => {
       void runSessionLifecycle(node, 'archive');
     }),

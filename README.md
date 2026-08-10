@@ -1,6 +1,6 @@
 # Codex Terminal
 
-[![Version](https://img.shields.io/badge/version-0.4.0-cba6f7?style=flat-square)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-0.5.0-cba6f7?style=flat-square)](CHANGELOG.md)
 [![License](https://img.shields.io/badge/license-MIT-89b4fa?style=flat-square)](LICENSE)
 [![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux-a6e3a1?style=flat-square)](#requirements)
 [![Editors](https://img.shields.io/badge/editors-VS%20Code%20%7C%20VSCodium-f9e2af?style=flat-square)](#requirements)
@@ -66,7 +66,10 @@ The real Codex TUI, started in the workspace folder:
   local `.jsonl` rollouts, groups them by project, and keeps the first real prompt as a preview.
   **Click a session to resume it** in a terminal, in the directory it was originally written in;
   the inline actions open a readable Markdown transcript or copy its id, and the context menu adds
-  the raw rollout. New and changed rollouts refresh the view automatically.
+  resume, fork, the raw rollout, and archive/delete. New and changed rollouts refresh the view
+  automatically. A row at the top reports how much disk Codex's session store is using — it grows
+  without bound, and archive/delete hand the work to `codex archive` / `codex delete` so Codex's
+  own state database stays in step.
 - **Interrupted sessions** — if a window closes without shutting down cleanly, the next window
   offers the Codex sessions it had open under an **Interrupted sessions** group at the top of the
   History view. Restoring one resumes that conversation where it stopped. Sessions that never
@@ -102,6 +105,8 @@ The real Codex TUI, started in the workspace folder:
 | `codexTerminal.iconColor` | `terminal.ansiMagenta` | Theme color id, or `""` for the default. |
 | `codexTerminal.showStatusBarButton` | `true` | The old `showStatusBarItem` key is migrated once per extension version. |
 | `codexTerminal.showEditorTitleButton` | `true` | |
+| `codexTerminal.showContextInStatusBar` | `true` | Append the highest context usage across live sessions to the status bar — the session nearest its limit is the one about to compact. |
+| `codexTerminal.stallSeconds` | `45` | Seconds of silence after which a working session is reported as producing no output. Codex writes nothing both while awaiting an approval and while stuck, and the two are indistinguishable from its session file. |
 | `codexTerminal.notifyOnCompletion` | `false` | Opt in to turn-completion notifications without modifying `~/.codex/config.toml`. |
 | `codexTerminal.tabTitle` | `live` | `live` leaves the tab name unset so Codex's own title — including its activity indicator — drives the tab. `static` shows a fixed `project — Codex` label and **cannot animate**; see below. |
 | `codexTerminal.titleItems` | `["activity", "project-name", "app-name"]` | Codex title items. The default gives the live activity indicator, the project name, and the constant `Codex` marker used to recognise our tabs after a window reload. |
@@ -181,8 +186,8 @@ VS Code, Insiders, Cursor).
 Command line:
 
 ```powershell
-codium --install-extension codex-terminal-0.4.0.vsix   # VSCodium
-code   --install-extension codex-terminal-0.4.0.vsix   # VS Code
+codium --install-extension codex-terminal-0.5.0.vsix   # VSCodium
+code   --install-extension codex-terminal-0.5.0.vsix   # VS Code
 ```
 
 Or from inside the editor: **Extensions** view → `...` menu (top of the sidebar) →
@@ -198,7 +203,7 @@ Codex icon then appears in the activity bar.
 npm install
 npm run check     # clean, compile, lint, test, bundle
 npm run l10n:export # refresh the default English localization bundle
-npm run package   # -> dist/codex-terminal-0.4.0.vsix
+npm run package   # -> dist/codex-terminal-0.5.0.vsix
 ```
 
 `npm run check` runs the headless unit suite over shell quoting, command resolution, session
@@ -215,10 +220,10 @@ via `SOURCE_DATE_EPOCH`, which makes the `.vsix` byte-identical for a given comm
 To confirm a downloaded `.vsix` is what this repository builds:
 
 ```powershell
-git checkout v0.4.0
+git checkout v0.5.0
 npm ci
 npm run package
-Get-FileHash -Algorithm SHA256 dist\codex-terminal-0.4.0.vsix
+Get-FileHash -Algorithm SHA256 dist\codex-terminal-0.5.0.vsix
 ```
 
 The hash must match `SHA256SUMS.txt` on the release. A mismatch means the file you downloaded

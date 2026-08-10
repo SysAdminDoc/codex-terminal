@@ -35,7 +35,7 @@ export interface TerminalNameContext {
   cwd?: string;
   /** Workspace folder name, preferred over the cwd basename when they differ. */
   workspaceFolder?: string;
-  mode: 'new' | 'resumeLast' | 'resumePicker' | 'forkLast';
+  mode: 'new' | 'resumeLast' | 'resumePicker' | 'forkLast' | 'forkPicker';
   profile?: string;
   sessionId?: string;
 }
@@ -60,6 +60,7 @@ const MODE_SUFFIX: Record<TerminalNameContext['mode'], string> = {
   resumeLast: ' (resumed)',
   resumePicker: ' (resumed)',
   forkLast: ' (fork)',
+  forkPicker: ' (fork)',
 };
 
 /** Basename of a path, tolerating either separator regardless of the host platform. */

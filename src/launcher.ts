@@ -304,7 +304,7 @@ export function buildLaunchPlan(req: LaunchRequest): LaunchPlan {
 }
 
 /** Codex subcommand for each launch mode the extension exposes. */
-export type LaunchMode = 'new' | 'resumeLast' | 'resumePicker' | 'forkLast';
+export type LaunchMode = 'new' | 'resumeLast' | 'resumePicker' | 'forkLast' | 'forkPicker';
 
 export function modeArgs(mode: LaunchMode): string[] {
   switch (mode) {
@@ -314,6 +314,9 @@ export function modeArgs(mode: LaunchMode): string[] {
       return ['resume'];
     case 'forkLast':
       return ['fork', '--last'];
+    // The session id is appended by the caller, giving `codex fork <id>`.
+    case 'forkPicker':
+      return ['fork'];
     case 'new':
     default:
       return [];
