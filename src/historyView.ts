@@ -30,6 +30,9 @@ import { strings } from './strings';
  * window died" is precisely the fact the rollouts do not record.
  */
 
+/** Long enough to collapse a burst of appends, short enough to feel immediate. */
+const REFRESH_DEBOUNCE_MS = 500;
+
 interface RecoveryGroupNode {
   kind: 'recovery-group';
   sessions: JournalSession[];
@@ -206,6 +209,8 @@ export class HistoryViewProvider
   private loaded = false;
   private filter = '';
   private recoverable: JournalSession[] = [];
+  private pending: NodeJS.Timeout | undefined;
+  private pendingHard = false;
 
   readonly onDidChangeTreeData = this.changes.event;
 
@@ -216,11 +221,35 @@ export class HistoryViewProvider
 
   /** Re-read the rollout directory. `hard` also drops the per-file preview cache. */
   refresh(hard = false): void {
+    if (this.pending) {
+      clearTimeout(this.pending);
+      this.pending = undefined;
+    }
     if (hard) {
       clearSessionCache();
     }
     this.loaded = false;
     this.changes.fire();
+  }
+
+  /**
+   * Coalesce filesystem-driven refreshes.
+   *
+   * Codex appends to the active rollout several times a second, and every append raises a
+   * change event. Refreshing on each one re-walks the whole rollout directory while a turn
+   * is running, for a view whose contents cannot meaningfully change that fast.
+   */
+  scheduleRefresh(hard = false): void {
+    this.pendingHard = this.pendingHard || hard;
+    if (this.pending) {
+      return;
+    }
+    this.pending = setTimeout(() => {
+      this.pending = undefined;
+      const wasHard = this.pendingHard;
+      this.pendingHard = false;
+      this.refresh(wasHard);
+    }, REFRESH_DEBOUNCE_MS);
   }
 
   /** Publish the sessions a dead window left behind, newest first. */
@@ -334,6 +363,10 @@ export class HistoryViewProvider
   }
 
   dispose(): void {
+    if (this.pending) {
+      clearTimeout(this.pending);
+      this.pending = undefined;
+    }
     this.changes.dispose();
   }
 }

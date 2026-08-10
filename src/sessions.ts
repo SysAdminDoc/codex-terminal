@@ -4,6 +4,7 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import { createInterface } from 'node:readline';
 
+import { parseRolloutFileName } from './binder';
 import {
   isInjectedContext,
   parseSessionMeta,
@@ -78,8 +79,16 @@ async function readHead(filePath: string): Promise<string> {
   }
 }
 
-async function sessionFiles(directory: string): Promise<string[]> {
-  const files: string[] = [];
+interface RolloutFile {
+  filePath: string;
+  /** From the filename, so it costs no I/O. Undefined for an unrecognised name. */
+  sessionId?: string;
+  /** Epoch ms from the filename; 0 when it could not be parsed, sorting such files last. */
+  startedAt: number;
+}
+
+async function sessionFiles(directory: string): Promise<RolloutFile[]> {
+  const files: RolloutFile[] = [];
   let entries;
   try {
     entries = await readdir(directory, { withFileTypes: true });
@@ -91,10 +100,41 @@ async function sessionFiles(directory: string): Promise<string[]> {
     if (entry.isDirectory()) {
       files.push(...(await sessionFiles(entryPath)));
     } else if (entry.isFile() && entry.name.endsWith('.jsonl')) {
-      files.push(entryPath);
+      const parsed = parseRolloutFileName(entry.name);
+      files.push({
+        filePath: entryPath,
+        ...(parsed ? { sessionId: parsed.sessionId } : {}),
+        startedAt: parsed?.startedAt ?? 0,
+      });
     }
   }
   return files;
+}
+
+/**
+ * Narrow to the newest `limit` rollouts using only their filenames.
+ *
+ * A rollout's name carries both its session id and its start time, so the newest N can be
+ * chosen without opening anything. That matters: the store here reached 2.01 GB across 121
+ * files in two days, and reading every head to then discard all but 200 made the cost of a
+ * refresh grow with the store rather than with what is displayed.
+ */
+export function selectNewestRollouts(files: readonly RolloutFile[], limit: number): RolloutFile[] {
+  const newestById = new Map<string, RolloutFile>();
+  const unidentified: RolloutFile[] = [];
+  for (const file of files) {
+    if (!file.sessionId) {
+      unidentified.push(file);
+      continue;
+    }
+    const previous = newestById.get(file.sessionId);
+    if (!previous || file.startedAt > previous.startedAt) {
+      newestById.set(file.sessionId, file);
+    }
+  }
+  return [...newestById.values(), ...unidentified]
+    .sort((left, right) => right.startedAt - left.startedAt)
+    .slice(0, Math.max(0, limit));
 }
 
 interface CacheEntry {
@@ -188,10 +228,12 @@ export async function discoverSessions(
   options: SessionDiscoveryOptions = {},
 ): Promise<SessionRecord[]> {
   const directory = codexSessionsDirectory(options.homeDirectory);
-  const files = await sessionFiles(directory);
-  const sessions = (await mapWithConcurrency(files, READ_CONCURRENCY, readSession)).filter(
-    (session): session is SessionRecord => session !== undefined,
-  );
+  const limit = options.maxResults ?? 30;
+  // Choose from filenames first; only the survivors are ever opened.
+  const files = selectNewestRollouts(await sessionFiles(directory), limit);
+  const sessions = (
+    await mapWithConcurrency(files, READ_CONCURRENCY, (file) => readSession(file.filePath))
+  ).filter((session): session is SessionRecord => session !== undefined);
   const unique = new Map<string, SessionRecord>();
   for (const session of sessions) {
     const previous = unique.get(session.id);
@@ -201,7 +243,7 @@ export async function discoverSessions(
   }
   return [...unique.values()]
     .sort((left, right) => right.timestamp.localeCompare(left.timestamp))
-    .slice(0, options.maxResults ?? 30);
+    .slice(0, limit);
 }
 
 export interface SessionGroup {

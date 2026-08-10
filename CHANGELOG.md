@@ -5,6 +5,14 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Changed
+
+- The History view now picks the newest sessions from rollout filenames before opening any
+  of them, so a refresh costs what is displayed rather than what is stored. Against a local
+  2.01 GB store a bounded refresh went from 70 ms to 12 ms, and the gap widens as the store
+  grows. Filesystem-driven refreshes are also debounced — Codex appends to the active rollout
+  several times a second, and each append previously re-walked the whole directory.
+
 ### Fixed
 
 - `codexTerminal.shell: "cmd"` could not launch at all. The Codex title override was emitted

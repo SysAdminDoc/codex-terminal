@@ -4,7 +4,12 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import { test } from 'node:test';
 
-import { codexHomeDirectory, discoverSessions, groupSessionsByProject } from '../sessions';
+import {
+  codexHomeDirectory,
+  discoverSessions,
+  groupSessionsByProject,
+  selectNewestRollouts,
+} from '../sessions';
 
 test('session discovery reads metadata headers, sorts newest first, and skips malformed files', async () => {
   const home = await mkdtemp(path.join(os.tmpdir(), 'codex-terminal-sessions-'));
@@ -109,4 +114,63 @@ test('session discovery extracts the first real prompt and groups by project', a
   } finally {
     await rm(home, { recursive: true, force: true });
   }
+});
+
+test('the scan cost is bounded by maxResults, not by the size of the store', async () => {
+  const home = await mkdtemp(path.join(os.tmpdir(), 'codex-terminal-scale-'));
+  try {
+    const directory = path.join(home, 'sessions', '2026', '08', '09');
+    await mkdir(directory, { recursive: true });
+
+    // A body far larger than the head the reader is allowed to touch. If selection happened
+    // after reading, 1,000 of these would be opened to display 20.
+    const body = 'x'.repeat(64 * 1024);
+    for (let index = 0; index < 1000; index += 1) {
+      const minute = String(index % 60).padStart(2, '0');
+      const second = String(Math.floor(index / 60)).padStart(2, '0');
+      const id = `019fe759-5303-7681-b98a-${String(index).padStart(12, '0')}`;
+      await writeFile(
+        path.join(directory, `rollout-2026-08-09T10-${minute}-${second}-${id}.jsonl`),
+        `${JSON.stringify({
+          type: 'session_meta',
+          payload: { id, timestamp: `2026-08-09T10:${minute}:${second}.000Z`, cwd: 'C:\repo' },
+        })}\n${body}\n`,
+      );
+    }
+
+    const started = Date.now();
+    const sessions = await discoverSessions({ homeDirectory: home, maxResults: 20 });
+    const elapsed = Date.now() - started;
+
+    assert.equal(sessions.length, 20);
+    assert.ok(elapsed < 2000, `refresh over 1000 rollouts took ${elapsed}ms`);
+  } finally {
+    await rm(home, { recursive: true, force: true });
+  }
+});
+
+test('rollouts sharing a session id collapse to the newest before anything is read', () => {
+  const files = [
+    { filePath: 'a', sessionId: 'same', startedAt: 100 },
+    { filePath: 'b', sessionId: 'same', startedAt: 300 },
+    { filePath: 'c', sessionId: 'other', startedAt: 200 },
+  ];
+  assert.deepEqual(
+    selectNewestRollouts(files, 10).map((file) => file.filePath),
+    ['b', 'c'],
+  );
+});
+
+test('a rollout with an unrecognised filename is kept but sorted last', () => {
+  const files = [
+    { filePath: 'strange.jsonl', startedAt: 0 },
+    { filePath: 'named', sessionId: 'x', startedAt: 500 },
+  ];
+  assert.deepEqual(
+    selectNewestRollouts(files, 10).map((file) => file.filePath),
+    ['named', 'strange.jsonl'],
+  );
+  // It must still be reachable when the cap allows it, or a differently-named rollout
+  // would become permanently invisible.
+  assert.equal(selectNewestRollouts(files, 1).length, 1);
 });

@@ -929,9 +929,10 @@ export async function activate(context: vscode.ExtensionContext): Promise<CodexT
     vscode.window.registerTreeDataProvider('codexTerminal.history', historyViewProvider),
     historyViewProvider,
     historyWatcher,
-    historyWatcher.onDidCreate(() => historyViewProvider?.refresh()),
-    historyWatcher.onDidChange(() => historyViewProvider?.refresh()),
-    historyWatcher.onDidDelete(() => historyViewProvider?.refresh(true)),
+    // Debounced: an active turn appends to its rollout several times a second.
+    historyWatcher.onDidCreate(() => historyViewProvider?.scheduleRefresh()),
+    historyWatcher.onDidChange(() => historyViewProvider?.scheduleRefresh()),
+    historyWatcher.onDidDelete(() => historyViewProvider?.scheduleRefresh(true)),
   );
 
   createStatusBarItem(context, monitor);
