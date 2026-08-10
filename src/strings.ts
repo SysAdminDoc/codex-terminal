@@ -24,6 +24,8 @@ export const strings = {
     group: (): string => vscode.l10n.t('Running'),
     sessionCount: (count: number): string =>
       count === 1 ? vscode.l10n.t('1 session') : vscode.l10n.t('{0} sessions', count),
+    workingCount: (working: number, total: number): string =>
+      vscode.l10n.t('{0} of {1} working', working, total),
     tooltip: (): string => vscode.l10n.t('Live Codex terminal sessions'),
     accessibilityGroup: (count: number): string =>
       count === 1
@@ -32,12 +34,41 @@ export const strings = {
     unavailableCwd: (): string => vscode.l10n.t('working directory unavailable'),
     tooltipSession: (name: string, cwd: string): string => vscode.l10n.t('{0} — {1}', name, cwd),
     focusTitle: (): string => vscode.l10n.t('Focus Running Codex Session'),
-    accessibilitySession: (name: string, cwd: string): string =>
+    runningFor: (duration: string): string => vscode.l10n.t('Working for {0}', duration),
+    turns: (count: number): string =>
+      count === 1 ? vscode.l10n.t('1 turn completed') : vscode.l10n.t('{0} turns completed', count),
+    context: (tokens: string, percent: number): string =>
+      vscode.l10n.t('{0} tokens — {1}% of the context window', tokens, percent),
+    sessionId: (id: string): string => vscode.l10n.t('Session `{0}`', id),
+    notBound: (): string =>
+      vscode.l10n.t('Not yet matched to a Codex session; it will bind once Codex starts writing.'),
+    accessibilitySession: (name: string, status: string): string =>
+      vscode.l10n.t('{0}, {1}. Click to focus the terminal.', name, status),
+  },
+  recovery: {
+    group: (): string => vscode.l10n.t('Interrupted sessions'),
+    count: (count: number): string =>
+      count === 1 ? vscode.l10n.t('1 to restore') : vscode.l10n.t('{0} to restore', count),
+    tooltip: (): string =>
       vscode.l10n.t(
-        '{0}, working directory {1}. Click to focus; use the inline actions to focus or stop.',
-        name,
-        cwd,
+        'These Codex sessions were open when a window closed unexpectedly. Click one to resume it exactly where it stopped.',
       ),
+    interruptedAt: (timestamp: string): string =>
+      vscode.l10n.t('Last active {0}, then the window closed unexpectedly.', timestamp),
+    restore: (): string => vscode.l10n.t('Restore Session'),
+    restoreAll: (): string => vscode.l10n.t('Restore All'),
+    dismiss: (): string => vscode.l10n.t('Dismiss'),
+    review: (): string => vscode.l10n.t('Show Me'),
+    prompt: (count: number): string =>
+      count === 1
+        ? vscode.l10n.t('1 Codex session was interrupted when a window closed unexpectedly.')
+        : vscode.l10n.t(
+            '{0} Codex sessions were interrupted when a window closed unexpectedly.',
+            count,
+          ),
+    restored: (project: string): string => vscode.l10n.t('Restoring Codex session in {0}…', project),
+    accessibility: (project: string, timestamp: string): string =>
+      vscode.l10n.t('{0}, interrupted {1}. Click to restore the session.', project, timestamp),
   },
   notifications: {
     turnCompleted: (workspace: string): string =>
@@ -64,6 +95,44 @@ export const strings = {
     resumeLabel: (timestamp: string, id: string): string =>
       vscode.l10n.t('{0} — {1}', timestamp, id),
   },
+  history: {
+    empty: (): string => vscode.l10n.t('No Codex sessions recorded yet'),
+    noMatches: (filter: string): string => vscode.l10n.t('No sessions match “{0}”', filter),
+    noPrompt: (): string => vscode.l10n.t('(no prompt recorded)'),
+    sessionCount: (count: number): string =>
+      count === 1 ? vscode.l10n.t('1 session') : vscode.l10n.t('{0} sessions', count),
+    openTranscript: (): string => vscode.l10n.t('Open Transcript'),
+    resume: (): string => vscode.l10n.t('Resume Session'),
+    clickToResume: (): string =>
+      vscode.l10n.t('Click to resume this conversation in a terminal.'),
+    searchPrompt: (): string => vscode.l10n.t('Filter sessions by project, prompt or id'),
+    searchPlaceholder: (): string => vscode.l10n.t('e.g. codex-terminal'),
+    pickPrompt: (): string => vscode.l10n.t('Choose a Codex session'),
+    accessibility: (project: string, timestamp: string, preview: string): string =>
+      vscode.l10n.t(
+        '{0}, {1}. {2}. Click to open the transcript.',
+        project,
+        timestamp,
+        preview,
+      ),
+    copied: (id: string): string => vscode.l10n.t('Copied session id {0}', id),
+    exported: (entries: number): string =>
+      vscode.l10n.t('Exported {0} transcript entries.', entries),
+    exportTruncated: (): string =>
+      vscode.l10n.t('Transcript was truncated; open the rollout file for the remainder.'),
+    exportFailed: (message: string): string =>
+      vscode.l10n.t('Could not export the transcript: {0}', message),
+  },
+  workbench: {
+    applied: (key: string, from: string, to: string): string =>
+      vscode.l10n.t('Set {0} from {1} to {2}.', key, from, to),
+    reverted: (key: string, to: string): string => vscode.l10n.t('Restored {0} to {1}.', key, to),
+    nothingToRevert: (): string =>
+      vscode.l10n.t('Codex Terminal has not changed any workbench settings.'),
+    failed: (key: string, message: string): string =>
+      vscode.l10n.t('Could not update {0}: {1}', key, message),
+    unset: (): string => vscode.l10n.t('unset'),
+  },
   warnings: {
     noEditor: (): string => vscode.l10n.t('Codex Terminal: no active editor to reference.'),
     noTerminal: (): string =>
@@ -74,6 +143,14 @@ export const strings = {
     tooltip: (): string => vscode.l10n.t('Open Codex CLI in a terminal'),
     accessibility: (): string =>
       vscode.l10n.t('Codex Terminal: Open Codex CLI in a terminal'),
+    workingTooltip: (working: number, total: number): string =>
+      vscode.l10n.t('Codex is working in {0} of {1} open sessions. Click to focus.', working, total),
+    liveTooltip: (total: number): string =>
+      total === 1
+        ? vscode.l10n.t('1 idle Codex session. Click to focus.')
+        : vscode.l10n.t('{0} idle Codex sessions. Click to focus.', total),
+    accessibilityWorking: (working: number): string =>
+      vscode.l10n.t('Codex Terminal: working in {0} sessions', working),
   },
   errors: {
     missingCommand: (command: string): string =>

@@ -85,3 +85,35 @@ Initial release.
 [0.3.0]: https://github.com/SysAdminDoc/codex-terminal/releases/tag/v0.3.0
 [0.2.0]: https://github.com/SysAdminDoc/codex-terminal/releases/tag/v0.2.0
 [0.1.0]: https://github.com/SysAdminDoc/codex-terminal/releases/tag/v0.1.0
+
+## Roadmap archive — 2026-08-10 — ROADMAP.md
+
+<details>
+<summary>Original roadmap snapshot</summary>
+
+```markdown
+# Roadmap — Codex Terminal
+
+Open work only. Item ids are `CT-<n>`, assigned sequentially and never reused.
+
+## Research-Driven Additions
+
+### P0
+
+### P1
+
+### P2
+
+### P3
+
+### Consciously excluded
+
+Mobile (desktop editor extension only), offline resilience (the extension performs no network
+I/O — CT-07 asserts this rather than adding work), and multi-user/collaboration (no shared
+state exists). A plugin ecosystem for the extension itself is excluded: Codex already has one at
+the CLI layer (plugins bundling skills and MCP servers, launched 2026-03-26), so an extension-level
+plugin API would duplicate it one abstraction too high. Distribution CI is excluded by the
+repository's own no-CI-artifacts rule; builds stay local.
+```
+
+</details>

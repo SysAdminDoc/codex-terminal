@@ -24,6 +24,7 @@ pins the shell and hands Codex to it as an argument instead.
 | Shell history | Clean | `codex` is left in it |
 | Terminal `+` dropdown | Contributes a native **Codex** profile | — |
 | Session control | New / Resume last / Resume picker / Fork last | New only |
+| Tab identity | Project name plus Codex's live activity title | Usually just `node` or `pwsh` |
 | Codex exits | `-NoExit` leaves a live prompt so you can read the error | Tab disappears |
 
 ## Screenshots
@@ -53,6 +54,18 @@ The real Codex TUI, started in the workspace folder:
 - **Editor title bar** — the ✨ button. Needs a focused text editor, so it is absent on an
   empty workspace (`"workbench.startupEditor": "none"`).
 - **Terminal `+` dropdown** — pick **Codex**.
+- **Terminal tabs** — each launch starts in its resolved working directory and passes Codex a
+  native terminal-title configuration. The default title contains the project name and Codex's
+  live activity indicator; the activity indicator changes while a turn is running. Open the
+  repository as a workspace, or configure `codexTerminal.cwd`, so the working directory is the
+  project you want shown. A path pasted only into the chat prompt is not visible to VS Code's
+  terminal API and cannot rename an already-created tab.
+- **Closing a tab** — the extension enforces `terminal.integrated.confirmOnKill: "never"`, so
+  closing a Codex tab immediately terminates its running processes.
+- **History** — the **History** view in the Codex Terminal activity-bar container reads Codex's
+  local `.jsonl` rollouts, groups them by project, and keeps the first real prompt as a preview.
+  Click a session to open a readable Markdown transcript; the inline actions resume it, copy its
+  id, or open the raw rollout. New and changed rollouts refresh the view automatically.
 - **Command Palette** — `Codex Terminal: New Session`, `Resume Last Session`,
   `Resume Session (picker)`, `Fork Last Session`, `Focus Codex Terminal`,
   `New Session with Profile…`, `Send File Reference to Codex`, `Doctor`, `Show Log`.
@@ -85,6 +98,8 @@ The real Codex TUI, started in the workspace folder:
 | `codexTerminal.showStatusBarButton` | `true` | The old `showStatusBarItem` key is migrated once per extension version. |
 | `codexTerminal.showEditorTitleButton` | `true` | |
 | `codexTerminal.notifyOnCompletion` | `false` | Opt in to turn-completion notifications without modifying `~/.codex/config.toml`. |
+| `codexTerminal.titleItems` | `["activity", "project-name"]` | Codex title items. The default provides the live activity indicator and project name. |
+| `codexTerminal.history.maxSessions` | `200` | Maximum recent sessions shown in the History view. |
 
 ### `editorDefault` is the one racy mode
 
@@ -160,7 +175,8 @@ npm run l10n:export # refresh the default English localization bundle
 npm run package   # -> dist/codex-terminal-0.3.0.vsix
 ```
 
-`npm run check` runs 38 unit tests over shell quoting, command resolution, and diagnostics. Run
+`npm run check` runs the headless unit suite over shell quoting, command resolution, session
+history, and diagnostics. Run
 `npm run test:integration` separately to boot the hostile-settings VS Code host suite.
 
 ## Unaffiliated

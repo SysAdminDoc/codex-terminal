@@ -1,5 +1,6 @@
-import * as os from 'node:os';
 import * as path from 'node:path';
+
+import { codexHomeDirectory } from './sessions';
 
 /** Return profile names represented by `<name>.config.toml` files. */
 export function profileNamesFromFiles(fileNames: readonly string[]): string[] {
@@ -10,6 +11,9 @@ export function profileNamesFromFiles(fileNames: readonly string[]): string[] {
     .sort((left, right) => left.localeCompare(right));
 }
 
-export function codexProfilesDirectory(homeDirectory: string = os.homedir()): string {
+export function codexProfilesDirectory(homeDirectory?: string): string {
+  if (!homeDirectory) {
+    return codexHomeDirectory();
+  }
   return path.join(homeDirectory, '.codex');
 }

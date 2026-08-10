@@ -4,12 +4,12 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import { test } from 'node:test';
 
-import { discoverSessions } from '../sessions';
+import { codexHomeDirectory, discoverSessions, groupSessionsByProject } from '../sessions';
 
 test('session discovery reads metadata headers, sorts newest first, and skips malformed files', async () => {
   const home = await mkdtemp(path.join(os.tmpdir(), 'codex-terminal-sessions-'));
   try {
-    const directory = path.join(home, '.codex', 'sessions', '2026', '08', '09');
+    const directory = path.join(home, 'sessions', '2026', '08', '09');
     await mkdir(directory, { recursive: true });
     await writeFile(
       path.join(directory, 'old.jsonl'),
@@ -42,7 +42,7 @@ test('session discovery reads metadata headers, sorts newest first, and skips ma
 test('session discovery respects the result limit', async () => {
   const home = await mkdtemp(path.join(os.tmpdir(), 'codex-terminal-sessions-'));
   try {
-    const directory = path.join(home, '.codex', 'sessions');
+    const directory = path.join(home, 'sessions');
     await mkdir(directory, { recursive: true });
     for (const [index, hour] of [12, 11, 10].entries()) {
       await writeFile(
@@ -59,6 +59,53 @@ test('session discovery respects the result limit', async () => {
     }
     const sessions = await discoverSessions({ homeDirectory: home, maxResults: 2 });
     assert.deepEqual(sessions.map((session) => session.id), ['0', '1']);
+  } finally {
+    await rm(home, { recursive: true, force: true });
+  }
+});
+
+test('session discovery extracts the first real prompt and groups by project', async () => {
+  const home = await mkdtemp(path.join(os.tmpdir(), 'codex-terminal-sessions-'));
+  try {
+    const directory = path.join(home, 'sessions', '2026', '08', '09');
+    await mkdir(directory, { recursive: true });
+    await writeFile(
+      path.join(directory, 'conversation.jsonl'),
+      [
+        JSON.stringify({
+          type: 'session_meta',
+          payload: {
+            id: 'conversation',
+            timestamp: '2026-08-09T12:00:00.000Z',
+            cwd: 'C:\\Users\\--\\repos\\codex-terminal',
+          },
+        }),
+        JSON.stringify({
+          type: 'response_item',
+          payload: {
+            type: 'message',
+            role: 'user',
+            content: [{ type: 'input_text', text: '<environment_context>injected</environment_context>' }],
+          },
+        }),
+        JSON.stringify({
+          type: 'response_item',
+          payload: {
+            type: 'message',
+            role: 'user',
+            content: [{ type: 'input_text', text: 'Add the history sidebar' }],
+          },
+        }),
+      ].join('\n'),
+    );
+    const sessions = await discoverSessions({ homeDirectory: home });
+    assert.equal(sessions[0]?.preview, 'Add the history sidebar');
+    assert.deepEqual(groupSessionsByProject(sessions).map((group) => group.project), [
+      'codex-terminal',
+    ]);
+    assert.equal(codexHomeDirectory(home), home);
+    assert.equal(codexHomeDirectory(undefined, 'C:\\codex-state'), 'C:\\codex-state');
+    assert.equal(codexHomeDirectory(undefined, undefined), path.join(os.homedir(), '.codex'));
   } finally {
     await rm(home, { recursive: true, force: true });
   }

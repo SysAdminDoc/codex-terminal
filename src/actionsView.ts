@@ -1,16 +1,18 @@
 import * as vscode from 'vscode';
 
-import { TerminalRegistry, type TrackedTerminal } from './terminals';
+import { contextUsed, elapsedSeconds } from './activity';
+import type { LiveSession, SessionMonitor } from './monitor';
+import { describeActivity, formatDuration, formatTokens, presentStatus } from './present';
 import { strings } from './strings';
 
 /**
- * Activity bar entry listing the launch actions.
+ * Activity bar entry listing the launch actions and every live session.
  *
  * The status bar item cannot be relied on: `workbench.statusBar.visible: false` is a
  * perfectly ordinary setting and hides every extension's status bar contribution with no
  * error anywhere. The editor title button needs a focused text editor, which a workspace
  * opened with `workbench.startupEditor: none` does not have. The activity bar is the only
- * surface that is present regardless.
+ * surface that is present regardless — which is also why the live spinner lives here.
  */
 
 export interface Action {
@@ -26,7 +28,7 @@ interface RunningGroup {
 
 interface RunningSession {
   kind: 'running-session';
-  tracked: TrackedTerminal;
+  session: LiveSession;
 }
 
 type ActionNode = Action | RunningGroup | RunningSession;
@@ -84,11 +86,18 @@ class ActionItem extends vscode.TreeItem {
 }
 
 class RunningGroupItem extends vscode.TreeItem {
-  constructor(count: number) {
+  constructor(count: number, working: number) {
     super(strings.running.group(), vscode.TreeItemCollapsibleState.Expanded);
-    this.description = strings.running.sessionCount(count);
+    this.description =
+      working > 0
+        ? strings.running.workingCount(working, count)
+        : strings.running.sessionCount(count);
     this.tooltip = strings.running.tooltip();
-    this.iconPath = new vscode.ThemeIcon('pulse');
+    this.iconPath = new vscode.ThemeIcon(working > 0 ? presentStatus({
+      status: 'working',
+      ordinal: 0,
+      completedTurns: 0,
+    }).icon : 'pulse');
     this.accessibilityInformation = {
       label: strings.running.accessibilityGroup(count),
       role: 'treeitem',
@@ -97,58 +106,103 @@ class RunningGroupItem extends vscode.TreeItem {
 }
 
 class RunningSessionItem extends vscode.TreeItem {
-  constructor(readonly session: RunningSession) {
-    super(session.tracked.terminal.name, vscode.TreeItemCollapsibleState.None);
-    const cwd = session.tracked.cwd ?? strings.running.unavailableCwd();
-    this.description = cwd;
-    this.tooltip = strings.running.tooltipSession(session.tracked.terminal.name, cwd);
-    this.iconPath = new vscode.ThemeIcon('terminal');
-    this.contextValue = 'codexTerminal.runningSession';
+  constructor(node: RunningSession, now: number) {
+    const { session } = node;
+    super(session.project || session.label, vscode.TreeItemCollapsibleState.None);
+    const presentation = presentStatus(session.activity);
+    this.description = describeActivity(session.activity, now);
+    this.iconPath = new vscode.ThemeIcon(
+      presentation.icon,
+      presentation.color ? new vscode.ThemeColor(presentation.color) : undefined,
+    );
+    this.contextValue = session.sessionId
+      ? 'codexTerminal.runningSession.bound'
+      : 'codexTerminal.runningSession';
+    this.tooltip = buildTooltip(session, now);
     this.command = {
       command: 'codexTerminal.focusSession',
       title: strings.running.focusTitle(),
-      arguments: [session.tracked.terminal],
+      arguments: [session.terminal],
     };
     this.accessibilityInformation = {
-      label: strings.running.accessibilitySession(session.tracked.terminal.name, cwd),
+      label: strings.running.accessibilitySession(
+        session.project || session.label,
+        this.description,
+      ),
       role: 'button',
     };
   }
 }
 
+function buildTooltip(session: LiveSession, now: number): vscode.MarkdownString {
+  const presentation = presentStatus(session.activity);
+  const lines = [
+    `**${session.project || session.label}** — ${presentation.label}`,
+    '',
+    `- \`${session.cwd}\``,
+  ];
+  const elapsed = elapsedSeconds(session.activity, now);
+  if (elapsed !== undefined) {
+    lines.push(`- ${strings.running.runningFor(formatDuration(elapsed))}`);
+  }
+  if (session.activity.completedTurns > 0) {
+    lines.push(`- ${strings.running.turns(session.activity.completedTurns)}`);
+  }
+  const used = contextUsed(session.activity);
+  if (used !== undefined && session.activity.totalTokens) {
+    lines.push(
+      `- ${strings.running.context(
+        formatTokens(session.activity.totalTokens),
+        Math.round(used * 100),
+      )}`,
+    );
+  }
+  lines.push(
+    session.sessionId
+      ? `- ${strings.running.sessionId(session.sessionId)}`
+      : `- _${strings.running.notBound()}_`,
+  );
+  if (session.activity.lastMessage) {
+    lines.push('', `> ${session.activity.lastMessage.replace(/\s+/g, ' ').slice(0, 300)}`);
+  }
+  return new vscode.MarkdownString(lines.join('\n'));
+}
+
 export class ActionsViewProvider implements vscode.TreeDataProvider<ActionNode>, vscode.Disposable {
   private readonly changes = new vscode.EventEmitter<ActionNode | undefined | null | void>();
-  private readonly registrySubscription: vscode.Disposable;
+  private readonly monitorSubscription: vscode.Disposable;
 
   readonly onDidChangeTreeData = this.changes.event;
 
-  constructor(private readonly registry: TerminalRegistry) {
-    this.registrySubscription = registry.onDidChange(() => this.changes.fire());
+  constructor(private readonly monitor: SessionMonitor) {
+    this.monitorSubscription = monitor.onDidChange(() => this.changes.fire());
   }
 
   getTreeItem(node: ActionNode): vscode.TreeItem {
     if ('kind' in node && node.kind === 'running-group') {
-      return new RunningGroupItem(this.registry.live().length);
+      return new RunningGroupItem(this.monitor.live().length, this.monitor.workingCount());
     }
     if ('kind' in node && node.kind === 'running-session') {
-      return new RunningSessionItem(node);
+      return new RunningSessionItem(node, Date.now());
     }
     return new ActionItem(node);
   }
 
   getChildren(element?: ActionNode): ActionNode[] {
     if (!element) {
-      const live = this.registry.live();
+      const live = this.monitor.live();
       return live.length > 0 ? [...ACTIONS, RUNNING_GROUP] : [...ACTIONS];
     }
     if ('kind' in element && element.kind === 'running-group') {
-      return this.registry.live().map((tracked) => ({ kind: 'running-session', tracked }));
+      return this.monitor
+        .live()
+        .map((session) => ({ kind: 'running-session' as const, session }));
     }
     return [];
   }
 
   dispose(): void {
-    this.registrySubscription.dispose();
+    this.monitorSubscription.dispose();
     this.changes.dispose();
   }
 }

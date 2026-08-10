@@ -17,9 +17,36 @@ import { TerminalRegistry } from './terminals';
 import { collectDoctorReport } from './doctor';
 import { codexProfilesDirectory, profileNamesFromFiles } from './profiles';
 import { NotifyBridge } from './notify';
-import { discoverSessions, type SessionRecord } from './sessions';
+import { SessionMonitor } from './monitor';
+import { JournalStore, interruptedSessions, type JournalSession } from './journal';
+import { statusBarText } from './present';
+import {
+  codexHomeDirectory,
+  codexSessionsDirectory,
+  discoverSessions,
+  exportTranscript,
+  sessionProject,
+  type SessionRecord,
+} from './sessions';
 import { strings } from './strings';
 import { migrateSettings, type MigrationTarget } from './migrate';
+import {
+  DEFAULT_TERMINAL_NAME_TEMPLATE,
+  DEFAULT_TITLE_ITEMS,
+  OWNERSHIP_ENV_VAR,
+  projectName,
+  renderTerminalName,
+  type TabTitleMode,
+} from './naming';
+import {
+  AGENT_CLI_TITLE_SETTING,
+  CONFIRM_ON_KILL_SETTING,
+  planAgentCliTitle,
+  planConfirmOnKill,
+  planTabDescription,
+  titleItemsArgs,
+} from './workbench';
+import { HistoryViewProvider, isRecoveryNode, isSessionNode } from './historyView';
 
 const PWSH_PROBE = [
   'C:\\Program Files\\PowerShell\\7\\pwsh.exe',
@@ -32,14 +59,29 @@ let log: vscode.LogOutputChannel;
 let terminalRegistry: TerminalRegistry | undefined;
 let extensionContext: vscode.ExtensionContext | undefined;
 let notifyBridge: NotifyBridge | undefined;
+let historyViewProvider: HistoryViewProvider | undefined;
+let sessionMonitor: SessionMonitor | undefined;
 
 export interface CodexTerminalExtensionApi {
   getActionCount: () => number;
   getTerminalProfileOptions: () => Promise<vscode.TerminalOptions | undefined>;
 }
 
+/**
+ * `titleTemplate` is not in the stable `TerminalOptions` typings, but the extension host
+ * forwards it verbatim to the terminal service, which is what lets a single tab use a
+ * live title without changing `terminal.integrated.tabs.title` for every other terminal
+ * in the window. An older host simply ignores the field, which is why the `${sequence}`
+ * tab description is still applied as the fallback.
+ */
+type TerminalOptionsWithTitle = vscode.TerminalOptions & { titleTemplate?: string };
+
 function config(): vscode.WorkspaceConfiguration {
   return vscode.workspace.getConfiguration('codexTerminal');
+}
+
+function tabTitleMode(): TabTitleMode {
+  return config().get<TabTitleMode>('tabTitle', 'live') === 'static' ? 'static' : 'live';
 }
 
 async function syncNotifyBridge(): Promise<void> {
@@ -60,6 +102,7 @@ async function syncNotifyBridge(): Promise<void> {
     executable: process.execPath,
     workspaceName,
     onTurnEnded: (event) => {
+      historyViewProvider?.refresh();
       void vscode.window.showInformationMessage(strings.notifications.turnCompleted(event.workspace));
     },
   });
@@ -76,6 +119,7 @@ async function syncNotifyBridge(): Promise<void> {
 
 function readLaunchRequest(mode: LaunchMode, profile?: string, sessionId?: string): LaunchRequest {
   const cfg = config();
+  const titleItems = cfg.get<string[]>('titleItems', [...DEFAULT_TITLE_ITEMS]);
   return {
     shell: cfg.get<ShellKind>('shell', 'auto'),
     customShellPath: cfg.get<string>('customShellPath', ''),
@@ -85,6 +129,9 @@ function readLaunchRequest(mode: LaunchMode, profile?: string, sessionId?: strin
       ...(sessionId ? [sessionId] : []),
       ...(profile ? profileArgs(profile) : []),
       ...cfg.get<string[]>('args', []),
+      // Codex writes this title through OSC sequences. The activity item is a live
+      // spinner while it is working and the project item is derived from the repo root.
+      ...titleItemsArgs(titleItems),
       ...(notifyBridge?.launchArgs() ?? []),
     ],
     keepShellOpen: cfg.get<boolean>('keepShellOpen', true),
@@ -137,26 +184,53 @@ function iconColor(): vscode.ThemeColor | undefined {
   return id ? new vscode.ThemeColor(id) : undefined;
 }
 
+interface LaunchOptions {
+  mode: LaunchMode;
+  profile?: string;
+  sessionId?: string;
+  /** Overrides the resolved workspace cwd, so a saved chat resumes where it was written. */
+  cwd?: string;
+}
+
 /** Shared between the commands and the contributed terminal profile. */
 async function terminalOptions(
-  mode: LaunchMode,
+  request: LaunchOptions,
   withLocation: boolean,
-  profile?: string,
-  sessionId?: string,
-): Promise<{ options: vscode.TerminalOptions; plan: ReturnType<typeof buildLaunchPlan> }> {
+): Promise<{
+  options: TerminalOptionsWithTitle;
+  plan: ReturnType<typeof buildLaunchPlan>;
+  cwd?: string;
+  project: string;
+  label: string;
+}> {
+  const { mode, profile, sessionId } = request;
   const plan = buildLaunchPlan(readLaunchRequest(mode, profile, sessionId));
   const cfg = config();
   const baseName = cfg.get<string>('terminalName', 'Codex');
-  const options: vscode.TerminalOptions = {
-    name: [baseName, profile, sessionId ? `resume ${sessionId.slice(0, 8)}` : undefined]
-      .filter(Boolean)
-      .join(' — '),
-    cwd: await resolveCwd(),
-    env: cfg.get<Record<string, string>>('env', {}),
+  const cwd = request.cwd ?? (await resolveCwd());
+  const workspaceFolder = cwd
+    ? vscode.workspace.getWorkspaceFolder(vscode.Uri.file(cwd))?.name
+    : undefined;
+  const nameContext = { name: baseName, cwd, workspaceFolder, mode, profile, sessionId };
+  const label = renderTerminalName(DEFAULT_TERMINAL_NAME_TEMPLATE, nameContext);
+
+  const options: TerminalOptionsWithTitle = {
+    cwd,
+    env: { ...cfg.get<Record<string, string>>('env', {}), [OWNERSHIP_ENV_VAR]: '1' },
     iconPath: new vscode.ThemeIcon('sparkle'),
     color: iconColor(),
     isTransient: false,
   };
+
+  if (tabTitleMode() === 'static') {
+    options.name = label;
+  } else {
+    // Naming a terminal stops the workbench from ever subscribing to the process title,
+    // which is exactly what Codex uses to animate. The template keeps the live title
+    // scoped to this tab instead of every terminal in the window.
+    options.titleTemplate = '${sequence}';
+  }
+
   if (withLocation) {
     options.location = resolveLocation();
   }
@@ -176,7 +250,7 @@ async function terminalOptions(
   if (plan.shellResolutionReason) {
     log.info(strings.logs.shellResolution(plan.shellResolutionReason));
   }
-  return { options, plan };
+  return { options, plan, cwd, project: projectName(nameContext), label };
 }
 
 function preflightCodexCommand(command: string): string | undefined {
@@ -205,13 +279,18 @@ function preflightCodexCommand(command: string): string | undefined {
 }
 
 function liveOwnedTerminal(): vscode.Terminal | undefined {
-  return terminalRegistry?.mostRecentLive()?.terminal;
+  const live = sessionMonitor?.live() ?? [];
+  return live.length > 0 ? live[live.length - 1].terminal : undefined;
 }
 
-async function launch(mode: LaunchMode, profile?: string, sessionId?: string): Promise<void> {
+async function launch(request: LaunchOptions): Promise<void> {
   try {
     await syncNotifyBridge();
-    if (mode === 'new' && !profile && config().get<boolean>('reuseTerminal', false)) {
+    if (
+      request.mode === 'new' &&
+      !request.profile &&
+      config().get<boolean>('reuseTerminal', false)
+    ) {
       const existing = liveOwnedTerminal();
       if (existing) {
         existing.show(false);
@@ -219,17 +298,23 @@ async function launch(mode: LaunchMode, profile?: string, sessionId?: string): P
       }
     }
 
-    const request = readLaunchRequest(mode, profile, sessionId);
-    if (!preflightCodexCommand(request.command)) {
+    const launchRequest = readLaunchRequest(request.mode, request.profile, request.sessionId);
+    if (!preflightCodexCommand(launchRequest.command)) {
       return;
     }
 
-    const { options, plan } = await terminalOptions(mode, true, profile, sessionId);
+    const { options, plan, cwd, project, label } = await terminalOptions(request, true);
     const terminal = vscode.window.createTerminal(options);
-    terminalRegistry?.track(
-      terminal,
-      typeof options.cwd === 'string' ? options.cwd : options.cwd?.fsPath,
-    );
+    if (cwd) {
+      sessionMonitor?.track(terminal, {
+        cwd,
+        project,
+        label,
+        mode: request.mode,
+        profile: request.profile,
+        sessionId: request.sessionId,
+      });
+    }
     terminal.show(false);
 
     if (plan.sendTextFallback) {
@@ -283,23 +368,23 @@ async function launchWithProfile(): Promise<void> {
   if (!profile?.trim()) {
     return;
   }
-  launch('new', profile.trim());
+  void launch({ mode: 'new', profile: profile.trim() });
 }
 
 async function resumeFromSessionPicker(): Promise<void> {
-  const sessions = await discoverSessions();
+  const sessions = await discoverSessions({ homeDirectory: codexHomeDirectory() });
   if (sessions.length === 0) {
-    launch('resumePicker');
+    void launch({ mode: 'resumePicker' });
     return;
   }
 
   const items = sessions.map((session: SessionRecord) => ({
-    label: strings.sessions.resumeLabel(
+    label: session.preview || strings.history.noPrompt(),
+    description: sessionProject(session),
+    detail: strings.sessions.resumeLabel(
       new Date(session.timestamp).toLocaleString(),
       session.id.slice(0, 8),
     ),
-    description: session.cwd,
-    detail: session.timestamp,
     session,
   }));
   const selected = await vscode.window.showQuickPick(items, {
@@ -309,7 +394,11 @@ async function resumeFromSessionPicker(): Promise<void> {
     ignoreFocusOut: true,
   });
   if (selected) {
-    launch('resumePicker', undefined, selected.session.id);
+    void launch({
+      mode: 'resumePicker',
+      sessionId: selected.session.id,
+      cwd: selected.session.cwd || undefined,
+    });
   }
 }
 
@@ -391,32 +480,244 @@ function stopSession(terminal: vscode.Terminal | undefined): void {
   terminal?.dispose();
 }
 
-function createStatusBarItem(context: vscode.ExtensionContext): void {
+function settingText(value: unknown): string {
+  return value === undefined ? strings.workbench.unset() : JSON.stringify(value);
+}
+
+/**
+ * The terminal API has no per-terminal close-confirmation switch. These settings are the
+ * editor's supported controls for the requested behaviour and for Codex's live OSC title:
+ * `${sequence}` in the tab description is what surfaces that title on hosts that ignore
+ * the per-terminal template, and it is the reason a working tab shows Codex's spinner.
+ */
+async function applyWorkbenchPreferences(): Promise<void> {
+  const root = vscode.workspace.getConfiguration();
+  const changes: Array<{ key: string; value: unknown }> = [];
+  const confirmOnKill = planConfirmOnKill(root.get<string>(CONFIRM_ON_KILL_SETTING, 'editor'));
+  if (confirmOnKill) {
+    changes.push({ key: confirmOnKill.key, value: confirmOnKill.to });
+  }
+  const agentCliTitle = planAgentCliTitle(
+    root.get<boolean>(AGENT_CLI_TITLE_SETTING, true),
+  );
+  if (agentCliTitle) {
+    changes.push({ key: agentCliTitle.key, value: agentCliTitle.to });
+  }
+  if (tabTitleMode() === 'live') {
+    const description = planTabDescription(
+      root.get<string>('terminal.integrated.tabs.description'),
+    );
+    if (description) {
+      changes.push({ key: description.key, value: description.to });
+    }
+  }
+
+  for (const change of changes) {
+    const before = root.get<unknown>(change.key);
+    try {
+      await root.update(change.key, change.value, vscode.ConfigurationTarget.Global);
+      log.info(strings.workbench.applied(change.key, settingText(before), settingText(change.value)));
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      log.warn(strings.workbench.failed(change.key, message));
+    }
+  }
+}
+
+async function openTranscript(node: unknown): Promise<void> {
+  if (!isSessionNode(node)) {
+    return;
+  }
+  try {
+    const result = await exportTranscript(node.session.filePath, node.project);
+    const document = await vscode.workspace.openTextDocument({
+      language: 'markdown',
+      content: result.markdown,
+    });
+    await vscode.window.showTextDocument(document, { preview: true });
+    if (result.truncated) {
+      void vscode.window.showWarningMessage(strings.history.exportTruncated());
+    } else {
+      log.info(strings.history.exported(result.entryCount));
+    }
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    log.error(strings.history.exportFailed(message));
+    void vscode.window.showErrorMessage(strings.history.exportFailed(message));
+  }
+}
+
+/** Resume in the directory the conversation was written in, not the current workspace. */
+function resumeHistorySession(node: unknown): void {
+  if (isSessionNode(node)) {
+    void launch({
+      mode: 'resumePicker',
+      sessionId: node.session.id,
+      cwd: node.session.cwd || undefined,
+    });
+  }
+}
+
+function restoreJournalSession(session: JournalSession): void {
+  if (!session.sessionId) {
+    return;
+  }
+  void vscode.window.showInformationMessage(
+    strings.recovery.restored(session.project || session.label),
+  );
+  historyViewProvider?.clearRecoverable(session.sessionId);
+  void launch({
+    mode: 'resumePicker',
+    sessionId: session.sessionId,
+    cwd: session.cwd || undefined,
+  });
+}
+
+function restoreSession(node: unknown): void {
+  if (isRecoveryNode(node)) {
+    restoreJournalSession(node.session);
+  }
+}
+
+function restoreAllSessions(): void {
+  for (const session of [...(historyViewProvider?.getRecoverable() ?? [])]) {
+    restoreJournalSession(session);
+  }
+}
+
+function dismissRecovery(): void {
+  historyViewProvider?.clearRecoverable();
+}
+
+async function copyHistorySessionId(node: unknown): Promise<void> {
+  if (!isSessionNode(node)) {
+    return;
+  }
+  await vscode.env.clipboard.writeText(node.session.id);
+  void vscode.window.showInformationMessage(strings.history.copied(node.session.id));
+}
+
+async function openRawHistorySession(node: unknown): Promise<void> {
+  if (!isSessionNode(node)) {
+    return;
+  }
+  const document = await vscode.workspace.openTextDocument(vscode.Uri.file(node.session.filePath));
+  await vscode.window.showTextDocument(document, { preview: false });
+}
+
+async function searchHistory(): Promise<void> {
+  if (!historyViewProvider) {
+    return;
+  }
+  const value = await vscode.window.showInputBox({
+    prompt: strings.history.searchPrompt(),
+    placeHolder: strings.history.searchPlaceholder(),
+    value: historyViewProvider.getFilter(),
+    ignoreFocusOut: true,
+  });
+  if (value !== undefined) {
+    historyViewProvider.setFilter(value);
+  }
+}
+
+/**
+ * Status bar item, driven by live session state.
+ *
+ * `$(loading~spin)` is the workbench's animated-codicon syntax: the `~spin` modifier
+ * becomes `codicon-modifier-spin` and the animation is CSS, so this costs one label
+ * update per state change rather than a timer.
+ */
+function createStatusBarItem(context: vscode.ExtensionContext, monitor: SessionMonitor): void {
   const item = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 100);
-  item.command = 'codexTerminal.new';
-  item.text = strings.status.text();
-  item.tooltip = strings.status.tooltip();
-  item.accessibilityInformation = {
-    label: strings.status.accessibility(),
-    role: 'button',
-  };
+  item.command = 'codexTerminal.focus';
   context.subscriptions.push(item);
 
-  const sync = (): void => {
+  const render = (): void => {
+    const live = monitor.live().length;
+    const working = monitor.workingCount();
+    item.text = statusBarText(working, live);
+    item.tooltip =
+      working > 0
+        ? strings.status.workingTooltip(working, live)
+        : live > 0
+          ? strings.status.liveTooltip(live)
+          : strings.status.tooltip();
+    item.accessibilityInformation = {
+      label:
+        working > 0
+          ? strings.status.accessibilityWorking(working)
+          : strings.status.accessibility(),
+      role: 'button',
+    };
     if (config().get<boolean>('showStatusBarButton', true)) {
       item.show();
     } else {
       item.hide();
     }
   };
-  sync();
+
+  render();
   context.subscriptions.push(
+    monitor.onDidChange(render),
     vscode.workspace.onDidChangeConfiguration((event) => {
       if (event.affectsConfiguration('codexTerminal.showStatusBarButton')) {
-        sync();
+        render();
       }
     }),
   );
+}
+
+/**
+ * Offer back the sessions a window was holding when it died.
+ *
+ * Presented once: the crashed journals are stamped as handled straight after, so opening
+ * a second window does not raise the same prompt again. The sidebar group stays until it
+ * is used or dismissed.
+ */
+async function offerRecovery(store: JournalStore, windowId: string): Promise<void> {
+  try {
+    const journals = await store.readAll();
+    const now = Date.now();
+    const active = sessionMonitor?.activeSessionIds() ?? new Set<string>();
+    const candidates = interruptedSessions(journals, now, windowId).filter(
+      (session) => session.sessionId && !active.has(session.sessionId),
+    );
+    if (candidates.length === 0) {
+      return;
+    }
+
+    const handled = journals
+      .filter((journal) =>
+        candidates.some((candidate) =>
+          journal.sessions.some((session) => session.key === candidate.key),
+        ),
+      )
+      .map((journal) => journal.windowId);
+
+    historyViewProvider?.setRecoverable(candidates);
+    log.info(`found ${candidates.length} interrupted Codex session(s) from a previous window`);
+    await store.markHandled(handled);
+
+    const choice = await vscode.window.showWarningMessage(
+      strings.recovery.prompt(candidates.length),
+      strings.recovery.restoreAll(),
+      strings.recovery.review(),
+      strings.recovery.dismiss(),
+    );
+    if (choice === strings.recovery.restoreAll()) {
+      restoreAllSessions();
+    } else if (choice === strings.recovery.review()) {
+      await vscode.commands.executeCommand('codexTerminal.history.focus');
+    } else if (choice === strings.recovery.dismiss()) {
+      dismissRecovery();
+    }
+  } catch (error) {
+    log.warn(
+      `could not check for interrupted sessions: ${
+        error instanceof Error ? error.message : String(error)
+      }`,
+    );
+  }
 }
 
 async function runSettingsMigrations(context: vscode.ExtensionContext): Promise<void> {
@@ -460,6 +761,23 @@ export async function activate(context: vscode.ExtensionContext): Promise<CodexT
     const message = error instanceof Error ? error.message : String(error);
     log.error(strings.migration.failed(message));
   }
+  await applyWorkbenchPreferences();
+
+  const windowId = vscode.env.sessionId;
+  const store = new JournalStore(
+    path.join(context.globalStorageUri.fsPath, 'sessions'),
+    windowId,
+  );
+  const monitor = new SessionMonitor({
+    store,
+    windowId,
+    workspaceName: vscode.workspace.name,
+    codexHome: () => codexHomeDirectory(),
+    log,
+  });
+  sessionMonitor = monitor;
+  context.subscriptions.push(monitor);
+
   terminalRegistry = new TerminalRegistry();
   const adopted = terminalRegistry.adopt(
     vscode.window.terminals,
@@ -467,18 +785,30 @@ export async function activate(context: vscode.ExtensionContext): Promise<CodexT
   );
   if (adopted > 0) {
     log.info(strings.logs.adopted(adopted));
+    // Survivors of a reload can be shown and focused, but their rollout cannot be
+    // inferred after the fact: the launch instant that makes the match unambiguous is
+    // exactly what the reload destroyed.
+    for (const tracked of terminalRegistry.live()) {
+      monitor.track(tracked.terminal, {
+        cwd: tracked.cwd ?? '',
+        project: tracked.cwd ? path.basename(tracked.cwd) : tracked.terminal.name,
+        label: tracked.terminal.name,
+        mode: 'adopted',
+        bindable: false,
+      });
+    }
   }
 
   const commands: Array<[string, () => void]> = [
-    ['codexTerminal.new', () => launch('new')],
-    ['codexTerminal.resumeLast', () => launch('resumeLast')],
+    ['codexTerminal.new', () => void launch({ mode: 'new' })],
+    ['codexTerminal.resumeLast', () => void launch({ mode: 'resumeLast' })],
     [
       'codexTerminal.resumePicker',
       () => {
         void resumeFromSessionPicker();
       },
     ],
-    ['codexTerminal.forkLast', () => launch('forkLast')],
+    ['codexTerminal.forkLast', () => void launch({ mode: 'forkLast' })],
     [
       'codexTerminal.newWithProfile',
       () => {
@@ -493,6 +823,15 @@ export async function activate(context: vscode.ExtensionContext): Promise<CodexT
       },
     ],
     ['codexTerminal.showLog', () => log.show(true)],
+    ['codexTerminal.refreshHistory', () => historyViewProvider?.refresh(true)],
+    [
+      'codexTerminal.searchHistory',
+      () => {
+        void searchHistory();
+      },
+    ],
+    ['codexTerminal.restoreAllSessions', restoreAllSessions],
+    ['codexTerminal.dismissRecovery', dismissRecovery],
     [
       'codexTerminal.focus',
       () => {
@@ -500,7 +839,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<CodexT
         if (terminal) {
           terminal.show(false);
         } else {
-          launch('new');
+          void launch({ mode: 'new' });
         }
       },
     ],
@@ -511,6 +850,11 @@ export async function activate(context: vscode.ExtensionContext): Promise<CodexT
   context.subscriptions.push(
     vscode.commands.registerCommand('codexTerminal.focusSession', focusSession),
     vscode.commands.registerCommand('codexTerminal.stopSession', stopSession),
+    vscode.commands.registerCommand('codexTerminal.openTranscript', openTranscript),
+    vscode.commands.registerCommand('codexTerminal.resumeHistorySession', resumeHistorySession),
+    vscode.commands.registerCommand('codexTerminal.copyHistorySessionId', copyHistorySessionId),
+    vscode.commands.registerCommand('codexTerminal.openRawHistorySession', openRawHistorySession),
+    vscode.commands.registerCommand('codexTerminal.restoreSession', restoreSession),
   );
 
   const provideTerminalProfile = async (): Promise<vscode.TerminalProfile | undefined> => {
@@ -520,7 +864,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<CodexT
     if (!preflightCodexCommand(request.command)) {
       return undefined;
     }
-    const { options } = await terminalOptions('new', false);
+    const { options } = await terminalOptions({ mode: 'new' }, false);
     return new vscode.TerminalProfile(options);
   };
   context.subscriptions.push(
@@ -532,16 +876,45 @@ export async function activate(context: vscode.ExtensionContext): Promise<CodexT
   context.subscriptions.push(
     vscode.window.onDidCloseTerminal((closed) => {
       terminalRegistry?.remove(closed);
+      monitor.close(closed);
     }),
   );
 
-  const actionsProvider = new ActionsViewProvider(terminalRegistry);
-  context.subscriptions.push(
-    vscode.window.registerTreeDataProvider('codexTerminal.actions', actionsProvider),
-    actionsProvider,
+  const actionsProvider = new ActionsViewProvider(monitor);
+  historyViewProvider = new HistoryViewProvider(() =>
+    config().get<number>('history.maxSessions', 200),
+  );
+  const actionsView = vscode.window.createTreeView('codexTerminal.actions', {
+    treeDataProvider: actionsProvider,
+  });
+  const historyDirectory = codexSessionsDirectory(codexHomeDirectory());
+  const historyWatcher = vscode.workspace.createFileSystemWatcher(
+    new vscode.RelativePattern(vscode.Uri.file(historyDirectory), '**/*.jsonl'),
   );
 
-  createStatusBarItem(context);
+  // The activity-bar badge is the one indicator visible while the sidebar is collapsed.
+  const renderBadge = (): void => {
+    const working = monitor.workingCount();
+    actionsView.badge =
+      working > 0
+        ? { value: working, tooltip: strings.status.workingTooltip(working, monitor.live().length) }
+        : undefined;
+  };
+  renderBadge();
+
+  context.subscriptions.push(
+    actionsView,
+    actionsProvider,
+    monitor.onDidChange(renderBadge),
+    vscode.window.registerTreeDataProvider('codexTerminal.history', historyViewProvider),
+    historyViewProvider,
+    historyWatcher,
+    historyWatcher.onDidCreate(() => historyViewProvider?.refresh()),
+    historyWatcher.onDidChange(() => historyViewProvider?.refresh()),
+    historyWatcher.onDidDelete(() => historyViewProvider?.refresh(true)),
+  );
+
+  createStatusBarItem(context, monitor);
 
   // Worth logging: with `workbench.statusBar.visible: false` the status bar item is created
   // successfully and is simply never rendered, with no error anywhere to explain it.
@@ -556,16 +929,26 @@ export async function activate(context: vscode.ExtensionContext): Promise<CodexT
       if (event.affectsConfiguration('codexTerminal.notifyOnCompletion')) {
         void syncNotifyBridge();
       }
+      if (
+        event.affectsConfiguration(CONFIRM_ON_KILL_SETTING) ||
+        event.affectsConfiguration(AGENT_CLI_TITLE_SETTING) ||
+        event.affectsConfiguration('codexTerminal.tabTitle')
+      ) {
+        void applyWorkbenchPreferences();
+      }
     }),
     {
       dispose: () => {
         notifyBridge?.dispose();
         notifyBridge = undefined;
+        historyViewProvider = undefined;
         extensionContext = undefined;
       },
     },
   );
   void syncNotifyBridge();
+  void monitor.pruneJournals();
+  void offerRecovery(store, windowId);
 
   return {
     getActionCount: () => actionsProvider.getChildren().length,
@@ -577,6 +960,9 @@ export function deactivate(): void {
   notifyBridge?.dispose();
   notifyBridge = undefined;
   extensionContext = undefined;
+  // Stamps the journal so the next window does not treat these sessions as crashed.
+  void sessionMonitor?.shutdown();
+  sessionMonitor = undefined;
   terminalRegistry?.dispose();
   terminalRegistry = undefined;
 }

@@ -1,5 +1,7 @@
 import * as vscode from 'vscode';
 
+import { OWNERSHIP_ENV_VAR, isOwnedTerminalName } from './naming';
+
 export interface TrackedTerminal {
   terminal: vscode.Terminal;
   cwd?: string;
@@ -25,12 +27,16 @@ export class TerminalRegistry implements vscode.Disposable {
   adopt(terminals: readonly vscode.Terminal[], terminalName: string): number {
     let adopted = 0;
     for (const terminal of terminals) {
-      if (terminal.name !== terminalName || terminal.exitStatus !== undefined) {
+      if (terminal.exitStatus !== undefined || !isOwnedTerminal(terminal, terminalName)) {
         continue;
       }
       const alreadyTracked = this.entries.some((entry) => entry.terminal === terminal);
       if (!alreadyTracked) {
-        this.entries.push({ terminal, startedAt: Date.now() });
+        this.entries.push({
+          terminal,
+          cwd: terminalCwd(terminal),
+          startedAt: Date.now(),
+        });
         adopted += 1;
       }
     }
@@ -62,4 +68,37 @@ export class TerminalRegistry implements vscode.Disposable {
     this.changes.dispose();
     this.entries.length = 0;
   }
+}
+
+/**
+ * Recognise a terminal as ours.
+ *
+ * The environment marker is checked first because it is the only signal that survives
+ * `live` tab titles, where Codex owns the label and no name of ours appears anywhere in
+ * it. The name checks remain for terminals launched in `static` mode and for anything
+ * created before the marker existed.
+ */
+function isOwnedTerminal(terminal: vscode.Terminal, baseName: string): boolean {
+  const creationOptions = terminal.creationOptions;
+  if ('env' in creationOptions && creationOptions.env?.[OWNERSHIP_ENV_VAR]) {
+    return true;
+  }
+  if (isOwnedTerminalName(terminal.name, baseName)) {
+    return true;
+  }
+  return 'name' in creationOptions && typeof creationOptions.name === 'string'
+    ? isOwnedTerminalName(creationOptions.name, baseName)
+    : false;
+}
+
+function terminalCwd(terminal: vscode.Terminal): string | undefined {
+  const options = terminal.creationOptions;
+  if (!('cwd' in options)) {
+    return undefined;
+  }
+  const cwd = options.cwd;
+  if (typeof cwd === 'string') {
+    return cwd;
+  }
+  return cwd?.fsPath;
 }

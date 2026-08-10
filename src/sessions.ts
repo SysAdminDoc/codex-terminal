@@ -1,12 +1,29 @@
-import { open, readdir } from 'node:fs/promises';
+import { open, readdir, stat } from 'node:fs/promises';
+import { createReadStream } from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
+import { createInterface } from 'node:readline';
+
+import {
+  isInjectedContext,
+  parseSessionMeta,
+  parseTranscriptLine,
+  renderTranscriptEntry,
+  renderTranscriptHeader,
+  summarise,
+  type TranscriptMeta,
+  type TranscriptRenderOptions,
+} from './transcript';
 
 export interface SessionRecord {
   id: string;
   timestamp: string;
   cwd: string;
   filePath: string;
+  /** First prompt the operator actually typed, once the injected scaffolding is skipped. */
+  preview?: string;
+  sizeBytes: number;
+  modifiedAt: number;
 }
 
 export interface SessionDiscoveryOptions {
@@ -14,17 +31,48 @@ export interface SessionDiscoveryOptions {
   maxResults?: number;
 }
 
-export function codexSessionsDirectory(homeDirectory: string = os.homedir()): string {
-  return path.join(homeDirectory, '.codex', 'sessions');
+/**
+ * How much of a rollout is read to build a list entry. A rollout averages ~11 MB here and
+ * the first real prompt lands around 42 KB (line 7) — everything before it is the session
+ * header, AGENTS.md replay and skill catalogue. 192 KB clears that with margin while
+ * keeping a full refresh of ~80 sessions in the tens of megabytes rather than gigabytes.
+ */
+const HEAD_BYTES = 192 * 1024;
+const READ_CONCURRENCY = 8;
+
+/** Resolve Codex's state directory (`$CODEX_HOME` or the default `~/.codex`). */
+export function codexHomeDirectory(
+  homeDirectory?: string,
+  environmentValue: string | undefined = process.env.CODEX_HOME,
+): string {
+  const explicit = homeDirectory?.trim();
+  if (explicit) {
+    return explicit;
+  }
+  const configured = environmentValue?.trim();
+  return configured ? path.resolve(configured) : path.join(os.homedir(), '.codex');
 }
 
-async function jsonlHeader(filePath: string): Promise<unknown> {
+export function codexSessionsDirectory(homeDirectory: string = codexHomeDirectory()): string {
+  return path.join(homeDirectory, 'sessions');
+}
+
+/** Project label for a rollout: the working directory's leaf. */
+export function sessionProject(session: Pick<SessionRecord, 'cwd'>): string {
+  const cwd = session.cwd.replace(/[\\/]+$/, '');
+  if (!cwd) {
+    return '';
+  }
+  const leaf = cwd.split(/[\\/]/).pop() ?? '';
+  return leaf || cwd;
+}
+
+async function readHead(filePath: string): Promise<string> {
   const handle = await open(filePath, 'r');
   try {
-    const buffer = Buffer.alloc(256 * 1024);
+    const buffer = Buffer.alloc(HEAD_BYTES);
     const { bytesRead } = await handle.read(buffer, 0, buffer.length, 0);
-    const firstLine = buffer.subarray(0, bytesRead).toString('utf8').split(/\r?\n/, 1)[0];
-    return JSON.parse(firstLine);
+    return buffer.subarray(0, bytesRead).toString('utf8');
   } finally {
     await handle.close();
   }
@@ -49,33 +97,99 @@ async function sessionFiles(directory: string): Promise<string[]> {
   return files;
 }
 
+interface CacheEntry {
+  modifiedAt: number;
+  sizeBytes: number;
+  record: SessionRecord | null;
+}
+
+const headCache = new Map<string, CacheEntry>();
+
+/** Drop cached previews, e.g. when the history view is refreshed by hand. */
+export function clearSessionCache(): void {
+  headCache.clear();
+}
+
 async function readSession(filePath: string): Promise<SessionRecord | undefined> {
+  let stats;
   try {
-    const header = (await jsonlHeader(filePath)) as {
-      type?: unknown;
-      payload?: { id?: unknown; session_id?: unknown; timestamp?: unknown; cwd?: unknown };
-    };
-    if (header.type !== 'session_meta' || !header.payload) {
-      return undefined;
-    }
-    const id = header.payload.id ?? header.payload.session_id;
-    const { timestamp, cwd } = header.payload;
-    if (typeof id !== 'string' || typeof timestamp !== 'string' || typeof cwd !== 'string') {
-      return undefined;
-    }
-    return { id, timestamp, cwd, filePath };
+    stats = await stat(filePath);
   } catch {
     return undefined;
   }
+  const cached = headCache.get(filePath);
+  if (cached && cached.modifiedAt === stats.mtimeMs && cached.sizeBytes === stats.size) {
+    return cached.record ?? undefined;
+  }
+
+  let record: SessionRecord | undefined;
+  try {
+    const head = await readHead(filePath);
+    // A truncated final line is expected — the head stops mid-file — so it is skipped.
+    const lines = head.split(/\r?\n/);
+    const meta = parseSessionMeta(lines[0] ?? '');
+    if (meta) {
+      record = {
+        id: meta.id,
+        timestamp: meta.timestamp,
+        cwd: meta.cwd,
+        filePath,
+        preview: firstPromptFromLines(lines.slice(1)),
+        sizeBytes: stats.size,
+        modifiedAt: stats.mtimeMs,
+      };
+    }
+  } catch {
+    record = undefined;
+  }
+
+  headCache.set(filePath, {
+    modifiedAt: stats.mtimeMs,
+    sizeBytes: stats.size,
+    record: record ?? null,
+  });
+  return record;
 }
 
-/** Read only session metadata, newest first, without loading conversation bodies. */
+function firstPromptFromLines(lines: readonly string[]): string | undefined {
+  for (const line of lines) {
+    if (!line) {
+      continue;
+    }
+    const entry = parseTranscriptLine(line);
+    if (entry?.role === 'user' && !isInjectedContext(entry.text)) {
+      return summarise(entry.text);
+    }
+  }
+  return undefined;
+}
+
+async function mapWithConcurrency<T, R>(
+  items: readonly T[],
+  limit: number,
+  worker: (item: T) => Promise<R>,
+): Promise<R[]> {
+  const results: R[] = new Array(items.length);
+  let next = 0;
+  const runners = Array.from({ length: Math.min(limit, items.length) }, async () => {
+    for (let index = next++; index < items.length; index = next++) {
+      results[index] = await worker(items[index]);
+    }
+  });
+  await Promise.all(runners);
+  return results;
+}
+
+/**
+ * Read only session metadata and the opening prompt, newest first, without loading
+ * conversation bodies.
+ */
 export async function discoverSessions(
   options: SessionDiscoveryOptions = {},
 ): Promise<SessionRecord[]> {
   const directory = codexSessionsDirectory(options.homeDirectory);
   const files = await sessionFiles(directory);
-  const sessions = (await Promise.all(files.map((filePath) => readSession(filePath)))).filter(
+  const sessions = (await mapWithConcurrency(files, READ_CONCURRENCY, readSession)).filter(
     (session): session is SessionRecord => session !== undefined,
   );
   const unique = new Map<string, SessionRecord>();
@@ -88,4 +202,95 @@ export async function discoverSessions(
   return [...unique.values()]
     .sort((left, right) => right.timestamp.localeCompare(left.timestamp))
     .slice(0, options.maxResults ?? 30);
+}
+
+export interface SessionGroup {
+  project: string;
+  cwd: string;
+  sessions: SessionRecord[];
+}
+
+/** Group by working directory, most recently used project first. */
+export function groupSessionsByProject(sessions: readonly SessionRecord[]): SessionGroup[] {
+  const groups = new Map<string, SessionGroup>();
+  for (const session of sessions) {
+    const key = session.cwd.toLowerCase();
+    const group = groups.get(key);
+    if (group) {
+      group.sessions.push(session);
+    } else {
+      groups.set(key, {
+        project: sessionProject(session) || session.cwd,
+        cwd: session.cwd,
+        sessions: [session],
+      });
+    }
+  }
+  return [...groups.values()];
+}
+
+export interface TranscriptExportResult {
+  markdown: string;
+  entryCount: number;
+  truncated: boolean;
+}
+
+/**
+ * Stream a whole rollout into Markdown. Rollouts reach hundreds of megabytes, so the file
+ * is read line by line and the output is capped rather than materialised twice.
+ */
+export async function exportTranscript(
+  filePath: string,
+  project: string,
+  options: TranscriptRenderOptions & { maxBytes?: number } = {},
+): Promise<TranscriptExportResult> {
+  const maxBytes = options.maxBytes ?? 8 * 1024 * 1024;
+  const stream = createReadStream(filePath, { encoding: 'utf8' });
+  const reader = createInterface({ input: stream, crlfDelay: Infinity });
+
+  const parts: string[] = [];
+  let meta: TranscriptMeta | undefined;
+  let bytes = 0;
+  let entryCount = 0;
+  let truncated = false;
+
+  try {
+    for await (const line of reader) {
+      if (!line.trim()) {
+        continue;
+      }
+      if (!meta) {
+        meta = parseSessionMeta(line);
+        if (meta) {
+          const header = renderTranscriptHeader(meta, project);
+          parts.push(header);
+          bytes += header.length;
+          continue;
+        }
+      }
+      const entry = parseTranscriptLine(line);
+      if (!entry) {
+        continue;
+      }
+      const rendered = renderTranscriptEntry(entry, options);
+      if (!rendered) {
+        continue;
+      }
+      if (bytes + rendered.length > maxBytes) {
+        truncated = true;
+        break;
+      }
+      parts.push(rendered);
+      bytes += rendered.length;
+      entryCount += 1;
+    }
+  } finally {
+    reader.close();
+    stream.close();
+  }
+
+  if (truncated) {
+    parts.push('\n---\n\n> Transcript truncated. Open the rollout file for the remainder.\n');
+  }
+  return { markdown: parts.join('\n'), entryCount, truncated };
 }

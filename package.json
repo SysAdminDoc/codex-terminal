@@ -3,7 +3,7 @@
   "displayName": "%extension.displayName%",
   "description": "%extension.description%",
   "l10n": "./l10n",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "publisher": "sysadmindoc",
   "license": "MIT",
   "author": "SysAdminDoc",
@@ -50,6 +50,11 @@
           "id": "codexTerminal.actions",
           "name": "%views.launch.name%",
           "icon": "resources/activity-icon.svg"
+        },
+        {
+          "id": "codexTerminal.history",
+          "name": "%views.history.name%",
+          "icon": "$(history)"
         }
       ]
     },
@@ -58,7 +63,8 @@
         {
           "id": "codexTerminal.profile",
           "title": "%terminal.profile.title%",
-          "icon": "sparkle"
+          "icon": "sparkle",
+          "titleTemplate": "${sequence}"
         }
       ]
     },
@@ -120,6 +126,59 @@
         "command": "codexTerminal.showLog",
         "title": "%command.showLog.title%",
         "category": "%category.codexTerminal%"
+      },
+      {
+        "command": "codexTerminal.refreshHistory",
+        "title": "%command.refreshHistory.title%",
+        "category": "%category.codexTerminal%",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "codexTerminal.searchHistory",
+        "title": "%command.searchHistory.title%",
+        "category": "%category.codexTerminal%",
+        "icon": "$(search)"
+      },
+      {
+        "command": "codexTerminal.openTranscript",
+        "title": "%command.openTranscript.title%",
+        "category": "%category.codexTerminal%",
+        "icon": "$(book)"
+      },
+      {
+        "command": "codexTerminal.resumeHistorySession",
+        "title": "%command.resumeHistory.title%",
+        "category": "%category.codexTerminal%",
+        "icon": "$(debug-start)"
+      },
+      {
+        "command": "codexTerminal.copyHistorySessionId",
+        "title": "%command.copyHistoryId.title%",
+        "category": "%category.codexTerminal%",
+        "icon": "$(copy)"
+      },
+      {
+        "command": "codexTerminal.openRawHistorySession",
+        "title": "%command.openRawHistory.title%",
+        "category": "%category.codexTerminal%"
+      },
+      {
+        "command": "codexTerminal.restoreSession",
+        "title": "%command.restoreSession.title%",
+        "category": "%category.codexTerminal%",
+        "icon": "$(debug-restart)"
+      },
+      {
+        "command": "codexTerminal.restoreAllSessions",
+        "title": "%command.restoreAllSessions.title%",
+        "category": "%category.codexTerminal%",
+        "icon": "$(debug-restart)"
+      },
+      {
+        "command": "codexTerminal.dismissRecovery",
+        "title": "%command.dismissRecovery.title%",
+        "category": "%category.codexTerminal%",
+        "icon": "$(close)"
       }
     ],
     "menus": {
@@ -128,6 +187,16 @@
           "command": "codexTerminal.new",
           "when": "view == codexTerminal.actions",
           "group": "navigation@1"
+        },
+        {
+          "command": "codexTerminal.refreshHistory",
+          "when": "view == codexTerminal.history",
+          "group": "navigation@1"
+        },
+        {
+          "command": "codexTerminal.searchHistory",
+          "when": "view == codexTerminal.history",
+          "group": "navigation@2"
         }
       ],
       "editor/title": [
@@ -147,12 +216,47 @@
       "view/item/context": [
         {
           "command": "codexTerminal.focusSession",
-          "when": "view == codexTerminal.actions && viewItem == codexTerminal.runningSession",
+          "when": "view == codexTerminal.actions && viewItem =~ /^codexTerminal\\.runningSession/",
           "group": "inline@1"
         },
         {
           "command": "codexTerminal.stopSession",
-          "when": "view == codexTerminal.actions && viewItem == codexTerminal.runningSession",
+          "when": "view == codexTerminal.actions && viewItem =~ /^codexTerminal\\.runningSession/",
+          "group": "inline@2"
+        },
+        {
+          "command": "codexTerminal.openTranscript",
+          "when": "view == codexTerminal.history && viewItem == codexTerminal.historySession",
+          "group": "inline@1"
+        },
+        {
+          "command": "codexTerminal.copyHistorySessionId",
+          "when": "view == codexTerminal.history && viewItem == codexTerminal.historySession",
+          "group": "inline@2"
+        },
+        {
+          "command": "codexTerminal.resumeHistorySession",
+          "when": "view == codexTerminal.history && viewItem == codexTerminal.historySession",
+          "group": "codexTerminal@1"
+        },
+        {
+          "command": "codexTerminal.openRawHistorySession",
+          "when": "view == codexTerminal.history && viewItem == codexTerminal.historySession",
+          "group": "codexTerminal@2"
+        },
+        {
+          "command": "codexTerminal.restoreSession",
+          "when": "view == codexTerminal.history && viewItem == codexTerminal.recoverySession",
+          "group": "inline@1"
+        },
+        {
+          "command": "codexTerminal.restoreAllSessions",
+          "when": "view == codexTerminal.history && viewItem == codexTerminal.recoveryGroup",
+          "group": "inline@1"
+        },
+        {
+          "command": "codexTerminal.dismissRecovery",
+          "when": "view == codexTerminal.history && viewItem == codexTerminal.recoveryGroup",
           "group": "inline@2"
         }
       ]
@@ -264,6 +368,19 @@
           "default": "Codex",
           "description": "%setting.terminalName.description%"
         },
+        "codexTerminal.tabTitle": {
+          "type": "string",
+          "enum": [
+            "live",
+            "static"
+          ],
+          "default": "live",
+          "enumDescriptions": [
+            "%setting.tabTitle.live%",
+            "%setting.tabTitle.static%"
+          ],
+          "markdownDescription": "%setting.tabTitle.markdownDescription%"
+        },
         "codexTerminal.iconColor": {
           "type": "string",
           "default": "terminal.ansiMagenta",
@@ -290,6 +407,27 @@
           "default": false,
           "description": "%setting.notifyOnCompletion.description%",
           "scope": "machine-overridable"
+        },
+        "codexTerminal.titleItems": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9-]*$"
+          },
+          "default": [
+            "activity",
+            "project-name",
+            "app-name"
+          ],
+          "description": "%setting.titleItems.description%",
+          "scope": "machine-overridable"
+        },
+        "codexTerminal.history.maxSessions": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 1000,
+          "default": 200,
+          "description": "%setting.history.maxSessions.description%"
         }
       }
     }
@@ -303,7 +441,7 @@
     "test": "npm run compile && node --test \"out/test/*.test.js\"",
     "test:integration": "npm run compile && npm run bundle && vscode-test --label hostile --jobs 1",
     "check": "npm run clean && npm run compile && npm run lint && node --test \"out/test/*.test.js\" && npm run bundle",
-    "package": "npm run check && vsce package --out dist/codex-terminal-0.3.0.vsix",
+    "package": "npm run check && vsce package --out dist/codex-terminal-0.4.0.vsix",
     "vscode:prepublish": "npm run clean && npm run bundle"
   },
   "devDependencies": {
