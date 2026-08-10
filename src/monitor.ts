@@ -13,6 +13,7 @@ import {
 import { bindRollout, scanRollouts } from './binder';
 import {
   JournalStore,
+  stripMessages,
   emptyJournal,
   stampShutdown,
   upsertSession,
@@ -420,9 +421,10 @@ export class SessionMonitor implements vscode.Disposable {
       ...(closedAt ? { closedAt } : {}),
       status: entry.activity.status,
       // Opt-out: the journal is a second copy of conversation text, outside $CODEX_HOME.
-      ...(this.options.storeMessages?.() === false
-        ? {}
-        : { lastMessage: entry.activity.lastMessage }),
+      // The key is always present, with `undefined` when the setting is off: `upsertSession`
+      // merges over the previous record, so omitting it would preserve whatever was there.
+      lastMessage:
+        this.options.storeMessages?.() === false ? undefined : entry.activity.lastMessage,
       completedTurns: entry.activity.completedTurns,
     });
     void this.writeJournal();
@@ -454,6 +456,25 @@ export class SessionMonitor implements vscode.Disposable {
       );
     } finally {
       this.writing = false;
+    }
+  }
+
+  /**
+   * Remove conversation text from every journal on disk, this window's in-memory copy too.
+   *
+   * Called when `journal.storeMessages` is turned off. Without it the setting only stopped
+   * new text being written, and everything already recorded stayed for the full retention
+   * window — an opt-out that opted out of nothing already done.
+   */
+  async stripStoredMessages(): Promise<void> {
+    this.journal = stripMessages(this.journal);
+    try {
+      const rewritten = await this.options.store.stripMessagesEverywhere();
+      if (rewritten > 0) {
+        this.options.log.info(`removed conversation text from ${rewritten} session journal(s)`);
+      }
+    } catch {
+      // Best effort: a journal that cannot be rewritten is left alone rather than truncated.
     }
   }
 

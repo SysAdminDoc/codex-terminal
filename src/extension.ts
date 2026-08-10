@@ -370,6 +370,14 @@ export async function activate(context: vscode.ExtensionContext): Promise<CodexT
       if (event.affectsConfiguration('codexTerminal.command')) {
         actionsProvider.refreshInventory();
       }
+      if (
+        event.affectsConfiguration('codexTerminal.journal.storeMessages') &&
+        config().get<boolean>('journal.storeMessages', true) === false
+      ) {
+        // Turning the setting off has to act on what is already written, not only on what
+        // would be written next.
+        void monitor.stripStoredMessages();
+      }
     }),
     {
       dispose: () => {

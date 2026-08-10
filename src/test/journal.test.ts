@@ -15,6 +15,7 @@ import {
   parseJournal,
   recoverableSessions,
   stampShutdown,
+  stripMessages,
   upsertSession,
   type JournalSession,
   type JournalState,
@@ -286,4 +287,79 @@ test('a launch recorded by two windows resolves to the newer record', () => {
   });
   assert.equal(findLaunch([older, newer], 'shared')?.completedTurns, 7);
   assert.equal(findLaunch([newer, older], 'shared')?.completedTurns, 7);
+});
+
+
+/**
+ * `journal.storeMessages: false` used to stop only *new* text being written. `upsertSession`
+ * merges over the previous record, so a message already on disk survived every later update
+ * and sat there for the full retention window: the setting read as an opt-out and behaved as
+ * a tap.
+ */
+test('turning message storage off removes text that is already recorded', () => {
+  const before = upsertSession(
+    upsertSession(emptyJournal('w1'), session({ key: 'a', lastMessage: 'the secret plan' })),
+    session({ key: 'b' }),
+  );
+  const after = stripMessages(before);
+  assert.equal(after.sessions.length, 2);
+  assert.ok(!JSON.stringify(after).includes('the secret plan'));
+  assert.ok(!('lastMessage' in after.sessions[0]));
+  // Everything that is not conversation text is untouched — recovery still needs it.
+  assert.equal(after.sessions[0].key, 'a');
+  assert.equal(after.sessions[0].launchedAt, NOW - 600_000);
+  assert.equal(after.sessions[0].sessionId, '019fe759-5303-7681-b98a-16ffcb95a268');
+});
+
+test('stripping a journal with no text at all returns it unchanged', () => {
+  // Identity, so the rewrite pass can skip files that would not change.
+  const state = upsertSession(emptyJournal('w1'), session({ key: 'a' }));
+  assert.equal(stripMessages(state), state);
+});
+
+test('an update with the setting off overwrites the recorded message', () => {
+  // The merge is what made this subtle: omitting the key preserves the old value, so the
+  // key has to be present and undefined.
+  const stored = upsertSession(
+    emptyJournal('w1'),
+    session({ key: 'a', lastMessage: 'the secret plan' }),
+  );
+  const updated = upsertSession(stored, session({ key: 'a', lastMessage: undefined }));
+  assert.equal(updated.sessions[0].lastMessage, undefined);
+  assert.ok(!JSON.stringify(updated).includes('the secret plan'));
+});
+
+
+test('every window\'s journal on disk is rewritten, not just this one\'s', async () => {
+  const directory = await mkdtemp(path.join(tmpdir(), 'codex-journal-strip-'));
+  try {
+    const mine = new JournalStore(directory, 'w1');
+    await mine.write(upsertSession(emptyJournal('w1'), session({ lastMessage: 'mine' })));
+    const theirs = new JournalStore(directory, 'w2');
+    await theirs.write(upsertSession(emptyJournal('w2'), session({ lastMessage: 'theirs' })));
+    // Not a journal, and not to be touched.
+    await writeFile(path.join(directory, 'notes.txt'), 'theirs', 'utf8');
+
+    // They share a directory, so a setting that says text is not stored has to be true of
+    // what is on disk rather than of what this process writes next.
+    const rewritten = await mine.stripMessagesEverywhere();
+    assert.equal(rewritten, 2);
+
+    for (const entry of await readdir(directory)) {
+      const contents = await readFile(path.join(directory, entry), 'utf8');
+      if (entry.endsWith('.json')) {
+        assert.ok(!contents.includes('mine'), entry);
+        assert.ok(!contents.includes('theirs'), entry);
+        // Still a journal: recovery needs everything that is not conversation text.
+        assert.ok(parseJournal(contents)?.sessions.length === 1, entry);
+      } else {
+        assert.equal(contents, 'theirs');
+      }
+    }
+
+    // Nothing left to do the second time, which is what lets the caller log a real count.
+    assert.equal(await mine.stripMessagesEverywhere(), 0);
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
 });

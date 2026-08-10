@@ -24,6 +24,13 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- **`journal.storeMessages: false` did not remove what was already stored.** It stopped new
+  text being written, but the journal update merges over the previous record, so a message
+  already on disk survived every later update and stayed for the full seven-day retention — an
+  opt-out that opted out of nothing already done. Turning it off now rewrites every journal in
+  the extension's storage, this window's and every other window's, keeping the identifiers and
+  timestamps recovery needs and dropping the conversation text.
+
 - **An argument could break out of the command line and run something else.** Values were
   quoted only when they matched a metacharacter set, and that set had no `;`, `$` or backtick —
   so `--model=a;calc`, typed into the profile prompt or arriving through `codexTerminal.args`,

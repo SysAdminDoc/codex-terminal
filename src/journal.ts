@@ -82,6 +82,28 @@ export function upsertSession(
 }
 
 /**
+ * The same journal with every scrap of conversation text removed.
+ *
+ * `journal.storeMessages: false` used to only stop *new* text being written. `upsertSession`
+ * merges over the previous record, so a message already on disk survived every later update
+ * and sat there for the full retention window — the setting read as an opt-out and behaved as
+ * a tap. Turning it off now rewrites what is already there.
+ */
+export function stripMessages(state: JournalState): JournalState {
+  let changed = false;
+  const sessions = state.sessions.map((session) => {
+    if (session.lastMessage === undefined) {
+      return session;
+    }
+    changed = true;
+    const rest = { ...session };
+    delete rest.lastMessage;
+    return rest;
+  });
+  return changed ? { ...state, sessions } : state;
+}
+
+/**
  * Sessions worth offering back to the operator.
  *
  * Only rollout-bound sessions qualify: a launch that never produced a rollout has no
@@ -360,6 +382,46 @@ export class JournalStore {
   }
 
   /** Delete journals that are cleanly closed or too old to matter. */
+  /**
+   * Remove conversation text from every journal in the directory, this window's included.
+   *
+   * Every window's journal, not just this one's: they share a directory, and a setting that
+   * says text is not stored has to be true of what is on disk rather than of what this
+   * process happens to write next.
+   */
+  async stripMessagesEverywhere(): Promise<number> {
+    let entries: string[];
+    try {
+      entries = await readdir(this.directory);
+    } catch {
+      return 0;
+    }
+    let rewritten = 0;
+    for (const entry of entries) {
+      if (!entry.startsWith('window-') || !entry.endsWith('.json')) {
+        continue;
+      }
+      const target = path.join(this.directory, entry);
+      try {
+        const state = parseJournal(await readFile(target, 'utf8'));
+        if (!state) {
+          continue;
+        }
+        const stripped = stripMessages(state);
+        if (stripped === state) {
+          continue;
+        }
+        const temporary = `${target}.strip.tmp`;
+        await writeFile(temporary, JSON.stringify(stripped), 'utf8');
+        await rename(temporary, target);
+        rewritten += 1;
+      } catch {
+        // Leave anything unreadable in place rather than truncating it blind.
+      }
+    }
+    return rewritten;
+  }
+
   async prune(now: number, maxAgeMs: number): Promise<number> {
     let entries: string[];
     try {
