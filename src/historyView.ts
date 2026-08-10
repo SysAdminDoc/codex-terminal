@@ -7,6 +7,7 @@ import {
   indexCheckouts,
   formatBytes,
   measureStore,
+  type CheckoutIndex,
   groupSessionsByProject,
   sessionProject,
   clearSessionCache,
@@ -38,6 +39,13 @@ import { strings } from './strings';
  */
 
 /** Long enough to collapse a burst of appends, short enough to feel immediate. */
+/**
+ * How stale the store-size readout may be. It costs a full recursive walk plus a `stat` per
+ * file — 2.23 GB across 121 files on the development machine — and it is a number that moves
+ * in megabytes over minutes, not one worth re-deriving twice a second while a turn runs.
+ */
+const USAGE_MAX_AGE_MS = 60_000;
+
 const REFRESH_DEBOUNCE_MS = 500;
 
 interface RecoveryGroupNode {
@@ -317,6 +325,10 @@ export class HistoryViewProvider
   private filter = '';
   private recoverable: JournalSession[] = [];
   private usage: { fileCount: number; totalBytes: number } | undefined;
+  /** When `usage` was measured, so a debounced refresh does not re-walk the whole store. */
+  private usageMeasuredAt = 0;
+  /** Resolved repository roots, reused across refreshes and dropped on an explicit one. */
+  private checkoutIndex: CheckoutIndex | undefined;
   /** Keyed by rollout path, cleared on a real reload; see `changedFiles`. */
   private readonly changedFileCache = new Map<string, HistoryNode[]>();
   private pending: NodeJS.Timeout | undefined;
@@ -338,6 +350,10 @@ export class HistoryViewProvider
     }
     if (hard) {
       clearSessionCache();
+      // Only here: a repository does not move while a turn is running, and re-resolving one
+      // per directory per refresh is the most expensive thing this view does.
+      this.checkoutIndex = undefined;
+      this.usageMeasuredAt = 0;
       // A live session keeps appending, so its file list is only as current as the last
       // scan. An explicit refresh is the operator asking for it to be re-read.
       this.changedFileCache.clear();
@@ -489,11 +505,17 @@ export class HistoryViewProvider
         maxResults: this.limit(),
       });
       // One `.git` walk per distinct directory, not per session: a project with forty
-      // sessions has one working directory.
-      this.groups = groupSessionsByProject(sessions, await indexCheckouts(sessions));
-      // stat-only, and only on a real reload, so it never rides the debounced refresh path
-      // more often than the listing itself.
-      this.usage = await measureStore(this.homeDirectory());
+      // sessions has one working directory — and the previous index is reused, so a
+      // directory already resolved is not walked again on the next append.
+      this.checkoutIndex = await indexCheckouts(sessions, this.checkoutIndex);
+      this.groups = groupSessionsByProject(sessions, this.checkoutIndex);
+      // A second full walk of the store, so it is rate-limited rather than run per refresh.
+      // The comment that used to sit here claimed it ran "only on a real reload"; it sat
+      // inside this block, which every debounced refresh reaches.
+      if (Date.now() - this.usageMeasuredAt >= USAGE_MAX_AGE_MS) {
+        this.usage = await measureStore(this.homeDirectory());
+        this.usageMeasuredAt = Date.now();
+      }
       this.loaded = true;
     }
 

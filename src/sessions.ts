@@ -147,6 +147,13 @@ interface CacheEntry {
   record: SessionRecord | null;
 }
 
+/**
+ * Bounded because it is never otherwise emptied: entries for files that dropped out of the
+ * top-N long ago were kept, with their preview text, for the life of the extension host.
+ * A generous multiple of the largest list anyone can ask for.
+ */
+const HEAD_CACHE_LIMIT = 2_000;
+
 const headCache = new Map<string, CacheEntry>();
 
 /** Drop cached previews, e.g. when the history view is refreshed by hand. */
@@ -187,6 +194,13 @@ async function readSession(filePath: string): Promise<SessionRecord | undefined>
     record = undefined;
   }
 
+  // Insertion order is iteration order for a Map, so the oldest key is the first one.
+  if (headCache.size >= HEAD_CACHE_LIMIT && !headCache.has(filePath)) {
+    const oldest = headCache.keys().next();
+    if (!oldest.done) {
+      headCache.delete(oldest.value);
+    }
+  }
   headCache.set(filePath, {
     modifiedAt: stats.mtimeMs,
     sizeBytes: stats.size,
@@ -320,6 +334,7 @@ export type CheckoutIndex = Map<string, Checkout | undefined>;
  */
 export async function indexCheckouts(
   sessions: readonly SessionRecord[],
+  previous?: CheckoutIndex,
 ): Promise<CheckoutIndex> {
   const index: CheckoutIndex = new Map();
   for (const session of sessions) {
@@ -327,7 +342,13 @@ export async function indexCheckouts(
     if (!session.cwd || index.has(key)) {
       continue;
     }
-    index.set(key, await findCheckout(session.cwd));
+    // Reuse what a previous scan already resolved. This is a `.git` walk up the tree per
+    // directory, and it used to run again on every debounced refresh — which is to say
+    // twice a second for the whole length of a Codex turn, for an answer that only changes
+    // when a repository is created, moved or converted to a worktree. An explicit refresh
+    // drops the index, which is what makes that case recoverable.
+    const reused = previous?.get(key);
+    index.set(key, reused !== undefined ? reused : await findCheckout(session.cwd));
   }
   return index;
 }

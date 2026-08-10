@@ -9,6 +9,7 @@ import {
   discoverSessions,
   formatBytes,
   groupSessionsByProject,
+  indexCheckouts,
   measureStore,
   selectNewestRollouts,
   type SessionRecord,
@@ -257,4 +258,55 @@ test('sessions outside any checkout still group by working directory', () => {
   );
   assert.equal(groups.length, 2);
   assert.deepEqual(groups.map((group) => group.project).sort(), ['one', 'two']);
+});
+
+
+/**
+ * The checkout index is a `.git` walk up the tree per distinct directory, and it used to run
+ * again on every debounced refresh — twice a second for the length of a Codex turn, for an
+ * answer that changes only when a repository is created, moved or turned into a worktree.
+ */
+test('a checkout index reuses what a previous scan already resolved', async () => {
+  const directory = await mkdtemp(path.join(os.tmpdir(), 'codex-checkout-'));
+  try {
+    const repository = path.join(directory, 'repo');
+    await mkdir(path.join(repository, '.git'), { recursive: true });
+    const sessions = [
+      { id: 'a', timestamp: '', cwd: repository, filePath: 'a', sizeBytes: 0, modifiedAt: 0 },
+      { id: 'b', timestamp: '', cwd: repository, filePath: 'b', sizeBytes: 0, modifiedAt: 0 },
+    ];
+
+    const first = await indexCheckouts(sessions);
+    assert.equal(first.size, 1);
+    const resolved = first.get(repository.toLowerCase());
+    assert.ok(resolved, 'the repository should have resolved');
+
+    // Remove the marker: a second scan from scratch would now resolve to nothing, so an
+    // index that still reports the repository is one that reused the previous answer.
+    await rm(path.join(repository, '.git'), { recursive: true, force: true });
+    const reused = await indexCheckouts(sessions, first);
+    assert.deepEqual(reused.get(repository.toLowerCase()), resolved);
+
+    // And an explicit refresh, which passes no previous index, sees the new truth.
+    const rescanned = await indexCheckouts(sessions);
+    assert.equal(rescanned.get(repository.toLowerCase()), undefined);
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test('a directory absent from the previous index is still resolved', async () => {
+  const directory = await mkdtemp(path.join(os.tmpdir(), 'codex-checkout-'));
+  try {
+    const repository = path.join(directory, 'repo');
+    await mkdir(path.join(repository, '.git'), { recursive: true });
+    const stale = await indexCheckouts([]);
+    const index = await indexCheckouts(
+      [{ id: 'a', timestamp: '', cwd: repository, filePath: 'a', sizeBytes: 0, modifiedAt: 0 }],
+      stale,
+    );
+    assert.ok(index.get(repository.toLowerCase()), 'a new directory must still be walked');
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
 });

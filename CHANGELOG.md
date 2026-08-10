@@ -24,6 +24,17 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- **The History view re-walked the whole session store twice a second.** Codex appends to its
+  rollout several times a second, and every append reached a debounced refresh that dropped the
+  loaded flag — which re-ran the directory scan, a `.git` walk per distinct working directory,
+  *and* a second full recursive walk with a `stat` per file to measure the store, for the whole
+  length of every turn. Against 2.23 GB across 121 files that is a lot of syscalls for a view
+  whose contents cannot change that fast. Resolved repository roots are now reused between
+  refreshes and dropped only on an explicit one, the store measurement is rate-limited to once
+  a minute, and the per-file preview cache is bounded instead of growing for the life of the
+  window. (A comment claiming the measurement ran "only on a real reload" was simply wrong: it
+  sat inside the block every refresh reached.)
+
 - **A Spanish editor drew Spanish and spoke English.** Every status label, every "last step"
   description, the tokens/context/plan-window readout and — most importantly — the accessible
   name of a running-session row were inline English literals in `present.ts`, which imports no
