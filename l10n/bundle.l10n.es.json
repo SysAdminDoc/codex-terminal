@@ -164,6 +164,7 @@
   "{0} could not be rebound to its session ({1}); it stays live but unlabelled": "{0} no se pudo revincular con su sesión ({1}); sigue activo pero sin etiqueta",
   "launch mode={0} shell={1} args={2} cwd={3} sendText={4}": "inicio mode={0} shell={1} args={2} cwd={3} sendText={4}",
   "launch mode={0} shell={1} args={2} cwd={3}": "inicio mode={0} shell={1} args={2} cwd={3}",
+  "launched with no workspace folder, so this session is not tracked: no live status, no badge and no crash recovery for it": "se inició sin carpeta de trabajo, así que esta sesión no se supervisa: sin estado en vivo, sin distintivo y sin recuperación tras un fallo",
   "Codex Terminal activated (workbench.statusBar.visible=true)": "Codex Terminal activado (workbench.statusBar.visible=true)",
   "Codex Terminal activated (workbench.statusBar.visible=false — status bar button cannot render; use the activity bar)": "Codex Terminal activado (workbench.statusBar.visible=false: el botón de la barra de estado no puede mostrarse; use la barra de actividad)",
   "activation took {0}ms": "la activación tardó {0} ms",

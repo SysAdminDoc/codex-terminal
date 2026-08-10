@@ -375,6 +375,10 @@ export const strings = {
             fallback,
           )
         : vscode.l10n.t('launch mode={0} shell={1} args={2} cwd={3}', mode, shell, args, cwd),
+    untracked: (): string =>
+      vscode.l10n.t(
+        'launched with no workspace folder, so this session is not tracked: no live status, no badge and no crash recovery for it',
+      ),
     activation: (statusBarVisible: boolean): string =>
       statusBarVisible
         ? vscode.l10n.t('Codex Terminal activated (workbench.statusBar.visible=true)')

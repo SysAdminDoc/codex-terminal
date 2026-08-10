@@ -90,10 +90,21 @@ export function bindRollout(
 }
 
 /** Date-sharded directories (`YYYY/MM/DD`) a session started at `since` could live in. */
+/**
+ * Most days a launch can still be waiting to bind.
+ *
+ * The walk used to run from the fixed launch instant to *now*, so a window left open for a
+ * fortnight `readdir`d fourteen directories on every retry, every two seconds, for a launch
+ * that was never going to bind. A rollout appears within seconds of the launch; a window that
+ * has been open across a date boundary needs two, and the rest is a leak.
+ */
+const MAX_CANDIDATE_DAYS = 2;
+
 export function candidateDirectories(sessionsRoot: string, since: number, now: number): string[] {
   const directories: string[] = [];
   const day = 24 * 60 * 60 * 1000;
-  for (let stamp = since; ; stamp += day) {
+  const first = Math.max(since, now - MAX_CANDIDATE_DAYS * day);
+  for (let stamp = first; ; stamp += day) {
     const date = new Date(Math.min(stamp, now));
     directories.push(
       path.join(

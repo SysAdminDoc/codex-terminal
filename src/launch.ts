@@ -360,6 +360,11 @@ export async function launch(request: LaunchOptions): Promise<void> {
       true,
     );
     const terminal = vscode.window.createTerminal(options);
+    if (!cwd) {
+      // The tab works; nothing else does. Live status, the badge, the journal and crash
+      // recovery all key off the working directory, and this used to be silent.
+      log().info(strings.logs.untracked());
+    }
     if (cwd) {
       services().monitor.track(terminal, {
         cwd,

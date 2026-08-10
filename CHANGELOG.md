@@ -24,6 +24,15 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- **A launch that never matched a session retried forever, silently.** Only successful matches
+  were logged, so a launch that never bound looked exactly like one that bound instantly — and
+  it kept scanning every two seconds for the life of the window, over a directory range that
+  grew by one day per calendar day the window stayed open. Matching now gives up after ten
+  minutes and logs where it looked, and the directory walk is bounded regardless of uptime.
+  Launching with no workspace folder open also says so: the tab works, but live status, the
+  badge, the journal and crash recovery all key off the working directory and none of them
+  applies.
+
 - **"No Codex sessions recorded yet" was the answer to three different questions.** A store
   that does not exist, one the process may not read, and one that is genuinely empty all
   produced the same row and logged nothing, so the most common "it does nothing" report could

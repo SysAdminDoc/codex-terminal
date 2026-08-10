@@ -154,3 +154,23 @@ test('scanning a directory that does not exist yet returns nothing', async () =>
   );
   assert.deepEqual(found, []);
 });
+
+/**
+ * The walk ran from the fixed launch instant to now, so a window left open for a fortnight
+ * `readdir`d fourteen directories on every retry, every two seconds, for a launch that was
+ * never going to bind. A rollout appears within seconds; the rest was a leak that grew by one
+ * directory per calendar day the window stayed open.
+ */
+test('the candidate walk is bounded however long the window has been open', () => {
+  const now = Date.parse('2026-08-10T12:00:00.000Z');
+  const fortnightAgo = now - 14 * 24 * 60 * 60 * 1000;
+  const directories = candidateDirectories('/root', fortnightAgo, now);
+  assert.ok(directories.length <= 3, `walked ${directories.length} directories`);
+  // The day the launch would land in is always included.
+  assert.ok(directories.some((entry) => entry.includes('2026') && entry.includes('10')));
+});
+
+test('a launch seconds old still looks in exactly one directory', () => {
+  const now = Date.parse('2026-08-10T12:00:00.000Z');
+  assert.equal(candidateDirectories('/root', now - 5_000, now).length, 1);
+});

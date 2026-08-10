@@ -164,6 +164,7 @@
   "{0} could not be rebound to its session ({1}); it stays live but unlabelled": "{0} could not be rebound to its session ({1}); it stays live but unlabelled",
   "launch mode={0} shell={1} args={2} cwd={3} sendText={4}": "launch mode={0} shell={1} args={2} cwd={3} sendText={4}",
   "launch mode={0} shell={1} args={2} cwd={3}": "launch mode={0} shell={1} args={2} cwd={3}",
+  "launched with no workspace folder, so this session is not tracked: no live status, no badge and no crash recovery for it": "launched with no workspace folder, so this session is not tracked: no live status, no badge and no crash recovery for it",
   "Codex Terminal activated (workbench.statusBar.visible=true)": "Codex Terminal activated (workbench.statusBar.visible=true)",
   "Codex Terminal activated (workbench.statusBar.visible=false — status bar button cannot render; use the activity bar)": "Codex Terminal activated (workbench.statusBar.visible=false — status bar button cannot render; use the activity bar)",
   "activation took {0}ms": "activation took {0}ms",

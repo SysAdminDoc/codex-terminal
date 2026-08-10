@@ -51,6 +51,15 @@ const IDLE_POLL_MS = 2_000;
 /** Codex appends several times a second; a short coalesce turns a burst into one read. */
 const WATCH_DEBOUNCE_MS = 80;
 /** Journals older than this are pruned; a week of crash history is plenty. */
+/**
+ * How long a launch may go unmatched before it is written off.
+ *
+ * Generous: Codex writes its rollout within seconds, but a first run has a trust prompt in
+ * front of it and an operator may take a while to answer. What matters is that it ends —
+ * retrying forever is what made a failed launch invisible.
+ */
+const BIND_GIVE_UP_MS = 10 * 60 * 1000;
+
 const JOURNAL_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
 
 export interface LiveSession {
@@ -383,6 +392,17 @@ export class SessionMonitor implements vscode.Disposable {
 
   private async tryBind(entry: Tracked): Promise<boolean> {
     const root = codexSessionsDirectory(this.options.codexHome());
+    // Only successes were ever logged, so a launch that never bound looked identical to one
+    // that bound instantly — and it retried every two seconds for the life of the window.
+    if (Date.now() - entry.launchedAt > BIND_GIVE_UP_MS) {
+      entry.bindable = false;
+      this.options.log.warn(
+        `gave up matching ${entry.label} to a Codex session after ${Math.round(
+          BIND_GIVE_UP_MS / 1000,
+        )}s; searched ${root} for rollouts in ${entry.cwd}`,
+      );
+      return false;
+    }
     const candidates = await scanRollouts(root, entry.cwd, entry.launchedAt, Date.now());
     const claimed = new Set(
       this.tracked
@@ -397,9 +417,9 @@ export class SessionMonitor implements vscode.Disposable {
     entry.sessionId = match.sessionId;
     this.attach(entry, match.filePath);
     this.options.log.info(`bound ${entry.label} to session ${match.sessionId}`);
-    // Fold the whole file, not just the tail: a rollout bound a few seconds late already
-    // holds the opening turn, and skipping it would report an idle session that is busy.
-    // Fold the whole file, not just the tail, a bounded chunk at a time.
+    // Fold the whole file, not just the tail, a bounded chunk at a time: a rollout bound a
+    // few seconds late already holds the opening turn, and skipping it would report an idle
+    // session that is busy.
     entry.activity =
       (await entry.tailer?.fold(entry.activity, reduceActivityLine))?.value ?? entry.activity;
     this.persist(entry);
