@@ -41,6 +41,9 @@ const TOKEN_COUNT = JSON.stringify({
     type: 'token_count',
     info: {
       total_token_usage: { input_tokens: 15667, output_tokens: 1138, total_tokens: 16805 },
+      // On the first turn the last request *is* the whole session, so both blocks agree.
+      // That coincidence is why dividing the lifetime total by the window looked correct.
+      last_token_usage: { input_tokens: 15667, output_tokens: 1138, total_tokens: 16805 },
       model_context_window: 258400,
     },
   },
@@ -68,6 +71,14 @@ const TOKEN_COUNT_FULL = JSON.stringify({
     type: 'token_count',
     info: {
       total_token_usage: {
+        input_tokens: 14434,
+        cached_input_tokens: 9984,
+        cache_write_input_tokens: 0,
+        output_tokens: 689,
+        reasoning_output_tokens: 445,
+        total_tokens: 15123,
+      },
+      last_token_usage: {
         input_tokens: 14434,
         cached_input_tokens: 9984,
         cache_write_input_tokens: 0,
@@ -153,8 +164,67 @@ test('token counts feed the context gauge without changing the status', () => {
   const state = reduceActivity(INITIAL_ACTIVITY, [TASK_STARTED, TOKEN_COUNT]);
   assert.equal(state.status, 'working');
   assert.equal(state.totalTokens, 16805);
+  assert.equal(state.contextTokens, 15667);
   const used = contextUsed(state);
   assert.ok(used !== undefined && used > 0.06 && used < 0.07);
+});
+
+/**
+ * The regression that motivated splitting the two figures apart. `total_token_usage` is the
+ * session-lifetime running total, so on a long session it exceeds the window by orders of
+ * magnitude — 180,572,005 against 258,400 on the machine this was measured on, and 120 of
+ * 121 local rollouts landed the old formula on a clamped 100%.
+ */
+test('a lifetime total far past the window still reports the real occupancy', () => {
+  const line = JSON.stringify({
+    ordinal: 90,
+    type: 'event_msg',
+    payload: {
+      type: 'token_count',
+      info: {
+        total_token_usage: {
+          input_tokens: 179870381,
+          cached_input_tokens: 176930560,
+          output_tokens: 701624,
+          total_tokens: 180572005,
+        },
+        last_token_usage: {
+          input_tokens: 145672,
+          cached_input_tokens: 143104,
+          output_tokens: 1308,
+          total_tokens: 146980,
+        },
+        model_context_window: 258400,
+      },
+    },
+  });
+  const state = reduceActivity(INITIAL_ACTIVITY, [TASK_STARTED, line]);
+  assert.equal(state.totalTokens, 180572005);
+  assert.equal(state.contextTokens, 145672);
+  const used = contextUsed(state);
+  assert.ok(used !== undefined && used > 0.56 && used < 0.57, `expected ~56%, got ${used}`);
+});
+
+/**
+ * A rollout old enough to predate `last_token_usage` reports nothing rather than falling back
+ * to the lifetime total — the fallback is the defect, not a degraded mode.
+ */
+test('a token_count without last_token_usage yields no context reading at all', () => {
+  const line = JSON.stringify({
+    ordinal: 91,
+    type: 'event_msg',
+    payload: {
+      type: 'token_count',
+      info: {
+        total_token_usage: { input_tokens: 900000, output_tokens: 1000, total_tokens: 901000 },
+        model_context_window: 258400,
+      },
+    },
+  });
+  const state = reduceActivity(INITIAL_ACTIVITY, [TASK_STARTED, line]);
+  assert.equal(state.totalTokens, 901000);
+  assert.equal(state.contextTokens, undefined);
+  assert.equal(contextUsed(state), undefined);
 });
 
 test('conversation records and malformed lines leave the status alone', () => {

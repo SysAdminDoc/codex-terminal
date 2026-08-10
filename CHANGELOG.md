@@ -3,6 +3,20 @@
 All notable changes to Codex Terminal are documented here.
 This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Fixed
+
+- **The context readout was a constant.** It divided the session's *lifetime* token total by the
+  model's context window and clamped the result at 100%, and the lifetime total is unbounded —
+  one session on the development machine reached 180,572,005 tokens against a 258,400-token
+  window. Folding all 121 local rollouts through the old reducer put 120 of them at exactly
+  100%; the number could not distinguish a session with room to spare from one about to
+  compact. Occupancy now comes from `last_token_usage.input_tokens`, the size of the prompt
+  Codex actually last sent. The same 121 rollouts now report a median of 53.4% and a maximum of
+  94.7%, with none clamped. A rollout too old to carry `last_token_usage` reports no percentage
+  at all rather than falling back to the total, because the fallback is the defect.
+
 ## [0.9.0] - 2026-08-10
 
 ### Added

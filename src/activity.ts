@@ -57,6 +57,15 @@ export interface SessionActivity {
   abortReason?: string;
   totalTokens?: number;
   contextWindow?: number;
+  /**
+   * Prompt size of the most recent request — what is actually sitting in the model's context.
+   *
+   * Distinct from `totalTokens`, which is the session-lifetime running total and therefore
+   * unbounded: a single session here reached 180,572,005 against a 258,400-token window.
+   * Dividing the lifetime total by the window is what made the context readout report 100%
+   * for 120 of the 121 rollouts on this machine, so the two numbers are kept apart.
+   */
+  contextTokens?: number;
   /** Billable input, cached input included — the rollout reports the total, not the remainder. */
   inputTokens?: number;
   cachedInputTokens?: number;
@@ -112,6 +121,7 @@ function tokensOf(payload: Record<string, unknown>): Pick<
   SessionActivity,
   | 'totalTokens'
   | 'contextWindow'
+  | 'contextTokens'
   | 'inputTokens'
   | 'cachedInputTokens'
   | 'outputTokens'
@@ -126,10 +136,15 @@ function tokensOf(payload: Record<string, unknown>): Pick<
   const input = numberAt(usage, 'input_tokens');
   const cached = numberAt(usage, 'cached_input_tokens');
   const output = numberAt(usage, 'output_tokens');
+  // The prompt Codex last sent, which is the only figure that answers "how full is the
+  // context". `last_token_usage.input_tokens` already includes the cached portion, so it is
+  // the whole prompt rather than the part that had to be re-sent.
+  const context = numberAt(objectAt(info, 'last_token_usage'), 'input_tokens');
   // `plan_type` rides on the rate-limit block beside the usage, not inside it.
   const plan = objectAt(payload, 'rate_limits')?.plan_type;
   return {
     ...(total !== undefined ? { totalTokens: total } : {}),
+    ...(context !== undefined ? { contextTokens: context } : {}),
     ...(input !== undefined ? { inputTokens: input } : {}),
     ...(cached !== undefined ? { cachedInputTokens: cached } : {}),
     ...(output !== undefined ? { outputTokens: output } : {}),
@@ -439,10 +454,17 @@ export function elapsedSeconds(activity: SessionActivity, now: number): number |
   return Math.max(0, Math.floor((now - activity.turnStartedAt) / 1000));
 }
 
-/** Fraction of the model's context window consumed, 0–1, when both numbers are known. */
+/**
+ * Fraction of the model's context window occupied, 0–1, when both numbers are known.
+ *
+ * Deliberately built on `contextTokens` alone. Falling back to the lifetime total would put
+ * the old defect back: it clamps to 1 on any session of length, so the readout would look
+ * populated while saying nothing. A rollout too old to carry `last_token_usage` reports
+ * nothing here instead, and the row drops the percentage the way it drops every absent fact.
+ */
 export function contextUsed(activity: SessionActivity): number | undefined {
-  if (!activity.totalTokens || !activity.contextWindow) {
+  if (!activity.contextTokens || !activity.contextWindow) {
     return undefined;
   }
-  return Math.min(1, activity.totalTokens / activity.contextWindow);
+  return Math.min(1, activity.contextTokens / activity.contextWindow);
 }

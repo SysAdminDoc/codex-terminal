@@ -61,16 +61,17 @@ test('a working session describes what it is doing, for how long, and its contex
     status: 'working',
     turnStartedAt: 1_000_000,
     totalTokens: 16_805,
+    contextTokens: 15_667,
     contextWindow: 258_400,
   });
-  assert.equal(describeActivity(state, 1_045_000), 'Working · 45s · 17k tokens · 7% context');
+  assert.equal(describeActivity(state, 1_045_000), 'Working · 45s · 17k tokens · 6% context');
 });
 
 test('the status bar reports the session closest to its context limit', () => {
   const sessions = [
-    activity({ totalTokens: 10_000, contextWindow: 100_000 }),
-    activity({ totalTokens: 80_000, contextWindow: 100_000 }),
-    activity({ totalTokens: 5_000, contextWindow: 100_000 }),
+    activity({ contextTokens: 10_000, contextWindow: 100_000 }),
+    activity({ contextTokens: 80_000, contextWindow: 100_000 }),
+    activity({ contextTokens: 5_000, contextWindow: 100_000 }),
   ];
   assert.equal(peakContextUsed(sessions), 0.8);
   assert.equal(statusBarText(1, 3, 0.8), `$(${SPINNER_ICON}) Codex 1/3 · 80%`);
@@ -78,7 +79,13 @@ test('the status bar reports the session closest to its context limit', () => {
 
 test('context is absent, never zero, until a session has reported both numbers', () => {
   // A 0% here would read as "plenty of room" at exactly the moment nothing is known.
-  assert.equal(peakContextUsed([activity(), activity({ totalTokens: 500 })]), undefined);
+  assert.equal(peakContextUsed([activity(), activity({ contextTokens: 500 })]), undefined);
+  // A lifetime total is not a context reading: the session total says nothing about how full
+  // the window is, so it must not stand in for one.
+  assert.equal(
+    peakContextUsed([activity({ totalTokens: 9_000_000, contextWindow: 100_000 })]),
+    undefined,
+  );
   assert.equal(statusBarText(0, 2, undefined), '$(sparkle) Codex 2');
 });
 
@@ -114,6 +121,7 @@ test('what a session row says out loud does not change just because time passed'
     status: 'working',
     turnStartedAt: 1_000_000,
     totalTokens: 16_805,
+    contextTokens: 15_667,
     contextWindow: 258_400,
     lastEventAt: '2026-08-09T16:00:00.000Z',
   });
