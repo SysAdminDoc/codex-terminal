@@ -71,6 +71,9 @@ export function describeActivity(activity: SessionActivity, now: number): string
   if (elapsed !== undefined) {
     parts.push(formatDuration(elapsed));
   }
+  if (activity.totalTokens) {
+    parts.push(`${formatTokens(activity.totalTokens)} tokens`);
+  }
   const used = contextUsed(activity);
   if (used !== undefined) {
     parts.push(`${Math.round(used * 100)}% context`);
@@ -78,13 +81,35 @@ export function describeActivity(activity: SessionActivity, now: number): string
   return parts.join(' · ');
 }
 
+/**
+ * Highest context usage across sessions, which is the number worth surfacing: the session
+ * closest to its limit is the one about to force a compaction. Undefined while no session
+ * has reported both a token count and a context window — a zero here would read as "plenty
+ * of room left" precisely when nothing is known.
+ */
+export function peakContextUsed(activities: readonly SessionActivity[]): number | undefined {
+  let peak: number | undefined;
+  for (const activity of activities) {
+    const used = contextUsed(activity);
+    if (used !== undefined && (peak === undefined || used > peak)) {
+      peak = used;
+    }
+  }
+  return peak;
+}
+
 /** Status bar text. `$(id)` is the workbench's inline-icon syntax, spin modifier included. */
-export function statusBarText(workingCount: number, liveCount: number): string {
+export function statusBarText(
+  workingCount: number,
+  liveCount: number,
+  peakContext?: number,
+): string {
+  const context = peakContext === undefined ? '' : ` · ${Math.round(peakContext * 100)}%`;
   if (workingCount > 0) {
-    return `$(${SPINNER_ICON}) Codex ${workingCount}/${liveCount}`;
+    return `$(${SPINNER_ICON}) Codex ${workingCount}/${liveCount}${context}`;
   }
   if (liveCount > 0) {
-    return `$(sparkle) Codex ${liveCount}`;
+    return `$(sparkle) Codex ${liveCount}${context}`;
   }
   return '$(sparkle) Codex';
 }

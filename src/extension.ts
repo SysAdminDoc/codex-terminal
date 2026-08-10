@@ -19,7 +19,7 @@ import { codexProfilesDirectory, profileNamesFromFiles } from './profiles';
 import { NotifyBridge } from './notify';
 import { SessionMonitor } from './monitor';
 import { JournalStore, interruptedSessions, type JournalSession } from './journal';
-import { statusBarText } from './present';
+import { peakContextUsed, statusBarText } from './present';
 import {
   codexHomeDirectory,
   codexSessionsDirectory,
@@ -653,9 +653,13 @@ function createStatusBarItem(context: vscode.ExtensionContext, monitor: SessionM
   context.subscriptions.push(item);
 
   const render = (): void => {
-    const live = monitor.live().length;
+    const sessions = monitor.live();
+    const live = sessions.length;
     const working = monitor.workingCount();
-    item.text = statusBarText(working, live);
+    const peak = config().get<boolean>('showContextInStatusBar', true)
+      ? peakContextUsed(sessions.map((session) => session.activity))
+      : undefined;
+    item.text = statusBarText(working, live, peak);
     item.tooltip =
       working > 0
         ? strings.status.workingTooltip(working, live)

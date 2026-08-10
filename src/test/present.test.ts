@@ -5,6 +5,7 @@ import { INITIAL_ACTIVITY, type SessionActivity } from '../activity';
 import {
   SPINNER_ICON,
   describeActivity,
+  peakContextUsed,
   formatDuration,
   formatTokens,
   presentStatus,
@@ -59,7 +60,23 @@ test('a working session describes what it is doing, for how long, and its contex
     totalTokens: 16_805,
     contextWindow: 258_400,
   });
-  assert.equal(describeActivity(state, 1_045_000), 'Working · 45s · 7% context');
+  assert.equal(describeActivity(state, 1_045_000), 'Working · 45s · 17k tokens · 7% context');
+});
+
+test('the status bar reports the session closest to its context limit', () => {
+  const sessions = [
+    activity({ totalTokens: 10_000, contextWindow: 100_000 }),
+    activity({ totalTokens: 80_000, contextWindow: 100_000 }),
+    activity({ totalTokens: 5_000, contextWindow: 100_000 }),
+  ];
+  assert.equal(peakContextUsed(sessions), 0.8);
+  assert.equal(statusBarText(1, 3, 0.8), `$(${SPINNER_ICON}) Codex 1/3 · 80%`);
+});
+
+test('context is absent, never zero, until a session has reported both numbers', () => {
+  // A 0% here would read as "plenty of room" at exactly the moment nothing is known.
+  assert.equal(peakContextUsed([activity(), activity({ totalTokens: 500 })]), undefined);
+  assert.equal(statusBarText(0, 2, undefined), '$(sparkle) Codex 2');
 });
 
 test('facts that are not known yet are omitted rather than shown blank', () => {

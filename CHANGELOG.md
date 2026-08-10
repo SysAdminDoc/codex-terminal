@@ -7,6 +7,11 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- Live context and token usage per session. Each running session shows tokens used and the
+  percentage of the model's context window consumed, and the status bar carries the highest
+  usage across sessions — the one about to force a compaction. Controlled by
+  `codexTerminal.showContextInStatusBar`. Both are omitted, never shown as zero, until a
+  session has reported a token count and a context window.
 - Workspace-trust declarations. In an untrusted workspace the settings that name the program,
   its arguments, or its environment are ignored, and the reason is shown; previously the
   extension was silently limited with no explanation. Virtual workspaces are declared
