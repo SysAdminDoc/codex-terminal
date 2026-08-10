@@ -80,6 +80,16 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   Everything that can wait (workbench preferences, the notification bridge, journal pruning,
   the recovery scan) is started without being awaited.
 
+### Performance
+
+- A bound session now reads its rollout when the file actually changes, instead of being
+  stat-ed and read every 600 ms along with every other live session. Cost scales with output
+  rather than with the number of agents you have open, which is the direction the rest of this
+  release pushes. The interval survives as a backstop — giving up on a silent turn is a
+  decision about elapsed time, and no file event will ever announce it — and a rollout that
+  cannot be watched (network shares, some filesystems) logs the reason and falls back to
+  polling rather than going quietly blind.
+
 ### Fixed
 
 - A session interrupted mid-turn no longer spins forever. Codex does not reliably record the
@@ -159,6 +169,16 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   grows. Filesystem-driven refreshes are also debounced — Codex appends to the active rollout
   several times a second, and each append previously re-walked the whole directory.
 
+### Performance
+
+- A bound session now reads its rollout when the file actually changes, instead of being
+  stat-ed and read every 600 ms along with every other live session. Cost scales with output
+  rather than with the number of agents you have open, which is the direction the rest of this
+  release pushes. The interval survives as a backstop — giving up on a silent turn is a
+  decision about elapsed time, and no file event will ever announce it — and a rollout that
+  cannot be watched (network shares, some filesystems) logs the reason and falls back to
+  polling rather than going quietly blind.
+
 ### Fixed
 
 - A file handle in the rollout tailer is now closed through the read promise rather than a
@@ -188,6 +208,16 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   ownership survives Codex owning the tab text.
 
 ## [0.3.0] - 2026-08-09
+
+### Performance
+
+- A bound session now reads its rollout when the file actually changes, instead of being
+  stat-ed and read every 600 ms along with every other live session. Cost scales with output
+  rather than with the number of agents you have open, which is the direction the rest of this
+  release pushes. The interval survives as a backstop — giving up on a silent turn is a
+  decision about elapsed time, and no file event will ever announce it — and a rollout that
+  cannot be watched (network shares, some filesystems) logs the reason and falls back to
+  polling rather than going quietly blind.
 
 ### Fixed
 

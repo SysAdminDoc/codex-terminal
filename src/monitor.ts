@@ -1,3 +1,5 @@
+import { watch, type FSWatcher } from 'node:fs';
+
 import * as vscode from 'vscode';
 
 import {
@@ -32,9 +34,21 @@ import { RolloutTailer } from './tail';
  * the handful that belong to open tabs.
  */
 
-/** Fast enough that the spinner tracks Codex, slow enough to stay invisible on CPU. */
+/**
+ * Fast enough that the spinner tracks Codex, slow enough to stay invisible on CPU.
+ *
+ * Only used for sessions the filesystem watcher could not cover. A bound rollout is watched
+ * instead, so the common case costs one read per actual append rather than one stat per
+ * session every 600 ms — which is the difference that matters once several agents are running.
+ */
 const WORKING_POLL_MS = 600;
+/**
+ * Backstop interval. It keeps running even when everything is watched, because giving up on a
+ * silent turn is a decision about elapsed *time*, and no file event will ever announce it.
+ */
 const IDLE_POLL_MS = 2_000;
+/** Codex appends several times a second; a short coalesce turns a burst into one read. */
+const WATCH_DEBOUNCE_MS = 80;
 /** Journals older than this are pruned; a week of crash history is plenty. */
 const JOURNAL_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
 
@@ -56,6 +70,8 @@ export interface LiveSession {
 
 interface Tracked extends LiveSession {
   tailer?: RolloutTailer;
+  watcher?: FSWatcher;
+  watchTimer?: NodeJS.Timeout;
   closed: boolean;
 }
 
@@ -143,7 +159,7 @@ export class SessionMonitor implements vscode.Disposable {
     if (details.rolloutPath) {
       // The first poll folds the file from the start, which is exactly what recovering the
       // activity state of a conversation already in progress requires.
-      entry.tailer = new RolloutTailer(details.rolloutPath);
+      this.attach(entry, details.rolloutPath);
     }
     this.tracked.push(entry);
     this.persist(entry);
@@ -157,6 +173,7 @@ export class SessionMonitor implements vscode.Disposable {
       return;
     }
     entry.closed = true;
+    this.unwatch(entry);
     entry.activity = { ...entry.activity, status: 'idle' };
     this.persist(entry, Date.now());
     this.changes.fire();
@@ -193,10 +210,77 @@ export class SessionMonitor implements vscode.Disposable {
     );
   }
 
+  /** Start tailing a rollout, and watch it so appends do not have to wait for the next tick. */
+  private attach(entry: Tracked, rolloutPath: string): void {
+    entry.rolloutPath = rolloutPath;
+    entry.tailer = new RolloutTailer(rolloutPath);
+    try {
+      // `persistent: false` so a watcher can never hold the host (or a test run) open.
+      const watcher = watch(rolloutPath, { persistent: false }, () => this.onFileEvent(entry));
+      watcher.on('error', (error) => {
+        // Network shares and some filesystems cannot watch. Say so and fall back to polling
+        // rather than going quietly blind.
+        this.options.log.info(
+          `cannot watch ${rolloutPath} (${error.message}); polling this session instead`,
+        );
+        this.unwatch(entry);
+        this.reschedule();
+      });
+      entry.watcher = watcher;
+    } catch (error) {
+      this.options.log.info(
+        `cannot watch ${rolloutPath} (${
+          error instanceof Error ? error.message : String(error)
+        }); polling this session instead`,
+      );
+    }
+  }
+
+  private unwatch(entry: Tracked): void {
+    if (entry.watchTimer) {
+      clearTimeout(entry.watchTimer);
+      entry.watchTimer = undefined;
+    }
+    entry.watcher?.close();
+    entry.watcher = undefined;
+  }
+
+  private onFileEvent(entry: Tracked): void {
+    if (entry.closed || this.stopped || entry.watchTimer) {
+      return;
+    }
+    entry.watchTimer = setTimeout(() => {
+      entry.watchTimer = undefined;
+      void this.readWatched(entry);
+    }, WATCH_DEBOUNCE_MS);
+    // Debounce timers must not hold the process open either.
+    entry.watchTimer.unref?.();
+  }
+
+  private async readWatched(entry: Tracked): Promise<void> {
+    if (entry.closed || this.stopped) {
+      return;
+    }
+    try {
+      if (await this.pollOne(entry)) {
+        this.changes.fire();
+        this.reschedule();
+      }
+    } catch (error) {
+      this.options.log.warn(
+        `watched read failed for ${entry.label}: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      );
+    }
+  }
+
   private reschedule(): void {
-    const live = this.live();
-    const wanted =
-      live.length === 0 ? 0 : live.some((entry) => isWorking(entry.activity)) ? WORKING_POLL_MS : IDLE_POLL_MS;
+    const live = this.liveTracked();
+    // A watched session does not need the fast tick: its appends arrive as events. The slow
+    // tick still runs for everything, because `settleOne` is driven by the clock.
+    const needsFastPoll = live.some((entry) => isWorking(entry.activity) && !entry.watcher);
+    const wanted = live.length === 0 ? 0 : needsFastPoll ? WORKING_POLL_MS : IDLE_POLL_MS;
     if (wanted === this.currentInterval) {
       return;
     }
@@ -289,13 +373,12 @@ export class SessionMonitor implements vscode.Disposable {
       return false;
     }
 
-    entry.rolloutPath = match.filePath;
     entry.sessionId = match.sessionId;
-    entry.tailer = new RolloutTailer(match.filePath);
+    this.attach(entry, match.filePath);
     this.options.log.info(`bound ${entry.label} to session ${match.sessionId}`);
     // Fold the whole file, not just the tail: a rollout bound a few seconds late already
     // holds the opening turn, and skipping it would report an idle session that is busy.
-    const lines = await entry.tailer.poll();
+    const lines = (await entry.tailer?.poll()) ?? [];
     entry.activity = reduceActivity(entry.activity, lines);
     this.persist(entry);
     return true;
@@ -372,6 +455,9 @@ export class SessionMonitor implements vscode.Disposable {
    */
   shutdown(): void {
     this.stopped = true;
+    for (const entry of this.tracked) {
+      this.unwatch(entry);
+    }
     if (this.timer) {
       clearInterval(this.timer);
       this.timer = undefined;
@@ -388,6 +474,9 @@ export class SessionMonitor implements vscode.Disposable {
     if (this.timer) {
       clearInterval(this.timer);
       this.timer = undefined;
+    }
+    for (const entry of this.tracked) {
+      this.unwatch(entry);
     }
     this.changes.dispose();
   }

@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { appendFile, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import Module from 'node:module';
 import { tmpdir } from 'node:os';
 import * as path from 'node:path';
@@ -258,5 +258,76 @@ test('a session whose rollout has gone quiet stops counting as working', async (
       messages.some((message) => message.includes('no longer counting it as working')),
       'the demotion is logged, not silent',
     );
+  });
+});
+
+test('an append reaches the session through the watcher, with no poll', async () => {
+  await withMonitor(async ({ monitor, directory }) => {
+    const rolloutPath = path.join(directory, 'rollout.jsonl');
+    await writeFile(rolloutPath, rollout(), 'utf8');
+    monitor.track(fakeTerminal(), {
+      cwd: directory,
+      project: 'fixture',
+      label: 'fixture',
+      mode: 'new',
+      key: 'k',
+      sessionId: 'session-abc',
+      rolloutPath,
+    });
+
+    let fired = 0;
+    monitor.onDidChange(() => {
+      fired += 1;
+    });
+
+    await appendFile(
+      rolloutPath,
+      `${JSON.stringify({
+        timestamp: new Date().toISOString(),
+        ordinal: 3,
+        type: 'event_msg',
+        payload: {
+          type: 'item_completed',
+          item: { type: 'FileChange', changes: { '/repo/appended.ts': { type: 'add' } } },
+        },
+      })}\n`,
+      'utf8',
+    );
+
+    // No `poll()` here on purpose: if this only worked because of the interval, the feature
+    // would not exist. The wait is generous enough to absorb the debounce.
+    const deadline = Date.now() + 4000;
+    while (Date.now() < deadline && monitor.live()[0].activity.lastItem?.kind !== 'fileChange') {
+      await new Promise((resolve) => setTimeout(resolve, 40));
+    }
+
+    assert.equal(monitor.live()[0].activity.lastItem?.kind, 'fileChange');
+    assert.equal(monitor.live()[0].activity.lastItem?.subject, 'appended.ts');
+    assert.ok(fired > 0, 'the view is told to redraw');
+  });
+});
+
+test('a rollout that cannot be watched still binds and falls back to polling', async () => {
+  await withMonitor(async ({ monitor, directory }) => {
+    // A path that does not exist cannot be watched; the session must still tail once the
+    // file appears rather than being dropped.
+    const rolloutPath = path.join(directory, 'not-yet.jsonl');
+    monitor.track(fakeTerminal(), {
+      cwd: directory,
+      project: 'fixture',
+      label: 'fixture',
+      mode: 'new',
+      key: 'k',
+      sessionId: 'session-abc',
+      rolloutPath,
+    });
+    assert.ok(
+      messages.some((message) => message.includes('polling this session instead')),
+      'the fallback is logged rather than silently going blind',
+    );
+
+    await writeFile(rolloutPath, rollout(), 'utf8');
+    await (monitor as unknown as { poll(): Promise<void> }).poll();
+    assert.equal(monitor.live()[0].activity.status, 'working');
   });
 });
