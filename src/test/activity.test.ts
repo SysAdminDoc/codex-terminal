@@ -497,3 +497,61 @@ test('an older token_count without the cache fields still yields a total', () =>
   assert.equal(state.cachedInputTokens, undefined);
   assert.equal(state.plan, undefined);
 });
+
+/**
+ * Verbatim shape from a 0.147 rollout on a `pro` account: a populated weekly `primary`, a
+ * `secondary` that is present as a key and null as a value. 55,975 of the 55,977 `token_count`
+ * records in the local store carry `primary` this way.
+ */
+const RATE_LIMITED = JSON.stringify({
+  ordinal: 95,
+  type: 'event_msg',
+  payload: {
+    type: 'token_count',
+    info: {
+      total_token_usage: { input_tokens: 1000, output_tokens: 10, total_tokens: 1010 },
+      last_token_usage: { input_tokens: 1000, output_tokens: 10, total_tokens: 1010 },
+      model_context_window: 258400,
+    },
+    rate_limits: {
+      limit_id: 'premium',
+      primary: { used_percent: 73.0, window_minutes: 10080, resets_at: 1786825753 },
+      secondary: null,
+      plan_type: 'pro',
+    },
+  },
+});
+
+test('the plan window Codex reports is folded, seconds converted to milliseconds', () => {
+  const state = reduceActivity(INITIAL_ACTIVITY, [TASK_STARTED, RATE_LIMITED]);
+  assert.deepEqual(state.rateLimits, {
+    primary: { usedPercent: 73, windowMinutes: 10080, resetsAt: 1786825753000 },
+  });
+  assert.equal(state.plan, 'pro');
+});
+
+test('a null window stays absent rather than becoming a zero', () => {
+  const state = reduceActivity(INITIAL_ACTIVITY, [TASK_STARTED, RATE_LIMITED]);
+  // A zero would read as "nothing spent" at exactly the moment nothing is known — the same
+  // mistake the context gauge made by clamping.
+  assert.equal(state.rateLimits?.secondary, undefined);
+  const none = JSON.stringify({
+    ordinal: 96,
+    type: 'event_msg',
+    payload: { type: 'token_count', info: { model_context_window: 1 }, rate_limits: { plan_type: 'pro' } },
+  });
+  assert.equal(reduceActivityLine(INITIAL_ACTIVITY, none).rateLimits, undefined);
+});
+
+test('rate limits survive a record that carries no usage block at all', () => {
+  const limitsOnly = JSON.stringify({
+    ordinal: 97,
+    type: 'event_msg',
+    payload: {
+      type: 'token_count',
+      rate_limits: { primary: { used_percent: 12.5, window_minutes: 300 } },
+    },
+  });
+  const state = reduceActivityLine(INITIAL_ACTIVITY, limitsOnly);
+  assert.deepEqual(state.rateLimits, { primary: { usedPercent: 12.5, windowMinutes: 300 } });
+});

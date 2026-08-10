@@ -7,6 +7,16 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **How much of your plan is left, on the tab you are looking at.** Codex writes `rate_limits`
+  into its session file beside the token counts — 55,975 of the 55,977 usage records in the
+  local store carry a populated window — and none of it was read. Each session row now ends
+  with `73% weekly limit`, the tooltip adds `· resets in 3d 4h`, and the status bar tooltip
+  carries the tightest window across every live session, since they all bill one account. On a
+  subscription this is the figure that stops the next turn; the dollar estimate is a list-price
+  equivalent nobody is billed. A window Codex does not report — the normal state of the second
+  slot on a `pro` plan — shows nothing rather than a zero, and the countdown is kept out of the
+  accessible name so a focused row is not re-announced every second.
+
 - **`codexTerminal.applyWorkbenchSettings`.** Whether the extension may set the three
   `terminal.integrated.*` settings a Codex tab needs. *Revert Workbench Settings* now turns it
   off, which is what makes a revert survive the configuration-change event the revert itself

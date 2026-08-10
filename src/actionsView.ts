@@ -7,9 +7,11 @@ import {
   announceActivity,
   describeActivity,
   describeItem,
+  describeRateLimit,
   formatDuration,
   formatTokens,
   presentStatus,
+  tightestWindow,
 } from './present';
 import { estimateCost, formatCost, type RateTable } from './cost';
 import { describeMcpServer, describePlugin, parseMcpList, parsePluginList } from './inventory';
@@ -211,6 +213,12 @@ function buildTooltip(
         Math.round(used * 100),
       )}`,
     );
+  }
+  // Above the cost line on purpose: on a subscription the plan window is the real budget and
+  // the dollar figure is a list-price equivalent nobody is billed.
+  const limit = describeRateLimit(tightestWindow(session.activity), now);
+  if (limit) {
+    lines.push(`- ${strings.running.rateLimit(limit)}`);
   }
   const estimate = estimateCost(session.activity, rates);
   if (estimate) {

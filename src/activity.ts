@@ -41,6 +41,21 @@ export interface ActivityItem {
   subject: string;
 }
 
+/** One rate-limit window as Codex reports it beside the token counts. */
+export interface RateLimitWindow {
+  /** 0–100. Codex sends it as a percentage, and it is kept in those units. */
+  usedPercent: number;
+  /** Length of the window; 10080 is the weekly one this account is on. */
+  windowMinutes?: number;
+  /** Epoch ms the window rolls over. Codex writes unix seconds. */
+  resetsAt?: number;
+}
+
+export interface RateLimitWindows {
+  primary?: RateLimitWindow;
+  secondary?: RateLimitWindow;
+}
+
 export interface SessionActivity {
   status: ActivityStatus;
   /** Most recent `item_completed`, or undefined before Codex has finished a step. */
@@ -78,6 +93,13 @@ export interface SessionActivity {
    * per token at all, which is the difference between an estimate and a fiction.
    */
   plan?: string;
+  /**
+   * How much of the plan's rate-limit windows this account has spent, as Codex last reported
+   * it. On a subscription this is the number that actually constrains the next turn — money
+   * is not — and Codex writes it into every `token_count` record: 55,975 of the 55,977 in the
+   * local store carry a populated `primary`.
+   */
+  rateLimits?: RateLimitWindows;
   /** Highest `ordinal` folded in; rollout records are strictly ordered by it. */
   ordinal: number;
   /** Turns completed in this rollout. */
@@ -126,10 +148,14 @@ function tokensOf(payload: Record<string, unknown>): Pick<
   | 'cachedInputTokens'
   | 'outputTokens'
   | 'plan'
+  | 'rateLimits'
 > {
+  const limits = rateLimitsOf(objectAt(payload, 'rate_limits'));
   const info = objectAt(payload, 'info');
   if (!info) {
-    return {};
+    // A record can carry the limits without the usage, and the limits are the half that
+    // still constrains the next turn — so do not discard them along with the missing half.
+    return limits ? { rateLimits: limits } : {};
   }
   const usage = objectAt(info, 'total_token_usage');
   const total = numberAt(usage, 'total_tokens');
@@ -152,6 +178,43 @@ function tokensOf(payload: Record<string, unknown>): Pick<
       ? { contextWindow: numberAt(info, 'model_context_window') }
       : {}),
     ...(typeof plan === 'string' && plan ? { plan } : {}),
+    ...(limits ? { rateLimits: limits } : {}),
+  };
+}
+
+/**
+ * Read the rate-limit block, keeping only windows that carry a usable percentage.
+ *
+ * `primary` and `secondary` are both present as keys and both frequently `null` — a `pro`
+ * account reports a weekly `primary` and no `secondary` at all — so an absent window has to
+ * stay absent rather than becoming a zero. A zero here would read as "nothing spent" at
+ * exactly the moment nothing is known, which is the same mistake the context gauge made.
+ */
+function rateLimitsOf(block: Record<string, unknown> | undefined): RateLimitWindows | undefined {
+  if (!block) {
+    return undefined;
+  }
+  const primary = rateLimitWindowOf(objectAt(block, 'primary'));
+  const secondary = rateLimitWindowOf(objectAt(block, 'secondary'));
+  if (!primary && !secondary) {
+    return undefined;
+  }
+  return { ...(primary ? { primary } : {}), ...(secondary ? { secondary } : {}) };
+}
+
+function rateLimitWindowOf(
+  window: Record<string, unknown> | undefined,
+): RateLimitWindow | undefined {
+  const usedPercent = numberAt(window, 'used_percent');
+  if (usedPercent === undefined) {
+    return undefined;
+  }
+  const windowMinutes = numberAt(window, 'window_minutes');
+  const resetsAt = epochMs(window?.resets_at);
+  return {
+    usedPercent,
+    ...(windowMinutes !== undefined ? { windowMinutes } : {}),
+    ...(resetsAt !== undefined ? { resetsAt } : {}),
   };
 }
 

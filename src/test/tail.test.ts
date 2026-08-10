@@ -123,29 +123,34 @@ test('a file many chunks long is folded once, in order, without materialising it
     }
 
     const tailer = new RolloutTailer(filePath);
-    const before = process.memoryUsage().heapUsed;
+    const baseline = process.memoryUsage().external;
     let seen = 0;
     let first = '';
     let last = '';
+    let externalAtFirstLine = 0;
     const { lines, dropped } = await tailer.fold(undefined, (_, text) => {
       if (seen === 0) {
         first = text;
+        // Sampled here rather than after the fold, because heap totals depend on when the
+        // collector happens to run and this does not: the read buffer is certainly alive at
+        // the moment the first line is handed over. A reader that took the whole unread span
+        // in one allocation — the shape this replaced — would be holding ~32 MB right now.
+        externalAtFirstLine = process.memoryUsage().external - baseline;
       }
       last = text;
       seen += 1;
       return undefined;
     });
-    const grew = process.memoryUsage().heapUsed - before;
 
     assert.equal(lines, count);
     assert.equal(seen, count);
     assert.equal(dropped, 0);
     assert.ok(first.endsWith(',"n":0}'), first.slice(-16));
     assert.ok(last.endsWith(`,"n":${count - 1}}`), last.slice(-16));
-    // The regression: the whole unread span used to become one buffer, one string and one
-    // array at once. This file is ~32 MB, so the old shape put ~96 MB on the heap before a
-    // single line was folded; the chunked one never holds more than a chunk.
-    assert.ok(grew < 16 * 1024 * 1024, `heap grew ${Math.round(grew / 1024 / 1024)} MB`);
+    assert.ok(
+      externalAtFirstLine < 4 * 1024 * 1024,
+      `read buffer held ${Math.round(externalAtFirstLine / 1024 / 1024)} MB of a ~32 MB file`,
+    );
   });
 });
 

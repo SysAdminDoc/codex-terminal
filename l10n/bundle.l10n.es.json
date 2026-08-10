@@ -26,6 +26,7 @@
   "{0} tokens — {1}% of the context window": "{0} tokens — {1} % de la ventana de contexto",
   "Session `{0}`": "Sesión `{0}`",
   "{0} at your rates for {1}": "{0} según sus tarifas para {1}",
+  "Used {0}": "Consumido: {0}",
   "Billed to your {0} plan, not per token — this is what the same tokens would list at.": "Se factura a su plan {0}, no por token: esto es lo que costarían esos mismos tokens a precio de lista.",
   "No cost shown: {0} is not in `codexTerminal.modelRates`. Add it there to price this session.": "No se muestra el coste: {0} no figura en `codexTerminal.modelRates`. Añádalo allí para poner precio a esta sesión.",
   "Last step: {0}": "Último paso: {0}",

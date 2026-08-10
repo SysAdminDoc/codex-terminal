@@ -12,6 +12,7 @@ import {
   isWorking,
   silentFor,
   type ActivityItem,
+  type RateLimitWindow,
   type SessionActivity,
 } from './activity';
 import { estimateCost, formatCost, type RateTable } from './cost';
@@ -85,6 +86,105 @@ export function formatDuration(seconds: number): string {
     return `${minutes}m ${seconds % 60}s`;
   }
   return `${Math.floor(minutes / 60)}h ${minutes % 60}m`;
+}
+
+/**
+ * A countdown, at the resolution the number is worth reading at.
+ *
+ * `formatDuration` is for a turn and tops out at hours-and-minutes; a plan window can be days
+ * away, and "76h 12m" is not a figure anyone converts in their head.
+ */
+export function formatCountdown(seconds: number): string {
+  if (seconds <= 0) {
+    return 'now';
+  }
+  const days = Math.floor(seconds / 86_400);
+  const hours = Math.floor((seconds % 86_400) / 3_600);
+  if (days > 0) {
+    return hours > 0 ? `${days}d ${hours}h` : `${days}d`;
+  }
+  return formatDuration(seconds);
+}
+
+/**
+ * Name a rate-limit window by its length, because Codex sends minutes and nothing else.
+ *
+ * Only the two lengths Codex actually uses are named; anything else is described by its own
+ * duration rather than guessed at, so a new window shape reads as itself instead of being
+ * mislabelled as one of these.
+ */
+export function describeWindowLength(minutes: number | undefined): string {
+  if (minutes === undefined) {
+    return 'plan limit';
+  }
+  if (minutes === 10_080) {
+    return 'weekly limit';
+  }
+  if (minutes === 300) {
+    return '5-hour limit';
+  }
+  if (minutes % 1440 === 0) {
+    return `${minutes / 1440}-day limit`;
+  }
+  return minutes % 60 === 0 ? `${minutes / 60}-hour limit` : `${minutes}-minute limit`;
+}
+
+/**
+ * The rate-limit window closest to being spent, which is the one that will stop the next turn.
+ *
+ * Undefined when no window has been reported. A subscription reports a weekly `primary` and no
+ * `secondary` at all, so picking "the primary one" would show nothing on a plan whose binding
+ * constraint happens to be the other.
+ */
+export function tightestWindow(activity: SessionActivity): RateLimitWindow | undefined {
+  const windows = [activity.rateLimits?.primary, activity.rateLimits?.secondary].filter(
+    (window): window is RateLimitWindow => window !== undefined,
+  );
+  let tightest: RateLimitWindow | undefined;
+  for (const window of windows) {
+    if (!tightest || window.usedPercent > tightest.usedPercent) {
+      tightest = window;
+    }
+  }
+  return tightest;
+}
+
+/**
+ * "73% of the weekly limit · resets in 3d 4h", or nothing at all.
+ *
+ * On a subscription this is the figure that constrains the next turn — a dollar estimate is
+ * a list-price equivalent nobody is billed. The reset time is the half that makes it
+ * actionable: 73% spent matters very differently three hours and three days from a rollover.
+ */
+export function describeRateLimit(
+  window: RateLimitWindow | undefined,
+  now: number,
+): string | undefined {
+  if (!window) {
+    return undefined;
+  }
+  const parts = [
+    `${Math.round(window.usedPercent)}% of the ${describeWindowLength(window.windowMinutes)}`,
+  ];
+  if (window.resetsAt !== undefined) {
+    const seconds = Math.round((window.resetsAt - now) / 1000);
+    parts.push(seconds <= 0 ? 'resetting' : `resets in ${formatCountdown(seconds)}`);
+  }
+  return parts.join(' · ');
+}
+
+/** Highest rate-limit pressure across sessions; they share one account, so they share it. */
+export function peakRateLimit(
+  activities: readonly SessionActivity[],
+): RateLimitWindow | undefined {
+  let peak: RateLimitWindow | undefined;
+  for (const activity of activities) {
+    const window = tightestWindow(activity);
+    if (window && (!peak || window.usedPercent > peak.usedPercent)) {
+      peak = window;
+    }
+  }
+  return peak;
 }
 
 export function formatTokens(tokens: number): string {
@@ -167,6 +267,11 @@ export function describeActivity(
   const used = contextUsed(activity);
   if (used !== undefined) {
     parts.push(`${Math.round(used * 100)}% context`);
+  }
+  // On a subscription this, not the cost estimate, is what actually stops the next turn.
+  const window = tightestWindow(activity);
+  if (window) {
+    parts.push(`${Math.round(window.usedPercent)}% ${describeWindowLength(window.windowMinutes)}`);
   }
   // Only when the operator has priced the model. An unpriced session says so in the tooltip,
   // where there is room to name the model, rather than putting a hole in the row.

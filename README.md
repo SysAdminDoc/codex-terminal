@@ -210,6 +210,20 @@ for everything the extension says at runtime — and a test asserts they stay co
 directions, so adding an English string without a translation fails the build rather than
 falling back silently. Adding a locale means those two files and one entry in the test's list.
 
+### How much of your plan is left
+
+Every session row ends with the share of your rate-limit window Codex has reported spending —
+`73% weekly limit` — and the tooltip adds when it rolls over: `73% of the weekly limit · resets
+in 3d 4h`. The status bar tooltip carries the tightest window across every live session, because
+they all bill one account.
+
+Nothing is computed or guessed. Codex writes `rate_limits` into its session file beside the
+token counts, and this reads it: 55,975 of the 55,977 usage records in the local store carry a
+populated window. Where Codex reports no window — which is the normal state of the second slot
+on a `pro` plan — the row and tooltip say nothing rather than showing a zero.
+
+On a subscription this, not the cost estimate below, is the number that stops the next turn.
+
 ### Cost estimates, and why none ship with the extension
 
 A session row can show what it cost, but only at prices you supply:

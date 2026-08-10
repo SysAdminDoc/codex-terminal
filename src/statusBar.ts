@@ -1,7 +1,13 @@
 import * as vscode from 'vscode';
 
 import type { SessionMonitor } from './monitor';
-import { DEFAULT_STALL_SECONDS, peakContextUsed, statusBarText } from './present';
+import {
+  DEFAULT_STALL_SECONDS,
+  describeRateLimit,
+  peakContextUsed,
+  peakRateLimit,
+  statusBarText,
+} from './present';
 import { animationAllowed, config } from './services';
 import { strings } from './strings';
 
@@ -32,7 +38,17 @@ export function createStatusBarItem(context: vscode.ExtensionContext, monitor: S
         : live > 0
           ? strings.status.liveTooltip(live)
           : strings.status.tooltip();
-    item.tooltip = stalled > 0 ? `${base} ${strings.status.stalledTooltip(stalled)}` : base;
+    const parts = [stalled > 0 ? `${base} ${strings.status.stalledTooltip(stalled)}` : base];
+    // Every session bills the same account, so the tightest window across all of them is the
+    // one that will stop the next turn, whichever tab it is started from.
+    const limit = describeRateLimit(
+      peakRateLimit(sessions.map((session) => session.activity)),
+      Date.now(),
+    );
+    if (limit) {
+      parts.push(strings.running.rateLimit(limit));
+    }
+    item.tooltip = parts.join(' ');
     // Counts only. `item.text` carries the context percentage, which moves constantly, and
     // VS Code falls back to the text when no accessible label is set — so leaving this off
     // would make the item re-announce itself on every render to anyone focused on it.

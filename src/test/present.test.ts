@@ -7,7 +7,11 @@ import {
   announceActivity,
   describeActivity,
   motionAllowed,
+  describeRateLimit,
+  describeWindowLength,
   peakContextUsed,
+  peakRateLimit,
+  tightestWindow,
   formatDuration,
   formatTokens,
   presentStatus,
@@ -199,4 +203,81 @@ test('ordering does not rank silent against idle', () => {
     { activity: { ...INITIAL_ACTIVITY, status: 'idle' as const }, launchedAt: 2 },
   ]);
   assert.deepEqual(ordered.map((entry) => entry.launchedAt), [2, 1]);
+});
+
+test('a plan window is named by its length and counted down', () => {
+  const now = Date.parse('2026-08-10T12:00:00.000Z');
+  assert.equal(
+    describeRateLimit(
+      { usedPercent: 73, windowMinutes: 10_080, resetsAt: now + 3 * 86_400_000 + 4 * 3_600_000 },
+      now,
+    ),
+    '73% of the weekly limit · resets in 3d 4h',
+  );
+  assert.equal(
+    describeRateLimit({ usedPercent: 12.4, windowMinutes: 300, resetsAt: now + 5_400_000 }, now),
+    '12% of the 5-hour limit · resets in 1h 30m',
+  );
+});
+
+test('an unknown window length is described rather than mislabelled', () => {
+  assert.equal(describeWindowLength(undefined), 'plan limit');
+  assert.equal(describeWindowLength(1_440), '1-day limit');
+  assert.equal(describeWindowLength(90), '90-minute limit');
+});
+
+test('a window with no reset time still reports what has been spent', () => {
+  assert.equal(describeRateLimit({ usedPercent: 40 }, 0), '40% of the plan limit');
+  assert.equal(describeRateLimit(undefined, 0), undefined);
+});
+
+test('a window already past its reset says so instead of counting backwards', () => {
+  assert.equal(
+    describeRateLimit({ usedPercent: 99, windowMinutes: 300, resetsAt: 500 }, 10_000),
+    '99% of the 5-hour limit · resetting',
+  );
+});
+
+test('the tightest window wins, across both slots and across sessions', () => {
+  const spent = activity({
+    rateLimits: {
+      primary: { usedPercent: 20, windowMinutes: 10_080 },
+      secondary: { usedPercent: 91, windowMinutes: 300 },
+    },
+  });
+  // Every session bills one account, so the binding constraint is the worst window anywhere.
+  assert.equal(tightestWindow(spent)?.usedPercent, 91);
+  assert.equal(
+    peakRateLimit([activity({ rateLimits: { primary: { usedPercent: 5 } } }), spent])?.usedPercent,
+    91,
+  );
+  assert.equal(peakRateLimit([activity()]), undefined);
+});
+
+test('the session row carries the plan window beside the context gauge', () => {
+  const state = activity({
+    status: 'working',
+    turnStartedAt: 1_000_000,
+    totalTokens: 16_805,
+    contextTokens: 15_667,
+    contextWindow: 258_400,
+    rateLimits: { primary: { usedPercent: 73, windowMinutes: 10_080 } },
+  });
+  assert.equal(
+    describeActivity(state, 1_045_000),
+    'Working · 45s · 17k tokens · 6% context · 73% weekly limit',
+  );
+});
+
+test('what a row says out loud still excludes the numbers that tick', () => {
+  // The plan window's countdown moves every second; the accessible name must not.
+  const state = activity({
+    status: 'working',
+    turnStartedAt: 1_000_000,
+    rateLimits: { primary: { usedPercent: 73, windowMinutes: 10_080, resetsAt: 9_000_000 } },
+    lastEventAt: '2026-08-09T16:00:00.000Z',
+  });
+  const start = Date.parse('2026-08-09T16:00:00.000Z');
+  assert.equal(announceActivity(state, start), announceActivity(state, start + 30_000));
+  assert.ok(!announceActivity(state, start).includes('%'));
 });

@@ -42,6 +42,7 @@ export const strings = {
     sessionId: (id: string): string => vscode.l10n.t('Session `{0}`', id),
     cost: (amount: string, model: string): string =>
       vscode.l10n.t('{0} at your rates for {1}', amount, model),
+    rateLimit: (summary: string): string => vscode.l10n.t('Used {0}', summary),
     costOnPlan: (plan: string): string =>
       vscode.l10n.t(
         'Billed to your {0} plan, not per token — this is what the same tokens would list at.',
