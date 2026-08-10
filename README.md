@@ -177,6 +177,31 @@ and nothing while wedged, so "finished" would be a guess. The threshold is 10 mi
 working turn was 269 seconds across 80,779 samples. Any new output puts the session straight back
 to working.
 
+### What a screen reader hears
+
+A spinner that helps a sighted operator is a text label that changes several times a minute, and
+a label that changes is a label that gets read out. Two things keep that from turning into noise:
+
+- **The status bar does not announce itself.** VS Code builds a status bar entry as a plain
+  `<a role="button">` with no `aria-live` region anywhere around it, and re-applies its
+  `aria-label` only when the string actually differs. Nothing there is announced unless you focus
+  the status bar (*Focus Status Bar*), so the spinner is silent by construction.
+- **Nothing that merely ticks is part of an accessible name.** A tree row *is* re-read when its
+  name changes while it has focus, so the accessible name of a running session carries only the
+  status, whether it has gone quiet, and how many turns have finished. Elapsed time, token totals
+  and context percentage stay in the visible row and the tooltip, where a number that moves every
+  second belongs. In practice a session announces itself when it starts working, when it goes
+  quiet, and when a turn ends — not once per refresh.
+
+The status bar item announces the transition that matters most, too: finishing the last turn
+changes it from *working in N sessions* to *N sessions open, none working*, rather than falling
+back to the same label it uses when nothing is running at all.
+
+Measured on Windows with VSCodium 1.126 running under `--force-renderer-accessibility` (the mode
+that puts the editor into *Screen Reader Optimized*), reading the UI Automation tree directly: the
+entry's accessible name is the extension's own label, not its ticking text, and the platform
+exposes no live-region setting on it.
+
 ### Why `tabTitle: static` cannot animate
 
 Supplying a name to a terminal does more than set a label. VS Code records an extension-supplied

@@ -4,6 +4,7 @@ import { test } from 'node:test';
 import { INITIAL_ACTIVITY, type SessionActivity } from '../activity';
 import {
   SPINNER_ICON,
+  announceActivity,
   describeActivity,
   motionAllowed,
   peakContextUsed,
@@ -102,6 +103,49 @@ test('a long-silent working session says so instead of just claiming to work', (
   // 'Working' alone for two minutes of silence is a claim the rollout cannot support.
   assert.match(describeActivity(state, now, 45), /no output for 2m 0s/);
   assert.doesNotMatch(describeActivity(state, now, 600), /no output/);
+});
+
+test('what a session row says out loud does not change just because time passed', () => {
+  // The regression this guards: the accessible name used to be `describeActivity`, which
+  // carries elapsed seconds, a token total and a context percentage. A tree row is re-read
+  // aloud whenever its accessible name changes while it has focus, so a row whose name ticks
+  // talks over everything else on screen for the whole length of a turn.
+  const state = activity({
+    status: 'working',
+    turnStartedAt: 1_000_000,
+    totalTokens: 16_805,
+    contextWindow: 258_400,
+    lastEventAt: '2026-08-09T16:00:00.000Z',
+  });
+  const start = Date.parse('2026-08-09T16:00:00.000Z');
+  const first = announceActivity(state, start);
+  for (let second = 1; second <= 40; second += 1) {
+    assert.equal(announceActivity(state, start + second * 1_000), first);
+  }
+  // And the value it drops is exactly the value that moved.
+  assert.notEqual(describeActivity(state, start + 40_000), describeActivity(state, start));
+});
+
+test('a session row still announces the transitions that mean something', () => {
+  const working = activity({ status: 'working', turnStartedAt: 1_000_000 });
+  const now = Date.now();
+  assert.equal(announceActivity(working, now), 'Working');
+  // Finishing a turn is the transition a screen reader user is waiting for.
+  assert.equal(
+    announceActivity({ ...working, status: 'idle', completedTurns: 1 }, now),
+    'Idle, 1 turn completed',
+  );
+  assert.equal(
+    announceActivity({ ...working, status: 'idle', completedTurns: 4 }, now),
+    'Idle, 4 turns completed',
+  );
+  // Going quiet is the other one: said once, when the threshold is crossed, without the
+  // duration that would make it repeat.
+  const quiet = { ...working, lastEventAt: '2026-08-09T16:00:00.000Z' };
+  const later = Date.parse('2026-08-09T16:02:00.000Z');
+  assert.equal(announceActivity(quiet, later, 45), 'Working, no recent output');
+  assert.equal(announceActivity(quiet, later + 30_000, 45), 'Working, no recent output');
+  assert.equal(announceActivity(quiet, later, 600), 'Working');
 });
 
 test('reduced motion replaces the spinner with a still icon, keeping the meaning', () => {

@@ -33,11 +33,16 @@ export function createStatusBarItem(context: vscode.ExtensionContext, monitor: S
           ? strings.status.liveTooltip(live)
           : strings.status.tooltip();
     item.tooltip = stalled > 0 ? `${base} ${strings.status.stalledTooltip(stalled)}` : base;
+    // Counts only. `item.text` carries the context percentage, which moves constantly, and
+    // VS Code falls back to the text when no accessible label is set — so leaving this off
+    // would make the item re-announce itself on every render to anyone focused on it.
     item.accessibilityInformation = {
       label:
         working > 0
           ? strings.status.accessibilityWorking(working)
-          : strings.status.accessibility(),
+          : live > 0
+            ? strings.status.accessibilityLive(live)
+            : strings.status.accessibility(),
       role: 'button',
     };
     if (config().get<boolean>('showStatusBarButton', true)) {

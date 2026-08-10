@@ -4,6 +4,7 @@ import { contextUsed, elapsedSeconds, isStalled } from './activity';
 import type { LiveSession, SessionMonitor } from './monitor';
 import {
   DEFAULT_STALL_SECONDS,
+  announceActivity,
   describeActivity,
   describeItem,
   formatDuration,
@@ -151,7 +152,12 @@ class RunningSessionItem extends vscode.TreeItem {
       arguments: [session.terminal],
     };
     this.accessibilityInformation = {
-      label: strings.running.accessibilitySession(String(this.label), this.description),
+      // `announceActivity`, not `this.description`: the description ticks, and an accessible
+      // name that ticks is re-read aloud every time the row refreshes.
+      label: strings.running.accessibilitySession(
+        String(this.label),
+        announceActivity(session.activity, now, stallSeconds),
+      ),
       role: 'button',
     };
   }

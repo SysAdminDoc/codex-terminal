@@ -170,6 +170,38 @@ export function describeActivity(
 }
 
 /**
+ * The same row, said out loud.
+ *
+ * Deliberately narrower than `describeActivity`, and the difference is the whole point. A
+ * tree row's accessible name is re-announced whenever it changes while the row has focus, and
+ * `describeActivity` carries elapsed time, a token total and a context percentage — three
+ * values that differ on nearly every refresh. Announcing those is not extra detail, it is the
+ * row talking over the rest of the screen every second or two for the length of a turn.
+ *
+ * What is left changes only when something actually happened: the status, whether the session
+ * has gone quiet, and how many turns have finished. Everything dropped is still on screen and
+ * still in the tooltip, which is where a value that ticks belongs.
+ */
+export function announceActivity(
+  activity: SessionActivity,
+  now: number,
+  stallSeconds = DEFAULT_STALL_SECONDS,
+): string {
+  const parts: string[] = [presentStatus(activity).label];
+  const silent = silentFor(activity, now);
+  // The threshold crossing is the event; the duration is the thing that would repeat.
+  if (silent !== undefined && silent >= stallSeconds) {
+    parts.push('no recent output');
+  }
+  if (activity.completedTurns > 0) {
+    parts.push(
+      activity.completedTurns === 1 ? '1 turn completed' : `${activity.completedTurns} turns completed`,
+    );
+  }
+  return parts.join(', ');
+}
+
+/**
  * Highest context usage across sessions, which is the number worth surfacing: the session
  * closest to its limit is the one about to force a compaction. Undefined while no session
  * has reported both a token count and a context window — a zero here would read as "plenty

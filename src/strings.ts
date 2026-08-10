@@ -251,6 +251,12 @@ export const strings = {
         : vscode.l10n.t('{0} idle Codex sessions. Click to focus.', total),
     accessibilityWorking: (working: number): string =>
       vscode.l10n.t('Codex Terminal: working in {0} sessions', working),
+    // Without this, working 1 → 0 leaves the same accessible name as having nothing open at
+    // all, so the one transition worth hearing — the turn finished — is the one that is silent.
+    accessibilityLive: (live: number): string =>
+      live === 1
+        ? vscode.l10n.t('Codex Terminal: 1 session open, none working')
+        : vscode.l10n.t('Codex Terminal: {0} sessions open, none working', live),
   },
   errors: {
     missingCommand: (command: string): string =>
