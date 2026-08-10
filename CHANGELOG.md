@@ -48,6 +48,13 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
+- The workbench settings this extension changes are now announced and reversible. Three global
+  settings have to be changed for a Codex tab to show its live title, and the extension changed
+  them silently, kept no record, and left them that way after uninstall. It now records what
+  each held beforehand, says once what it changed, and contributes **Codex Terminal: Revert
+  Workbench Settings**, which restores the recorded values exactly. A setting you have since
+  changed yourself is left alone — except the tab description, where only the token this
+  extension appended is removed, so the rest of your template survives.
 - Transcripts open as read-only virtual documents instead of untitled buffers. Every open used
   to create a dirty buffer that asked to be saved on close — a file you never wrote — and the
   same session opened twice produced two unrelated documents. They now open on a
@@ -78,6 +85,9 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   across 80,779 samples, so 10 minutes leaves better than a 2× margin. Any new output returns
   the session to working immediately. Applied to the 25 most recent real sessions, this
   correctly demoted 10 abandoned ones and left the 2 genuinely running untouched.
+- `terminal.integrated.tabs.allowAgentCliTitle` is written as a boolean. It was being set to
+  the *string* `"true"`, which happened to behave correctly while showing up as an invalid
+  value in the settings editor.
 - Closing a window normally is no longer reported as a crash. The stamp that records a
   deliberate shutdown was written asynchronously from `deactivate`, which the editor does not
   wait for, so it often never landed — and the next window then offered to recover terminals

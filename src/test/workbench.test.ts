@@ -7,6 +7,8 @@ import {
   planConfirmOnKill,
   planTabDescription,
   titleItemsArgs,
+  planRestore,
+  recordOverrides,
 } from '../workbench';
 import { DEFAULT_TITLE_ITEMS } from '../naming';
 import { buildLaunchPlan } from '../launcher';
@@ -79,4 +81,57 @@ test('unknown title items are separated from the ones Codex knows', () => {
 test('every default title item is in the known vocabulary', () => {
   // A default Codex would reject is a silent, self-inflicted bug.
   assert.deepEqual(partitionTitleItems([...DEFAULT_TITLE_ITEMS]).unknown, []);
+});
+
+test('the ledger records what a setting held before we first changed it', () => {
+  const first = recordOverrides({}, [
+    { key: 'terminal.integrated.confirmOnKill', from: 'editor', to: 'never' },
+  ]);
+  assert.deepEqual(first['terminal.integrated.confirmOnKill'], {
+    key: 'terminal.integrated.confirmOnKill',
+    previous: 'editor',
+    applied: 'never',
+  });
+
+  // First write wins: the value worth giving back is the one from before this extension ever
+  // touched the setting, not whatever it held the last time it did.
+  const second = recordOverrides(first, [
+    { key: 'terminal.integrated.confirmOnKill', from: 'never', to: 'never' },
+  ]);
+  assert.equal(second['terminal.integrated.confirmOnKill'].previous, 'editor');
+});
+
+test('a setting still holding our value is restored verbatim', () => {
+  const record = { key: 'terminal.integrated.confirmOnKill', previous: 'editor', applied: 'never' };
+  assert.deepEqual(planRestore(record, 'never'), {
+    key: 'terminal.integrated.confirmOnKill',
+    to: 'editor',
+  });
+});
+
+test('a setting that was unset before is unset again, not blanked', () => {
+  const record = { key: 'terminal.integrated.confirmOnKill', previous: undefined, applied: 'never' };
+  const restore = planRestore(record, 'never');
+  // `undefined` removes the global override; an empty string would be a value of its own.
+  assert.equal(restore?.to, undefined);
+  assert.ok(restore, 'the key must still be restored, just to nothing');
+});
+
+test('a setting the operator has since changed is left alone', () => {
+  const record = { key: 'terminal.integrated.confirmOnKill', previous: 'editor', applied: 'never' };
+  assert.equal(planRestore(record, 'always'), undefined);
+});
+
+test('an edited tab description keeps the edit and loses only our token', () => {
+  const record = {
+    key: 'terminal.integrated.tabs.description',
+    previous: '${task}',
+    applied: '${task}${separator}${sequence}',
+  };
+  // The operator appended their own token after ours; restoring the old value verbatim would
+  // silently discard their work, so only ours is removed.
+  const restore = planRestore(record, '${task}${separator}${sequence}${separator}${cwdFolder}');
+  assert.ok(restore);
+  assert.ok(!restore.to?.includes('${sequence}'));
+  assert.ok(restore.to?.includes('${cwdFolder}'), 'their addition survives');
 });

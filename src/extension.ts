@@ -50,8 +50,12 @@ import {
   partitionTitleItems,
   planAgentCliTitle,
   planConfirmOnKill,
+  planRestore,
   planTabDescription,
+  recordOverrides,
   titleItemsArgs,
+  type OverrideLedger,
+  type SettingChange,
 } from './workbench';
 import { HistoryViewProvider, isRecoveryNode, isSessionNode } from './historyView';
 import {
@@ -66,6 +70,8 @@ const PWSH_PROBE = [
   'C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe',
 ];
 const CODEX_INSTALL_URL = 'https://github.com/openai/codex#installation';
+/** `globalState` key holding what the workbench settings looked like before we touched them. */
+const OVERRIDE_LEDGER_KEY = 'codexTerminal.workbenchOverrides';
 
 let log: vscode.LogOutputChannel;
 let terminalRegistry: TerminalRegistry | undefined;
@@ -549,36 +555,111 @@ function settingText(value: unknown): string {
  */
 async function applyWorkbenchPreferences(): Promise<void> {
   const root = vscode.workspace.getConfiguration();
-  const changes: Array<{ key: string; value: unknown }> = [];
+  // Kept as full `SettingChange`s rather than key/value pairs: `from` is what makes the
+  // change reversible, and discarding it here is what left these settings permanent.
+  const changes: SettingChange[] = [];
   const confirmOnKill = planConfirmOnKill(root.get<string>(CONFIRM_ON_KILL_SETTING, 'editor'));
   if (confirmOnKill) {
-    changes.push({ key: confirmOnKill.key, value: confirmOnKill.to });
+    changes.push(confirmOnKill);
   }
   const agentCliTitle = planAgentCliTitle(
     root.get<boolean>(AGENT_CLI_TITLE_SETTING, true),
   );
   if (agentCliTitle) {
-    changes.push({ key: agentCliTitle.key, value: agentCliTitle.to });
+    changes.push(agentCliTitle);
   }
   if (tabTitleMode() === 'live') {
     const description = planTabDescription(
       root.get<string>('terminal.integrated.tabs.description'),
     );
     if (description) {
-      changes.push({ key: description.key, value: description.to });
+      changes.push(description);
     }
   }
 
+  const applied: SettingChange[] = [];
   for (const change of changes) {
-    const before = root.get<unknown>(change.key);
+    // `agentCliTitle` is a boolean setting whose plan carries a string; write the real type.
+    const value = change.key === AGENT_CLI_TITLE_SETTING ? change.to === 'true' : change.to;
     try {
-      await root.update(change.key, change.value, vscode.ConfigurationTarget.Global);
-      log.info(strings.workbench.applied(change.key, settingText(before), settingText(change.value)));
+      await root.update(change.key, value, vscode.ConfigurationTarget.Global);
+      log.info(strings.workbench.applied(change.key, settingText(change.from), settingText(value)));
+      applied.push(change);
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       log.warn(strings.workbench.failed(change.key, message));
     }
   }
+  if (applied.length === 0) {
+    return;
+  }
+
+  // Recorded before the operator is told, so the offer to undo is one this can honour even
+  // if the notification is dismissed and the command is run days later.
+  await extensionContext?.globalState.update(
+    OVERRIDE_LEDGER_KEY,
+    recordOverrides(readOverrideLedger(), applied),
+  );
+  // A notification, not a dialog: these settings are required for the tab to work, so this
+  // announces a change rather than asking permission for one. It appears only when something
+  // actually changed, which after the first window is never.
+  const choice = await vscode.window.showInformationMessage(
+    strings.workbench.announced(applied.map((change) => change.key).join(', ')),
+    strings.workbench.revert(),
+    strings.errors.showLog(),
+  );
+  if (choice === strings.workbench.revert()) {
+    await revertWorkbenchPreferences();
+  } else if (choice === strings.errors.showLog()) {
+    log.show(true);
+  }
+}
+
+function readOverrideLedger(): OverrideLedger {
+  return extensionContext?.globalState.get<OverrideLedger>(OVERRIDE_LEDGER_KEY) ?? {};
+}
+
+/**
+ * Give back every workbench setting this extension changed.
+ *
+ * Restores the recorded prior value where the setting still holds what was written, and
+ * leaves a setting the operator has since edited alone — except the tab description, where
+ * only the appended token is removed so the rest of their template survives.
+ */
+async function revertWorkbenchPreferences(): Promise<void> {
+  const ledger = readOverrideLedger();
+  const records = Object.values(ledger);
+  if (records.length === 0) {
+    void vscode.window.showInformationMessage(strings.workbench.nothingToRevert());
+    return;
+  }
+
+  const root = vscode.workspace.getConfiguration();
+  const reverted: string[] = [];
+  for (const record of records) {
+    const current = root.get<unknown>(record.key);
+    const restore = planRestore(record, current === undefined ? undefined : String(current));
+    if (!restore) {
+      log.info(strings.workbench.skippedRevert(record.key));
+      continue;
+    }
+    try {
+      // `undefined` removes the global override rather than writing an empty value.
+      await root.update(restore.key, restore.to, vscode.ConfigurationTarget.Global);
+      log.info(strings.workbench.reverted(restore.key, settingText(restore.to)));
+      reverted.push(restore.key);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      log.warn(strings.workbench.failed(restore.key, message));
+    }
+  }
+
+  await extensionContext?.globalState.update(OVERRIDE_LEDGER_KEY, undefined);
+  void vscode.window.showInformationMessage(
+    reverted.length > 0
+      ? strings.workbench.revertedAll(reverted.join(', '))
+      : strings.workbench.nothingToRevert(),
+  );
 }
 
 async function openTranscript(node: unknown): Promise<void> {
@@ -968,6 +1049,12 @@ export async function activate(context: vscode.ExtensionContext): Promise<CodexT
       },
     ],
     ['codexTerminal.showLog', () => log.show(true)],
+    [
+      'codexTerminal.revertWorkbenchSettings',
+      () => {
+        void revertWorkbenchPreferences();
+      },
+    ],
     ['codexTerminal.refreshHistory', () => historyViewProvider?.refresh(true)],
     [
       'codexTerminal.searchHistory',

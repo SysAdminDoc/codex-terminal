@@ -128,6 +128,11 @@
         "icon": "$(debug-stop)"
       },
       {
+        "command": "codexTerminal.revertWorkbenchSettings",
+        "title": "%command.revertWorkbenchSettings.title%",
+        "category": "%category.codexTerminal%"
+      },
+      {
         "command": "codexTerminal.showLog",
         "title": "%command.showLog.title%",
         "category": "%category.codexTerminal%"

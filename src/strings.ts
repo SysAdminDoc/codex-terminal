@@ -161,6 +161,16 @@ export const strings = {
       vscode.l10n.t('codex {0} {1}: {2}', action, id, output),
   },
   workbench: {
+    announced: (keys: string): string =>
+      vscode.l10n.t(
+        'Codex Terminal changed workbench settings so the tab can show Codex’s live title: {0}',
+        keys,
+      ),
+    revert: (): string => vscode.l10n.t('Revert'),
+    revertedAll: (keys: string): string =>
+      vscode.l10n.t('Reverted the workbench settings Codex Terminal had changed: {0}', keys),
+    skippedRevert: (key: string): string =>
+      vscode.l10n.t('left {0} alone: it no longer holds the value Codex Terminal wrote', key),
     applied: (key: string, from: string, to: string): string =>
       vscode.l10n.t('Set {0} from {1} to {2}.', key, from, to),
     reverted: (key: string, to: string): string => vscode.l10n.t('Restored {0} to {1}.', key, to),

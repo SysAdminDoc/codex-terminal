@@ -62,6 +62,11 @@ The real Codex TUI, started in the workspace folder:
   terminal API and cannot rename an already-created tab.
 - **Closing a tab** — the extension enforces `terminal.integrated.confirmOnKill: "never"`, so
   closing a Codex tab immediately terminates its running processes.
+- **Workbench settings it changes** — three global settings are required for a Codex tab to show
+  its live title (`terminal.integrated.confirmOnKill`, `terminal.integrated.tabs.description`,
+  `terminal.integrated.tabs.allowAgentCliTitle`). The extension says once what it changed and
+  records what each held beforehand; **Codex Terminal: Revert Workbench Settings** puts them
+  back. A setting you have since changed yourself is left alone.
 - **History** — the **History** view in the Codex Terminal activity-bar container reads Codex's
   local `.jsonl` rollouts, groups them by project, and keeps the first real prompt as a preview.
   **Click a session to resume it** in a terminal, in the directory it was originally written in;

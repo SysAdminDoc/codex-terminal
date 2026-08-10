@@ -75,6 +75,71 @@ export function planConfirmOnKillRevert(current: string | undefined): SettingCha
   };
 }
 
+/**
+ * What one workbench setting held before this extension first overrode it.
+ *
+ * Recorded rather than inferred. The extension changes three settings in the operator's
+ * *global* configuration — it has to, because a tab cannot show Codex's live title without
+ * them — but until now it said nothing and left them changed forever, including after
+ * uninstall. Restoring a guessed default is not the same as giving back what was there.
+ */
+export interface RecordedOverride {
+  key: string;
+  /** The prior value; `undefined` means the setting was unset and should be unset again. */
+  previous: string | undefined;
+  /** What the extension wrote, so a later edit by the operator can be recognised. */
+  applied: string;
+}
+
+export type OverrideLedger = Record<string, RecordedOverride>;
+
+/**
+ * Add newly applied changes to the ledger, never overwriting an existing entry.
+ *
+ * First write wins: the value worth restoring is what the operator had before this extension
+ * ever touched the setting, not what it held after the last time it did.
+ */
+export function recordOverrides(
+  ledger: OverrideLedger,
+  applied: readonly SettingChange[],
+): OverrideLedger {
+  const next: OverrideLedger = { ...ledger };
+  for (const change of applied) {
+    if (!(change.key in next)) {
+      next[change.key] = { key: change.key, previous: change.from, applied: change.to };
+    }
+  }
+  return next;
+}
+
+export interface SettingRestore {
+  key: string;
+  /** `undefined` removes the override, which is not the same as writing an empty string. */
+  to: string | undefined;
+}
+
+/**
+ * How to give one setting back.
+ *
+ * If it still holds exactly what the extension wrote, the prior value is restored verbatim.
+ * If the operator has since changed it themselves, their value is left alone — except for the
+ * tab description, where the extension *appended* a token to whatever was there and can
+ * surgically remove just that token without discarding the edit.
+ */
+export function planRestore(
+  record: RecordedOverride,
+  current: string | undefined,
+): SettingRestore | undefined {
+  if (current === record.applied) {
+    return { key: record.key, to: record.previous };
+  }
+  if (record.key === 'terminal.integrated.tabs.description') {
+    const surgical = planTabDescriptionRevert(current);
+    return surgical ? { key: surgical.key, to: surgical.to } : undefined;
+  }
+  return undefined;
+}
+
 export function planAgentCliTitle(current: boolean | undefined): SettingChange | undefined {
   if (current === DEFAULT_AGENT_CLI_TITLE) {
     return undefined;

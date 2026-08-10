@@ -69,6 +69,7 @@
   "setting.showContextInStatusBar.description": "Append the highest context usage across live Codex sessions to the status bar item. The session closest to its limit is the one about to force a compaction.",
   "setting.notifyOnCompletion.description": "Show a notification when a Codex turn completes. Uses an invocation-scoped notify hook and never edits ~/.codex/config.toml.",
   "setting.titleItems.description": "Codex items rendered in the terminal tab title. The default shows a live activity spinner and the project name.",
+  "command.revertWorkbenchSettings.title": "Revert Workbench Settings",
   "setting.transcript.includeToolCalls.description": "Include the commands Codex ran and the patches it applied in an exported transcript. Each block is capped, because an apply_patch call carries the entire new contents of every file it writes.",
   "setting.transcript.includeToolOutput.description": "Also include what those commands printed back. Off by default: tool output is the bulk of a session and is rarely what you came back to read.",
   "setting.history.maxSessions.description": "Maximum number of recent Codex sessions shown in the History sidebar."
