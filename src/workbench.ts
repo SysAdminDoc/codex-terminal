@@ -101,7 +101,32 @@ export function titleItemsArgs(items: readonly string[]): string[] {
   if (invalid) {
     throw new Error(`Invalid codexTerminal.titleItems entry: ${JSON.stringify(invalid)}`);
   }
-  return ['-c', `tui.terminal_title=[${cleaned.map((item) => `"${item}"`).join(',')}]`];
+  // TOML *literal* strings, single-quoted. A double-quoted array is equally valid TOML but
+  // unrepresentable through cmd.exe, which has no escape for `"` inside a quoted argument:
+  // it made `codexTerminal.shell: "cmd"` throw on every launch, and blocked passing the
+  // same override to `codex doctor` through the `codex.cmd` npm shim. The vocabulary is
+  // `[a-z][a-z0-9-]*`, so a literal string can never need escaping.
+  return ['-c', `tui.terminal_title=[${cleaned.map((item) => `'${item}'`).join(',')}]`];
+}
+
+/**
+ * Split configured title items into the ones Codex knows and the ones it will refuse.
+ *
+ * Codex drops unknown identifiers silently and keeps the rest, so a typo costs the user a
+ * title item with no error anywhere. `titleItemsArgs` only rejects identifiers that are
+ * malformed; this catches well-formed ones that simply do not exist.
+ */
+export function partitionTitleItems(items: readonly string[]): {
+  known: string[];
+  unknown: string[];
+} {
+  const vocabulary = new Set<string>(KNOWN_TITLE_ITEMS);
+  const known: string[] = [];
+  const unknown: string[] = [];
+  for (const item of items.map((entry) => entry.trim()).filter(Boolean)) {
+    (vocabulary.has(item) ? known : unknown).push(item);
+  }
+  return { known, unknown };
 }
 
 /** The identifiers Codex 0.147 accepts in `[tui].terminal_title`. */

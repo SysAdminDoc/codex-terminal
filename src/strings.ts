@@ -169,6 +169,12 @@ export const strings = {
     commandPreflightPassed: (command: string, resolved: string): string =>
       vscode.l10n.t('Codex command preflight passed: {0} → {1}', command, resolved),
     shellResolution: (reason: string): string => vscode.l10n.t('shell resolution: {0}', reason),
+    unknownTitleItems: (items: string, known: string): string =>
+      vscode.l10n.t(
+        'codexTerminal.titleItems contains entries Codex does not know and will drop: {0}. Known items: {1}',
+        items,
+        known,
+      ),
     sentReference: (reference: string): string => vscode.l10n.t('sent reference {0}', reference),
     adopted: (count: number): string =>
       count === 1
@@ -199,6 +205,8 @@ export const strings = {
         ),
   },
   doctor: {
+    running: (): string =>
+      vscode.l10n.t('Running Codex Terminal Doctor — codex doctor scans the session store…'),
     report: (report: DoctorReport): string => {
       const shell = report.plan.shellPath ?? vscode.l10n.t('<editor default>');
       const shellExists =
@@ -222,6 +230,53 @@ export const strings = {
         ...(report.plan.shellResolutionReason
           ? [vscode.l10n.t('shell resolution: {0}', report.plan.shellResolutionReason)]
           : []),
+        ...(report.title
+          ? [
+              vscode.l10n.t(
+                'Codex tab title: {0} (activity indicator: {1}, source: {2})',
+                report.title.items.join(', ') || vscode.l10n.t('<none>'),
+                String(report.title.activity),
+                report.title.source ?? vscode.l10n.t('unknown'),
+              ),
+              ...(report.title.invalidItems.length > 0
+                ? [
+                    vscode.l10n.t(
+                      'Codex rejected these title items: {0}',
+                      report.title.invalidItems.join(', '),
+                    ),
+                  ]
+                : []),
+              ...(report.title.source === 'default'
+                ? [
+                    vscode.l10n.t(
+                      'The title override did not reach Codex, so codexTerminal.titleItems had no effect.',
+                    ),
+                  ]
+                : []),
+            ]
+          : []),
+        ...(report.unknownTitleItems.length > 0
+          ? [
+              vscode.l10n.t(
+                'unknown codexTerminal.titleItems entries: {0}',
+                report.unknownTitleItems.join(', '),
+              ),
+            ]
+          : []),
+        ...(report.codexVersion
+          ? [vscode.l10n.t('codex doctor: {0}', report.codexVersion)]
+          : []),
+        ...(report.codexDoctorNote
+          ? [vscode.l10n.t('codex doctor could not be read: {0}', report.codexDoctorNote)]
+          : []),
+        ...report.codexChecks.map((check) =>
+          vscode.l10n.t(
+            '  [{0}] {1}: {2}',
+            check.status,
+            check.id,
+            check.summary ?? vscode.l10n.t('(no summary)'),
+          ),
+        ),
       ].join('\n');
     },
   },

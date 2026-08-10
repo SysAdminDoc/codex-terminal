@@ -41,6 +41,8 @@ import {
 import {
   AGENT_CLI_TITLE_SETTING,
   CONFIRM_ON_KILL_SETTING,
+  KNOWN_TITLE_ITEMS,
+  partitionTitleItems,
   planAgentCliTitle,
   planConfirmOnKill,
   planTabDescription,
@@ -126,6 +128,12 @@ async function syncNotifyBridge(): Promise<void> {
 function readLaunchRequest(mode: LaunchMode, profile?: string, sessionId?: string): LaunchRequest {
   const cfg = config();
   const titleItems = cfg.get<string[]>('titleItems', [...DEFAULT_TITLE_ITEMS]);
+  // Codex drops identifiers it does not recognise without complaining, so an unknown item
+  // silently costs the user part of their tab title. Say so once, at launch.
+  const { unknown } = partitionTitleItems(titleItems);
+  if (unknown.length > 0) {
+    log.warn(strings.logs.unknownTitleItems(unknown.join(', '), KNOWN_TITLE_ITEMS.join(', ')));
+  }
   return {
     shell: cfg.get<ShellKind>('shell', 'auto'),
     customShellPath: cfg.get<string>('customShellPath', ''),
@@ -427,12 +435,21 @@ async function runDoctor(): Promise<void> {
     const editorTitleButtonCanRender =
       config().get<boolean>('showEditorTitleButton', true) &&
       vscode.window.activeTextEditor !== undefined;
-    const report = await collectDoctorReport({
-      request,
-      cwd: await resolveCwd(),
-      statusBarVisible,
-      editorTitleButtonCanRender,
-    });
+    const cwd = await resolveCwd();
+    const titleItems = config().get<string[]>('titleItems', [...DEFAULT_TITLE_ITEMS]);
+    // `codex doctor` walks the whole rollout store; 38s against 2 GB is normal and grows.
+    // Without progress this looks like a command that did nothing.
+    const report = await vscode.window.withProgress(
+      { location: vscode.ProgressLocation.Notification, title: strings.doctor.running() },
+      () =>
+        collectDoctorReport({
+          request,
+          cwd,
+          statusBarVisible,
+          editorTitleButtonCanRender,
+          titleItems,
+        }),
+    );
     const text = strings.doctor.report(report);
     log.info(text);
     const choice = await vscode.window.showInformationMessage(text, strings.errors.showLog());

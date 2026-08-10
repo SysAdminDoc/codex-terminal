@@ -3,6 +3,21 @@
 All notable changes to Codex Terminal are documented here.
 This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Fixed
+
+- `codexTerminal.shell: "cmd"` could not launch at all. The Codex title override was emitted
+  as a double-quoted TOML array, and cmd.exe has no escape for a double quote inside a quoted
+  argument, so every launch threw. The override now uses TOML literal strings.
+
+### Added
+
+- Doctor now reports what Codex actually resolved, by running `codex doctor --json` with the
+  same title override the extension launches with. Invocation-scoped `-c` overrides are not
+  validated by Codex, so this is the only way to confirm one landed rather than assuming it.
+  Unknown `codexTerminal.titleItems` entries are also reported at launch.
+
 ## [0.4.0] - 2026-08-10
 
 ### Added
