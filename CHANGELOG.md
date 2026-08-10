@@ -7,6 +7,14 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **Plugins and MCP servers, in the Launch panel.** Two collapsed, read-only sections built on
+  `codex plugin list --json` and `codex mcp list --json` — no write commands, and nothing runs
+  until a section is opened. A disabled plugin or MCP server says so rather than looking
+  installed, an unreadable list states why in the row and logs the whole output, and the cache
+  is dropped when `codexTerminal.command` changes so a corrected command takes effect at once.
+  Deliberately not built on `app-server`: it answers the same questions but is off by default,
+  so the sections would be empty for almost everyone.
+
 - **Spanish.** Both localization surfaces ship — the manifest (`package.nls.es.json`) and every
   runtime string (`l10n/bundle.l10n.es.json`, 172 of them) — and an integration suite runs a
   real editor in Spanish to prove the bundle is actually loaded rather than merely present. Key

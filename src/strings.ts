@@ -64,6 +64,30 @@ export const strings = {
     accessibilitySession: (name: string, status: string): string =>
       vscode.l10n.t('{0}, {1}. Click to focus the terminal.', name, status),
   },
+  inventory: {
+    plugins: (): string => vscode.l10n.t('Plugins'),
+    mcp: (): string => vscode.l10n.t('MCP servers'),
+    pluginsTooltip: (): string =>
+      vscode.l10n.t('Plugins Codex has installed, as `codex plugin list` reports them. Read-only.'),
+    mcpTooltip: (): string =>
+      vscode.l10n.t('MCP servers configured for Codex, as `codex mcp list` reports them. Read-only.'),
+    pluginTooltip: (id: string, enabled: boolean): string =>
+      enabled
+        ? vscode.l10n.t('{0} — installed and enabled', id)
+        : vscode.l10n.t('{0} — installed but disabled', id),
+    mcpTooltipEnabled: (transport: string): string =>
+      transport
+        ? vscode.l10n.t('Enabled, reached over {0}.', transport)
+        : vscode.l10n.t('Enabled.'),
+    mcpTooltipDisabled: (reason: string): string =>
+      reason ? vscode.l10n.t('Disabled: {0}', reason) : vscode.l10n.t('Disabled.'),
+    noPlugins: (): string => vscode.l10n.t('No plugins installed'),
+    noMcp: (): string => vscode.l10n.t('No MCP servers configured'),
+    unreadablePlugins: (reason: string): string =>
+      vscode.l10n.t('Could not read the plugin list ({0})', reason),
+    unreadableMcp: (reason: string): string =>
+      vscode.l10n.t('Could not read the MCP server list ({0})', reason),
+  },
   recovery: {
     group: (): string => vscode.l10n.t('Interrupted sessions'),
     count: (count: number): string =>

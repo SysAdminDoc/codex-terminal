@@ -12,7 +12,9 @@ import {
   presentStatus,
 } from './present';
 import { estimateCost, formatCost, type RateTable } from './cost';
+import { describeMcpServer, describePlugin, parseMcpList, parsePluginList } from './inventory';
 import { displayName, type SessionNames } from './names';
+import { peekServices } from './services';
 import { strings } from './strings';
 
 /**
@@ -41,7 +43,22 @@ interface RunningSession {
   session: LiveSession;
 }
 
-type ActionNode = Action | RunningGroup | RunningSession;
+export interface InventoryGroup {
+  kind: 'inventory-group';
+  of: 'plugins' | 'mcp';
+}
+
+interface InventoryEntry {
+  kind: 'inventory-entry';
+  label: string;
+  description: string;
+  tooltip: string;
+  icon: string;
+  /** Dimmed rows: something is configured but switched off, or nothing could be read. */
+  muted?: boolean;
+}
+
+type ActionNode = Action | RunningGroup | RunningSession | InventoryGroup | InventoryEntry;
 
 /** Narrow a tree node handed back by a context-menu command. */
 export function isRunningSessionNode(node: unknown): node is RunningSession {
@@ -52,6 +69,8 @@ export function isRunningSessionNode(node: unknown): node is RunningSession {
   );
 }
 const RUNNING_GROUP: RunningGroup = { kind: 'running-group' };
+const PLUGIN_GROUP: InventoryGroup = { kind: 'inventory-group', of: 'plugins' };
+const MCP_GROUP: InventoryGroup = { kind: 'inventory-group', of: 'mcp' };
 
 const ACTIONS: Action[] = [
   {
@@ -228,9 +247,141 @@ function buildTooltip(
   return new vscode.MarkdownString(lines.join('\n'));
 }
 
+class InventoryGroupItem extends vscode.TreeItem {
+  constructor(group: InventoryGroup) {
+    super(
+      group.of === 'plugins' ? strings.inventory.plugins() : strings.inventory.mcp(),
+      // Collapsed: the CLI behind it is only run when someone opens the section, so a panel
+      // nobody expands costs nothing.
+      vscode.TreeItemCollapsibleState.Collapsed,
+    );
+    this.tooltip =
+      group.of === 'plugins' ? strings.inventory.pluginsTooltip() : strings.inventory.mcpTooltip();
+    this.iconPath = new vscode.ThemeIcon(group.of === 'plugins' ? 'extensions' : 'server-process');
+    this.contextValue = `codexTerminal.inventory.${group.of}`;
+  }
+}
+
+class InventoryEntryItem extends vscode.TreeItem {
+  constructor(node: InventoryEntry) {
+    super(node.label, vscode.TreeItemCollapsibleState.None);
+    this.description = node.description;
+    this.tooltip = node.tooltip;
+    this.iconPath = new vscode.ThemeIcon(
+      node.icon,
+      node.muted ? new vscode.ThemeColor('disabledForeground') : undefined,
+    );
+    this.accessibilityInformation = { label: `${node.label}. ${node.tooltip}`, role: 'treeitem' };
+  }
+}
+
+/**
+ * Cached view of what Codex has plugged in.
+ *
+ * The tree refreshes on every monitor change — several times a minute while a turn runs — and
+ * a process spawn per refresh would be absurd for data that changes when the operator installs
+ * something. Read on expansion, then held until it goes stale.
+ */
+class Inventory {
+  private plugins?: { at: number; rows: InventoryEntry[] };
+  private mcp?: { at: number; rows: InventoryEntry[] };
+
+  constructor(
+    private readonly run: (args: readonly string[]) => Promise<string>,
+    private readonly ttlMs = 60_000,
+    private readonly now: () => number = Date.now,
+  ) {}
+
+  /** Drop everything read so far — the command that produces it has changed. */
+  forget(): void {
+    this.plugins = undefined;
+    this.mcp = undefined;
+  }
+
+  async rows(of: 'plugins' | 'mcp'): Promise<InventoryEntry[]> {
+    const cached = of === 'plugins' ? this.plugins : this.mcp;
+    if (cached && this.now() - cached.at < this.ttlMs) {
+      return cached.rows;
+    }
+    const rows = of === 'plugins' ? await this.readPlugins() : await this.readMcp();
+    const entry = { at: this.now(), rows };
+    if (of === 'plugins') {
+      this.plugins = entry;
+    } else {
+      this.mcp = entry;
+    }
+    return rows;
+  }
+
+  private async readPlugins(): Promise<InventoryEntry[]> {
+    const output = await this.run(['plugin', 'list', '--json']);
+    const parsed = parsePluginList(output);
+    if (!parsed) {
+      return [unreadable(strings.inventory.unreadablePlugins(firstLine(output, 'plugin list')))];
+    }
+    if (parsed.length === 0) {
+      return [note(strings.inventory.noPlugins())];
+    }
+    return parsed.map((entry) => ({
+      kind: 'inventory-entry' as const,
+      label: entry.name,
+      description: describePlugin(entry),
+      tooltip: strings.inventory.pluginTooltip(entry.id, entry.enabled),
+      icon: 'plug',
+      ...(entry.enabled ? {} : { muted: true }),
+    }));
+  }
+
+  private async readMcp(): Promise<InventoryEntry[]> {
+    const output = await this.run(['mcp', 'list', '--json']);
+    const parsed = parseMcpList(output);
+    if (!parsed) {
+      return [unreadable(strings.inventory.unreadableMcp(firstLine(output, 'mcp list')))];
+    }
+    if (parsed.length === 0) {
+      return [note(strings.inventory.noMcp())];
+    }
+    return parsed.map((entry) => ({
+      kind: 'inventory-entry' as const,
+      label: entry.name,
+      description: describeMcpServer(entry),
+      tooltip: entry.enabled
+        ? strings.inventory.mcpTooltipEnabled(entry.transport ?? '')
+        : strings.inventory.mcpTooltipDisabled(entry.disabledReason ?? ''),
+      icon: entry.enabled ? 'server-process' : 'circle-slash',
+      ...(entry.enabled ? {} : { muted: true }),
+    }));
+  }
+}
+
+/**
+ * First line only: a failed CLI call can print a paragraph, and this goes in a tree row.
+ *
+ * The rest is not thrown away — it goes to the log, because the first line of a failure is
+ * routinely the least informative one (a stack frame, a shim's banner), and a row that says
+ * "could not read" with no way to find out why is a dead end.
+ */
+function firstLine(output: string, what: string): string {
+  peekServices()?.log.warn(`codex ${what} could not be read:\n${output.slice(0, 4000)}`);
+  const line = output
+    .split('\n')
+    .map((entry) => entry.trim())
+    .find(Boolean);
+  return (line ?? '').slice(0, 200);
+}
+
+function note(label: string): InventoryEntry {
+  return { kind: 'inventory-entry', label, description: '', tooltip: label, icon: 'info', muted: true };
+}
+
+function unreadable(label: string): InventoryEntry {
+  return { kind: 'inventory-entry', label, description: '', tooltip: label, icon: 'warning', muted: true };
+}
+
 export class ActionsViewProvider implements vscode.TreeDataProvider<ActionNode>, vscode.Disposable {
   private readonly changes = new vscode.EventEmitter<ActionNode | undefined | null | void>();
   private readonly monitorSubscription: vscode.Disposable;
+  private readonly inventory: Inventory;
 
   readonly onDidChangeTreeData = this.changes.event;
 
@@ -240,11 +391,31 @@ export class ActionsViewProvider implements vscode.TreeDataProvider<ActionNode>,
     private readonly animate: () => boolean = () => true,
     private readonly names: () => SessionNames = () => ({}),
     private readonly rates: () => RateTable | undefined = () => undefined,
+    runCodex: (args: readonly string[]) => Promise<string> = () => Promise.resolve(''),
   ) {
     this.monitorSubscription = monitor.onDidChange(() => this.changes.fire());
+    this.inventory = new Inventory(runCodex);
+  }
+
+  /**
+   * Forget what Codex reported and redraw.
+   *
+   * Called when `codexTerminal.command` changes: the cached answer was produced by a different
+   * program, and an operator who has just fixed a wrong command should not have to wait out a
+   * cache to see it take effect.
+   */
+  refreshInventory(): void {
+    this.inventory.forget();
+    this.changes.fire();
   }
 
   getTreeItem(node: ActionNode): vscode.TreeItem {
+    if ('kind' in node && node.kind === 'inventory-group') {
+      return new InventoryGroupItem(node);
+    }
+    if ('kind' in node && node.kind === 'inventory-entry') {
+      return new InventoryEntryItem(node);
+    }
     if ('kind' in node && node.kind === 'running-group') {
       return new RunningGroupItem(
         this.monitor.live().length,
@@ -265,15 +436,23 @@ export class ActionsViewProvider implements vscode.TreeDataProvider<ActionNode>,
     return new ActionItem(node);
   }
 
-  getChildren(element?: ActionNode): ActionNode[] {
+  getChildren(element?: ActionNode): ActionNode[] | Thenable<ActionNode[]> {
     if (!element) {
       const live = this.monitor.live();
-      return live.length > 0 ? [...ACTIONS, RUNNING_GROUP] : [...ACTIONS];
+      return [
+        ...ACTIONS,
+        ...(live.length > 0 ? [RUNNING_GROUP] : []),
+        PLUGIN_GROUP,
+        MCP_GROUP,
+      ];
     }
     if ('kind' in element && element.kind === 'running-group') {
       return this.monitor
         .live()
         .map((session) => ({ kind: 'running-session' as const, session }));
+    }
+    if ('kind' in element && element.kind === 'inventory-group') {
+      return this.inventory.rows(element.of);
     }
     return [];
   }

@@ -1,7 +1,7 @@
 import * as path from 'node:path';
 import * as vscode from 'vscode';
 
-import { ActionsViewProvider } from './actionsView';
+import { ActionsViewProvider, getActions } from './actionsView';
 import type { RateTable } from './cost';
 import {
   askAboutSelection,
@@ -21,7 +21,9 @@ import {
   searchHistory,
   sessionNames,
 } from './historyCommands';
+import { runCommand } from './doctor';
 import { JournalStore } from './journal';
+import { resolveCommandPath } from './launcher';
 import {
   focusCodex,
   launch,
@@ -63,6 +65,12 @@ export interface CodexTerminalExtensionApi {
   getTerminalProfileOptions: () => Promise<vscode.TerminalOptions | undefined>;
   /** Wall-clock milliseconds spent inside `activate`, for the startup budget check. */
   getActivationMs: () => number;
+  /**
+   * Rendered labels of an inventory section, for the integration suite. The section is only
+   * reachable by expanding it in the sidebar, which a test cannot do without synthesising
+   * input, so the provider is asked the same question the tree asks it.
+   */
+  getInventoryRows: (of: 'plugins' | 'mcp') => Promise<string[]>;
 }
 
 /**
@@ -88,6 +96,27 @@ function focusSession(terminal: vscode.Terminal | undefined): void {
 
 function stopSession(terminal: vscode.Terminal | undefined): void {
   terminal?.dispose();
+}
+
+/**
+ * Ask Codex what it has plugged in, quietly.
+ *
+ * Deliberately not `preflightCodexCommand`: that one raises an error dialog, which is the right
+ * answer when the operator asked to launch Codex and wrong when a tree section was expanded.
+ * An unresolvable command comes back as text the parser rejects, and the row says so.
+ */
+function readCodexInventory(args: readonly string[]): Promise<string> {
+  const command = config().get<string>('command', 'codex');
+  const resolved = resolveCommandPath(command, {
+    platform: process.platform,
+    pathValue: process.env.PATH,
+    cwd: process.cwd(),
+  });
+  if (!resolved) {
+    return Promise.resolve(strings.errors.missingCommand(command));
+  }
+  peekServices()?.log.info(`codex ${args.join(' ')} via ${resolved}`);
+  return runCommand(resolved, args, process.platform, 4 * 1024 * 1024, 15_000);
 }
 
 async function runSettingsMigrations(
@@ -276,6 +305,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<CodexT
     animationAllowed,
     sessionNames,
     () => config().get<RateTable>('modelRates'),
+    readCodexInventory,
   );
   const actionsView = vscode.window.createTreeView('codexTerminal.actions', {
     treeDataProvider: actionsProvider,
@@ -337,6 +367,9 @@ export async function activate(context: vscode.ExtensionContext): Promise<CodexT
       ) {
         void applyWorkbenchPreferences();
       }
+      if (event.affectsConfiguration('codexTerminal.command')) {
+        actionsProvider.refreshInventory();
+      }
     }),
     {
       dispose: () => {
@@ -355,9 +388,13 @@ export async function activate(context: vscode.ExtensionContext): Promise<CodexT
   const activationMs = Date.now() - activationStartedAt;
   log.info(strings.logs.activationCost(activationMs));
   return {
-    getActionCount: () => actionsProvider.getChildren().length,
+    getActionCount: () => getActions().length,
     getTerminalProfileOptions: async () => (await provideTerminalProfile())?.options,
     getActivationMs: () => activationMs,
+    getInventoryRows: async (of) => {
+      const rows = await actionsProvider.getChildren({ kind: 'inventory-group', of });
+      return rows.map((row) => String(actionsProvider.getTreeItem(row).label));
+    },
   };
 }
 

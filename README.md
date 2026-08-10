@@ -178,6 +178,23 @@ and nothing while wedged, so "finished" would be a guess. The threshold is 10 mi
 working turn was 269 seconds across 80,779 samples. Any new output puts the session straight back
 to working.
 
+### What Codex has plugged in
+
+Two collapsed sections at the bottom of the Launch panel — **Plugins** and **MCP servers** —
+report what Codex itself says it has: `codex plugin list --json` and `codex mcp list --json`,
+both read-only, with no command that can install, enable or remove anything. A plugin that is
+installed but disabled says so, and so does an MCP server, with Codex's own reason.
+
+They are collapsed because that is also when the work happens: nothing runs until a section is
+opened, and the answer is then held for a minute rather than re-read on every tree refresh. A
+list that cannot be read says why in the row and puts the full output in the log, rather than
+rendering as an empty section — "no plugins installed" and "I could not ask" are different
+answers and only one of them is ever true.
+
+Neither section needs `codexTerminal.appServer.enabled`. The app server exposes the same
+information, but it is off by default and its protocol carries no compatibility guarantee, so
+the sections would be empty for almost everyone.
+
 ### Languages
 
 English and Spanish ship. Set VS Code's display language (*Configure Display Language*, or the

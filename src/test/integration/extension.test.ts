@@ -9,6 +9,7 @@ interface TestApi {
   getActionCount: () => number;
   getTerminalProfileOptions: () => Promise<vscode.TerminalOptions | undefined>;
   getActivationMs: () => number;
+  getInventoryRows: (of: 'plugins' | 'mcp') => Promise<string[]>;
 }
 
 /**
@@ -94,6 +95,50 @@ suite('Codex Terminal hostile settings integration', () => {
     const views = manifest.contributes?.views?.codexTerminalContainer ?? [];
     assert.ok(views.some((view) => view.id === 'codexTerminal.actions'));
     assert.equal(api.getActionCount(), 5);
+  });
+
+  test('the inventory sections answer from the real Codex CLI', async () => {
+    // The unit tests feed the provider captured JSON; this one runs the CLI that is actually
+    // installed. It is the only check that fails when Codex renames a subcommand, changes the
+    // shape of `--json`, or stops answering in the time allowed -- none of which the shipped
+    // parsers can notice on their own.
+    //
+    // The fixture deliberately points `codexTerminal.command` at `node`, so it has to be put
+    // back to `codex` here. That is not incidental: the first run of this test asserted
+    // against the fixture and read `Could not read the plugin list (…)`, which was the
+    // extension behaving correctly and the test asking the wrong question.
+    const extension = vscode.extensions.getExtension<TestApi>('sysadmindoc.codex-terminal');
+    assert.ok(extension);
+    const api = await extension.activate();
+
+    const settings = vscode.workspace.getConfiguration('codexTerminal');
+    const previous = settings.inspect<string>('command')?.workspaceValue;
+    await settings.update('command', 'codex', vscode.ConfigurationTarget.Workspace);
+    try {
+      for (const section of ['plugins', 'mcp'] as const) {
+        const rows = await api.getInventoryRows(section);
+        assert.ok(rows.length > 0, `the ${section} section must render at least one row`);
+        for (const row of rows) {
+          assert.ok(!/^Could not read/.test(row), `${section} came back unreadable: ${row}`);
+        }
+      }
+    } finally {
+      await vscode.workspace
+        .getConfiguration('codexTerminal')
+        .update('command', previous, vscode.ConfigurationTarget.Workspace);
+    }
+  });
+
+  test('a section degrades to a stated failure rather than an empty list', async () => {
+    // Back on the fixture's `codexTerminal.command: node`, which cannot answer `plugin list`.
+    // The section must say so: an empty section would read as "no plugins installed", which is
+    // a confident wrong answer about what a Codex run will have.
+    const extension = vscode.extensions.getExtension<TestApi>('sysadmindoc.codex-terminal');
+    assert.ok(extension);
+    const api = await extension.activate();
+    const rows = await api.getInventoryRows('plugins');
+    assert.equal(rows.length, 1);
+    assert.match(rows[0], /^Could not read the plugin list/);
   });
 
   test('every contributed command is actually registered', async () => {
