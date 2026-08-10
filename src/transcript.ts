@@ -6,7 +6,29 @@
  * ever holding it in memory.
  */
 
-export type TranscriptRole = 'user' | 'assistant' | 'developer' | 'reasoning' | 'tool' | 'output';
+export type TranscriptRole =
+  | 'user'
+  | 'assistant'
+  | 'developer'
+  | 'reasoning'
+  | 'tool'
+  | 'output'
+  | 'compaction';
+
+/**
+ * Rollout record types Codex 0.147 writes that carry no transcript content.
+ *
+ * Naming them is deliberate. An unrecognised type is indistinguishable from a type we chose
+ * to skip, so a future format addition would be silently dropped exactly like these are.
+ * `inter_agent_communication*` is subagent traffic; its payload shape is not documented and
+ * was not present in any sampled rollout, so it is skipped rather than guessed at.
+ */
+export const SKIPPED_RECORD_TYPES = [
+  'turn_context',
+  'world_state',
+  'inter_agent_communication',
+  'inter_agent_communication_metadata',
+] as const;
 
 export interface TranscriptEntry {
   role: TranscriptRole;
@@ -89,10 +111,33 @@ export function parseTranscriptLine(line: string): TranscriptEntry | undefined {
     return undefined;
   }
   const payload = record.payload;
+  const timestamp = typeof record.timestamp === 'string' ? record.timestamp : undefined;
+
+  /**
+   * Compaction replaces the conversation history with a summary. Dropping the record leaves
+   * a transcript that jumps between unrelated turns with nothing to explain the gap, which
+   * reads as lost content rather than as compaction.
+   */
+  if (record.type === 'compacted') {
+    const message =
+      payload && typeof payload.message === 'string' ? payload.message.trim() : '';
+    const replaced = Array.isArray(payload?.replacement_history)
+      ? (payload.replacement_history as unknown[]).length
+      : 0;
+    const entry: TranscriptEntry = {
+      role: 'compaction',
+      text:
+        message ||
+        (replaced > 0
+          ? `Earlier history was replaced with ${replaced} summarised item(s).`
+          : 'Earlier history was compacted.'),
+    };
+    return timestamp ? { ...entry, timestamp } : entry;
+  }
+
   if (record.type !== 'response_item' || !payload) {
     return undefined;
   }
-  const timestamp = typeof record.timestamp === 'string' ? record.timestamp : undefined;
   const withTimestamp = <T extends Omit<TranscriptEntry, 'timestamp'>>(
     entry: T,
   ): TranscriptEntry => (timestamp ? { ...entry, timestamp } : entry);
@@ -162,6 +207,7 @@ const ROLE_HEADINGS: Record<TranscriptRole, string> = {
   reasoning: '## Reasoning',
   tool: '### Tool call',
   output: '### Tool output',
+  compaction: '---\n\n### Context compacted',
 };
 
 function fence(text: string): string {

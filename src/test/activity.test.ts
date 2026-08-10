@@ -145,3 +145,19 @@ test('the context gauge stays absent until both numbers are known', () => {
   assert.equal(contextUsed({ ...INITIAL_ACTIVITY, totalTokens: 100 }), undefined);
   assert.equal(contextUsed({ ...INITIAL_ACTIVITY, contextWindow: 1000 }), undefined);
 });
+
+test('a compaction does not disturb the activity state', () => {
+  // Compaction happens mid-turn. Treating it as a turn boundary would report a working
+  // session as idle for the rest of its life.
+  const working = reduceActivityLine(INITIAL_ACTIVITY, TASK_STARTED);
+  const after = reduceActivityLine(
+    working,
+    JSON.stringify({
+      ordinal: 664,
+      type: 'compacted',
+      payload: { message: '', replacement_history: [{ type: 'message' }] },
+    }),
+  );
+  assert.equal(after.status, 'working');
+  assert.equal(after.turnId, working.turnId);
+});

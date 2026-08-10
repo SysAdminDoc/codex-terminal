@@ -15,6 +15,9 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
+- Compacted sessions now render a visible "Context compacted" boundary in the transcript.
+  Codex replaces earlier history when it compacts, and the record was previously dropped, so
+  a transcript jumped between unrelated turns with nothing to explain the gap.
 - The History view now picks the newest sessions from rollout filenames before opening any
   of them, so a refresh costs what is displayed rather than what is stored. Against a local
   2.01 GB store a bounded refresh went from 70 ms to 12 ms, and the gap widens as the store
