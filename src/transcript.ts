@@ -64,6 +64,98 @@ function textOf(content: unknown): string {
     .join('\n');
 }
 
+export type FileChangeKind = 'add' | 'update' | 'delete';
+
+export interface FileChange {
+  path: string;
+  kind: FileChangeKind;
+}
+
+/**
+ * Cheap pre-filter for the file-change scan.
+ *
+ * A `FileChange` record embeds the *entire new contents* of every file it touches, so
+ * rollouts reach 128 MB here and a single line can be megabytes. Parsing every line to find
+ * the few that matter costs far more than a substring test that rejects almost all of them,
+ * and the test is safe: the marker is the record's own discriminator, so a line without it
+ * cannot be a file change.
+ */
+export function mayContainFileChange(line: string): boolean {
+  return line.includes('"FileChange"');
+}
+
+/**
+ * Paths a single rollout line reports as changed, with the content thrown away.
+ *
+ * Only the keys and each entry's `type` are kept. Holding the contents would defeat the
+ * point of streaming the file.
+ */
+export function parseFileChanges(line: string): FileChange[] | undefined {
+  if (!mayContainFileChange(line)) {
+    return undefined;
+  }
+  let record: { type?: unknown; payload?: Record<string, unknown> };
+  try {
+    record = JSON.parse(line) as typeof record;
+  } catch {
+    return undefined;
+  }
+  const payload = record.payload;
+  if (record.type !== 'event_msg' || !payload || payload.type !== 'item_completed') {
+    return undefined;
+  }
+  const item = payload.item;
+  if (typeof item !== 'object' || item === null) {
+    return undefined;
+  }
+  const changes = (item as Record<string, unknown>).type === 'FileChange'
+    ? (item as Record<string, unknown>).changes
+    : undefined;
+  if (typeof changes !== 'object' || changes === null) {
+    return undefined;
+  }
+
+  const found: FileChange[] = [];
+  for (const [filePath, detail] of Object.entries(changes as Record<string, unknown>)) {
+    if (!filePath) {
+      continue;
+    }
+    const kind =
+      typeof detail === 'object' && detail !== null
+        ? (detail as Record<string, unknown>).type
+        : undefined;
+    found.push({
+      path: filePath,
+      kind: kind === 'add' || kind === 'delete' ? kind : 'update',
+    });
+  }
+  return found.length > 0 ? found : undefined;
+}
+
+/**
+ * Collapse repeated changes to one verdict per file.
+ *
+ * A session typically creates a file and then edits it several times. Listing that three
+ * times says nothing; what the operator wants is the net effect, so a file this session
+ * created reads as added however many times it was subsequently touched, and one it removed
+ * reads as deleted whatever came before.
+ */
+export function netFileChanges(changes: Iterable<FileChange>): FileChange[] {
+  const seen = new Map<string, { first: FileChangeKind; last: FileChangeKind }>();
+  for (const change of changes) {
+    const previous = seen.get(change.path);
+    if (previous) {
+      previous.last = change.kind;
+    } else {
+      seen.set(change.path, { first: change.kind, last: change.kind });
+    }
+  }
+  return [...seen.entries()].map(([path, { first, last }]) => ({
+    path,
+    kind: last === 'delete' ? 'delete' : first === 'add' ? 'add' : 'update',
+  }));
+}
+
 export function parseSessionMeta(line: string): TranscriptMeta | undefined {
   let record: { type?: unknown; payload?: Record<string, unknown> };
   try {

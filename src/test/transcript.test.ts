@@ -8,6 +8,9 @@ import {
   parseTranscriptLine,
   renderTranscriptEntry,
   summarise,
+  mayContainFileChange,
+  netFileChanges,
+  parseFileChanges,
 } from '../transcript';
 
 test('transcript parsing keeps metadata and real conversation messages', () => {
@@ -83,4 +86,79 @@ test('record types with no transcript content are skipped by name', () => {
       type,
     );
   }
+});
+
+test('a file-change record yields paths and kinds without their contents', () => {
+  const line = JSON.stringify({
+    type: 'event_msg',
+    ordinal: 9,
+    payload: {
+      type: 'item_completed',
+      item: {
+        type: 'FileChange',
+        id: 'exec-1',
+        changes: {
+          '/repo/added.ts': { type: 'add', content: 'x'.repeat(5000) },
+          '/repo/gone.ts': { type: 'delete' },
+          '/repo/touched.ts': { type: 'update', content: 'y' },
+        },
+      },
+    },
+  });
+  const changes = parseFileChanges(line);
+  assert.deepEqual(changes, [
+    { path: '/repo/added.ts', kind: 'add' },
+    { path: '/repo/gone.ts', kind: 'delete' },
+    { path: '/repo/touched.ts', kind: 'update' },
+  ]);
+  // The contents are what make rollouts reach 128 MB; keeping them would defeat streaming.
+  assert.ok(!JSON.stringify(changes).includes('xxxxx'));
+});
+
+test('records that are not file changes are rejected before parsing', () => {
+  assert.equal(mayContainFileChange('{"type":"event_msg","payload":{"type":"token_count"}}'), false);
+  assert.equal(parseFileChanges('{"type":"event_msg","payload":{"type":"token_count"}}'), undefined);
+  assert.equal(parseFileChanges('not json "FileChange"'), undefined);
+  assert.equal(
+    parseFileChanges(JSON.stringify({ type: 'response_item', payload: { type: 'FileChange' } })),
+    undefined,
+  );
+});
+
+test('an unknown change kind is treated as an edit rather than dropped', () => {
+  const line = JSON.stringify({
+    type: 'event_msg',
+    payload: {
+      type: 'item_completed',
+      item: { type: 'FileChange', changes: { '/repo/a.ts': { type: 'rename-in-2027' } } },
+    },
+  });
+  assert.deepEqual(parseFileChanges(line), [{ path: '/repo/a.ts', kind: 'update' }]);
+});
+
+test('repeated changes to one file collapse to their net effect', () => {
+  assert.deepEqual(
+    netFileChanges([
+      { path: 'a', kind: 'add' },
+      { path: 'a', kind: 'update' },
+      { path: 'a', kind: 'update' },
+    ]),
+    [{ path: 'a', kind: 'add' }],
+    'a file this session created reads as added however often it was then edited',
+  );
+  assert.deepEqual(
+    netFileChanges([
+      { path: 'b', kind: 'add' },
+      { path: 'b', kind: 'delete' },
+    ]),
+    [{ path: 'b', kind: 'delete' }],
+    'a removal is the last word whatever preceded it',
+  );
+  assert.deepEqual(
+    netFileChanges([
+      { path: 'c', kind: 'update' },
+      { path: 'c', kind: 'update' },
+    ]),
+    [{ path: 'c', kind: 'update' }],
+  );
 });

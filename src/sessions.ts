@@ -7,11 +7,14 @@ import { createInterface } from 'node:readline';
 import { parseRolloutFileName } from './binder';
 import {
   isInjectedContext,
+  netFileChanges,
+  parseFileChanges,
   parseSessionMeta,
   parseTranscriptLine,
   renderTranscriptEntry,
   renderTranscriptHeader,
   summarise,
+  type FileChange,
   type TranscriptMeta,
   type TranscriptRenderOptions,
 } from './transcript';
@@ -375,4 +378,67 @@ export async function exportTranscript(
     parts.push('\n---\n\n> Transcript truncated. Open the rollout file for the remainder.\n');
   }
   return { markdown: parts.join('\n'), entryCount, truncated };
+}
+
+export interface ChangedFilesResult {
+  files: FileChange[];
+  /** True when the scan stopped early; the list is then a prefix, not the whole story. */
+  truncated: boolean;
+}
+
+/**
+ * Every file a session changed, read straight out of its rollout.
+ *
+ * Streamed line by line and pre-filtered by substring before any JSON parsing: a rollout
+ * embeds the full contents of each file it writes, so they reach 128 MB here and a single
+ * line can be megabytes. Only paths and change kinds are kept.
+ *
+ * The caps exist because this runs when a session row is expanded, and an operator expanding
+ * a row expects a list, not a stall. When either cap is hit the result says so, so a
+ * shortened list is never mistaken for a complete one.
+ */
+export async function collectChangedFiles(
+  filePath: string,
+  options: { maxFiles?: number; maxBytes?: number } = {},
+): Promise<ChangedFilesResult> {
+  const maxFiles = options.maxFiles ?? 500;
+  const maxBytes = options.maxBytes ?? 256 * 1024 * 1024;
+  const stream = createReadStream(filePath, { encoding: 'utf8' });
+  const reader = createInterface({ input: stream, crlfDelay: Infinity });
+
+  const changes: FileChange[] = [];
+  const distinct = new Set<string>();
+  let bytes = 0;
+  let truncated = false;
+
+  try {
+    for await (const line of reader) {
+      bytes += line.length;
+      if (bytes > maxBytes) {
+        truncated = true;
+        break;
+      }
+      const found = parseFileChanges(line);
+      if (!found) {
+        continue;
+      }
+      for (const change of found) {
+        distinct.add(change.path);
+        changes.push(change);
+      }
+      if (distinct.size > maxFiles) {
+        truncated = true;
+        break;
+      }
+    }
+  } catch {
+    // A rollout being written right now can end mid-line; report what was read.
+    truncated = true;
+  } finally {
+    reader.close();
+    stream.destroy();
+  }
+
+  const files = netFileChanges(changes).sort((left, right) => left.path.localeCompare(right.path));
+  return { files, truncated };
 }

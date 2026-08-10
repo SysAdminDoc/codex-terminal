@@ -69,7 +69,9 @@ The real Codex TUI, started in the workspace folder:
   resume, fork, the raw rollout, and archive/delete. New and changed rollouts refresh the view
   automatically. A row at the top reports how much disk Codex's session store is using — it grows
   without bound, and archive/delete hand the work to `codex archive` / `codex delete` so Codex's
-  own state database stays in step.
+  own state database stays in step. **Expand a session** to list the files it changed — added,
+  edited or deleted — read back from the rollout; click one to open it. Deleted files are shown
+  without a link. The scan runs when you expand the row, not during the listing.
 - **Interrupted sessions** — if a window closes without shutting down cleanly, the next window
   offers the Codex sessions it had open under an **Interrupted sessions** group at the top of the
   History view. Restoring one resumes that conversation where it stopped. Sessions that never

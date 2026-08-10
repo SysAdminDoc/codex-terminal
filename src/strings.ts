@@ -106,6 +106,20 @@ export const strings = {
     empty: (): string => vscode.l10n.t('No Codex sessions recorded yet'),
     noMatches: (filter: string): string => vscode.l10n.t('No sessions match “{0}”', filter),
     noPrompt: (): string => vscode.l10n.t('(no prompt recorded)'),
+    changeKind: (kind: 'add' | 'update' | 'delete'): string =>
+      kind === 'add'
+        ? vscode.l10n.t('Added by this session')
+        : kind === 'delete'
+          ? vscode.l10n.t('Deleted by this session')
+          : vscode.l10n.t('Edited by this session'),
+    changedFileAccessibility: (name: string, kind: string): string =>
+      vscode.l10n.t('{0} — {1}', name, kind),
+    openChangedFile: (): string => vscode.l10n.t('Open Changed File'),
+    noChangedFiles: (): string => vscode.l10n.t('No file changes recorded in this session'),
+    changedFilesTruncated: (): string =>
+      vscode.l10n.t('… more files were changed than are listed here'),
+    changedFilesFailed: (reason: string): string =>
+      vscode.l10n.t('Could not read the file changes ({0})', reason),
     sessionCount: (count: number): string =>
       count === 1 ? vscode.l10n.t('1 session') : vscode.l10n.t('{0} sessions', count),
     openTranscript: (): string => vscode.l10n.t('Open Transcript'),

@@ -7,6 +7,16 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **Expanding a History session lists the files it changed**, tagged added, edited or
+  deleted, each opening the file — the first thing anyone asks of a finished agent session
+  and, until now, unanswerable without reading the raw rollout. Codex records every write it
+  makes, so this is read back rather than reconstructed. Repeated edits collapse to the net
+  effect: a file the session created reads as added however many times it was then touched,
+  and a removal is the last word. Deleted files are listed without a link, because a command
+  that reliably fails is worse than none. The scan is lazy, streamed and pre-filtered before
+  any JSON parsing, since a rollout embeds the full contents of every file it writes — the
+  largest here, 128 MB, lists its 48 files in 429 ms. If a cap is hit the list says so rather
+  than passing a prefix off as the whole story.
 - Sessions now report what Codex last did, not just that it is busy. "Working" for eleven
   minutes is indistinguishable from stuck; "Working · ran npm run check" or "Working · edited
   monitor.ts" is a progress report. Codex describes every step it finishes in its session

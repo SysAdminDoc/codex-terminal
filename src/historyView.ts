@@ -2,6 +2,7 @@ import * as vscode from 'vscode';
 
 import {
   codexHomeDirectory,
+  collectChangedFiles,
   discoverSessions,
   formatBytes,
   measureStore,
@@ -12,6 +13,7 @@ import {
   type SessionRecord,
 } from './sessions';
 import type { JournalSession } from './journal';
+import type { FileChange } from './transcript';
 import { strings } from './strings';
 
 /**
@@ -61,6 +63,12 @@ interface MessageNode {
   text: string;
 }
 
+/** One file a session created, edited or removed, read back from its rollout. */
+interface ChangedFileNode {
+  kind: 'changed-file';
+  change: FileChange;
+}
+
 /** Disk usage of Codex's session store, which grows without bound and is otherwise unseen. */
 interface UsageNode {
   kind: 'usage';
@@ -74,6 +82,7 @@ export type HistoryNode =
   | ProjectNode
   | SessionNode
   | UsageNode
+  | ChangedFileNode
   | MessageNode;
 
 export function isSessionNode(node: unknown): node is SessionNode {
@@ -170,7 +179,12 @@ class ProjectItem extends vscode.TreeItem {
 
 class SessionItem extends vscode.TreeItem {
   constructor(node: SessionNode) {
-    super(node.session.preview || strings.history.noPrompt(), vscode.TreeItemCollapsibleState.None);
+    // Collapsed, not None: expanding lists the files the session changed, which is read from
+    // the rollout on demand rather than during the listing scan.
+    super(
+      node.session.preview || strings.history.noPrompt(),
+      vscode.TreeItemCollapsibleState.Collapsed,
+    );
     const { session } = node;
     this.description = formatTimestamp(session.timestamp);
     this.tooltip = new vscode.MarkdownString(
@@ -215,6 +229,45 @@ class UsageItem extends vscode.TreeItem {
   }
 }
 
+const CHANGE_ICON: Record<FileChange['kind'], string> = {
+  add: 'diff-added',
+  update: 'diff-modified',
+  delete: 'diff-removed',
+};
+
+class ChangedFileItem extends vscode.TreeItem {
+  constructor(node: ChangedFileNode) {
+    const { change } = node;
+    // Either separator: rollouts are written on Windows and on POSIX.
+    const name = change.path.replace(/[\\/]+$/, '').split(/[\\/]/).pop() ?? change.path;
+    super(name, vscode.TreeItemCollapsibleState.None);
+    // The full path is the disambiguator: a session touches same-named files in different
+    // directories often enough that the basename alone is not an answer.
+    this.description = change.path;
+    this.tooltip = new vscode.MarkdownString(
+      `${strings.history.changeKind(change.kind)}
+
+- \`${change.path}\``,
+    );
+    this.iconPath = new vscode.ThemeIcon(CHANGE_ICON[change.kind]);
+    this.contextValue = `codexTerminal.changedFile.${change.kind}`;
+    this.accessibilityInformation = {
+      label: strings.history.changedFileAccessibility(name, strings.history.changeKind(change.kind)),
+      role: change.kind === 'delete' ? 'text' : 'button',
+    };
+    if (change.kind !== 'delete') {
+      // A deleted file has nothing to open, and a command that reliably fails is worse than
+      // no command at all.
+      this.resourceUri = vscode.Uri.file(change.path);
+      this.command = {
+        command: 'vscode.open',
+        title: strings.history.openChangedFile(),
+        arguments: [vscode.Uri.file(change.path)],
+      };
+    }
+  }
+}
+
 class MessageItem extends vscode.TreeItem {
   constructor(node: MessageNode) {
     super(node.text, vscode.TreeItemCollapsibleState.None);
@@ -231,6 +284,8 @@ export class HistoryViewProvider
   private filter = '';
   private recoverable: JournalSession[] = [];
   private usage: { fileCount: number; totalBytes: number } | undefined;
+  /** Keyed by rollout path, cleared on a real reload; see `changedFiles`. */
+  private readonly changedFileCache = new Map<string, HistoryNode[]>();
   private pending: NodeJS.Timeout | undefined;
   private pendingHard = false;
 
@@ -249,6 +304,9 @@ export class HistoryViewProvider
     }
     if (hard) {
       clearSessionCache();
+      // A live session keeps appending, so its file list is only as current as the last
+      // scan. An explicit refresh is the operator asking for it to be re-read.
+      this.changedFileCache.clear();
     }
     this.loaded = false;
     this.changes.fire();
@@ -301,6 +359,43 @@ export class HistoryViewProvider
     return this.filter;
   }
 
+  /**
+   * Files a session changed, scanned from its rollout the first time it is expanded.
+   *
+   * Cached per session because the scan reads the whole file and a rollout that has been
+   * closed never changes again. A live one may still grow, but re-scanning on every collapse
+   * and re-expand would cost far more than the staleness is worth — the refresh button and
+   * the file watcher both clear this.
+   */
+  private async changedFiles(node: SessionNode): Promise<HistoryNode[]> {
+    const cached = this.changedFileCache.get(node.session.filePath);
+    if (cached) {
+      return cached;
+    }
+    try {
+      const { files, truncated } = await collectChangedFiles(node.session.filePath);
+      const children: HistoryNode[] =
+        files.length === 0
+          ? [{ kind: 'message', text: strings.history.noChangedFiles() }]
+          : files.map((change) => ({ kind: 'changed-file' as const, change }));
+      // Say so rather than letting a capped list read as the whole story.
+      if (truncated) {
+        children.push({ kind: 'message', text: strings.history.changedFilesTruncated() });
+      }
+      this.changedFileCache.set(node.session.filePath, children);
+      return children;
+    } catch (error) {
+      return [
+        {
+          kind: 'message',
+          text: strings.history.changedFilesFailed(
+            error instanceof Error ? error.message : String(error),
+          ),
+        },
+      ];
+    }
+  }
+
   getTreeItem(node: HistoryNode): vscode.TreeItem {
     switch (node.kind) {
       case 'recovery-group':
@@ -313,6 +408,8 @@ export class HistoryViewProvider
         return new SessionItem(node);
       case 'usage':
         return new UsageItem(node);
+      case 'changed-file':
+        return new ChangedFileItem(node);
       default:
         return new MessageItem(node);
     }
@@ -323,13 +420,14 @@ export class HistoryViewProvider
       if (element.kind === 'recovery-group') {
         return element.sessions.map((session) => ({ kind: 'recovery' as const, session }));
       }
-      return element.kind === 'project'
-        ? element.group.sessions.map((session) => ({
-            kind: 'session' as const,
-            session,
-            project: element.group.project,
-          }))
-        : [];
+      if (element.kind === 'project') {
+        return element.group.sessions.map((session) => ({
+          kind: 'session' as const,
+          session,
+          project: element.group.project,
+        }));
+      }
+      return element.kind === 'session' ? this.changedFiles(element) : [];
     }
 
     if (!this.loaded) {
