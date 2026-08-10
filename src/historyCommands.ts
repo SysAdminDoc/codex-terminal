@@ -1,10 +1,11 @@
 import * as vscode from 'vscode';
 
+import { nodeEntryFor, setThreadName } from './appServer';
 import { runCommand } from './doctor';
 import { isRunningSessionNode } from './actionsView';
 import { isSessionNode } from './historyView';
 import { launch, preflightCodexCommand } from './launch';
-import { idForName, setSessionName, type SessionNames } from './names';
+import { idForName, normaliseName, setSessionName, type SessionNames } from './names';
 import { SESSION_NAMES_KEY, config, log, services } from './services';
 import { strings } from './strings';
 import { transcriptUri } from './transcriptDocument';
@@ -55,6 +56,53 @@ export async function nameSession(node: unknown): Promise<void> {
   await services().context.globalState.update(SESSION_NAMES_KEY, setSessionName(names, session.id, typed));
   services().history.refresh();
   services().monitor.refreshViews();
+  // Only a real name is pushed. Codex rejects an empty one outright ("thread name must not
+  // be empty") and offers no way to unset an existing one — there is no `thread/name/clear`
+  // and `null` is refused — so clearing here clears the local name only, and says so.
+  const cleared = !normaliseName(typed);
+  if (cleared) {
+    log().info(strings.names.clearedLocally(session.id));
+    return;
+  }
+  await pushNameToCodex(session.id, typed);
+}
+
+/**
+ * Mirror the name into Codex itself, so `codex resume <name>` finds it from any shell and the
+ * `thread-title` tab item can show it.
+ *
+ * Best effort on purpose. The local name is already stored and already visible by the time
+ * this runs; failing to reach the app-server is worth a log line, not an error dialog that
+ * implies the rename did not happen.
+ */
+async function pushNameToCodex(sessionId: string, name: string): Promise<void> {
+  const command = config().get<string>('command', 'codex');
+  const resolved = preflightCodexCommand(command);
+  if (!resolved) {
+    return;
+  }
+  const entry = nodeEntryFor(resolved);
+  try {
+    await vscode.window.withProgress(
+      { location: vscode.ProgressLocation.Window, title: strings.names.syncing() },
+      () =>
+        setThreadName(
+          {
+            command: entry ?? resolved,
+            ...(entry ? { nodeExecutable: process.execPath } : {}),
+            log: log(),
+          },
+          String(services().context.extension.packageJSON.version),
+          sessionId,
+          name.trim(),
+        ),
+    );
+    log().info(strings.names.synced(sessionId, name.trim()));
+  } catch (error) {
+    log().warn(
+      strings.names.syncFailed(error instanceof Error ? error.message : String(error)),
+    );
+  }
 }
 
 export async function openTranscript(node: unknown): Promise<void> {

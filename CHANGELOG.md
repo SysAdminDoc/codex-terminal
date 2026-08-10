@@ -7,6 +7,19 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **Naming a session now tells Codex too**, so `codex resume <name>` finds it from any shell
+  and Codex's own `thread-title` tab item can show it. Codex accepts a session name wherever it
+  accepts an id, but its CLI cannot set one — 0.147 has no rename subcommand and no flag — so
+  the app-server's `thread/name/set` is the only writer. It runs over stdio, needing neither a
+  listening socket nor the experimental setting, so it works on every supported editor. The
+  local name is stored and shown first; if Codex cannot be reached the name still works here
+  and the log says the Codex copy was not written.
+
+  One asymmetry is worth knowing: a Codex thread name can be **replaced but never unset**.
+  There is no clear method, an empty name is rejected outright and `null` is refused, so
+  clearing a name here clears the local one only. To see names in the tab, add `thread-title`
+  to `codexTerminal.titleItems` — it is not a default, because it would lengthen every tab
+  including the unnamed ones.
 - **Experimental: attach launched terminals to a Codex app-server** — `codexTerminal.appServer.enabled`.
   When on, the window hosts a `codex app-server` and every terminal it launches is handed
   `--remote ws://127.0.0.1:<port>`, so Codex reports its own activity over a supported protocol

@@ -80,8 +80,11 @@ The real Codex TUI, started in the workspace folder:
   without a link. The scan runs when you expand the row, not during the listing.
 - **Naming a session** — *Name Session…* on a row in either sidebar. The name replaces that
   row's label everywhere the extension draws it. It is stored by this extension, not by Codex:
-  the Codex CLI accepts a session name wherever it accepts an id, but offers no way to set one,
-  so a name given here does not reach Codex's own tab title.
+  the name is stored here and also written to Codex through the app server's `thread/name/set`,
+  which is the only writer — the CLI has no rename command — so `codex resume <name>` finds it
+  from any shell. Add `thread-title` to `codexTerminal.titleItems` to show it in the tab. A
+  Codex thread name can be replaced but never unset, so clearing a name here clears only the
+  local one.
 - **Interrupted sessions** — if a window closes without shutting down cleanly, the next window
   offers the Codex sessions it had open under an **Interrupted sessions** group at the top of the
   History view. Restoring one resumes that conversation where it stopped. Sessions that never

@@ -196,6 +196,19 @@ export const strings = {
       vscode.l10n.t('Another session is already named “{0}”.', name),
     notBound: (): string =>
       vscode.l10n.t('This session has no Codex session id yet, so it cannot be named.'),
+    syncing: (): string => vscode.l10n.t('Telling Codex the new session name…'),
+    clearedLocally: (id: string): string =>
+      vscode.l10n.t(
+        'cleared the local name for {0}; Codex keeps its own, because a thread name can be replaced but never unset',
+        id,
+      ),
+    synced: (id: string, name: string): string =>
+      vscode.l10n.t('set the Codex thread name for {0} to “{1}”', id, name),
+    syncFailed: (reason: string): string =>
+      vscode.l10n.t(
+        'the name is saved here but Codex was not told ({0}); `codex resume <name>` will not find it',
+        reason,
+      ),
   },
   appServer: {
     connecting: (): string => vscode.l10n.t('Connecting to codex app-server…'),

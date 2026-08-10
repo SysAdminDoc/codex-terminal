@@ -374,3 +374,35 @@ export function nodeEntryFor(resolved: string): string | undefined {
   );
   return existsSync(entry) ? entry : undefined;
 }
+
+/**
+ * Tell Codex what a session is called.
+ *
+ * Codex accepts a session name wherever it accepts an id — `resume`, `archive`, `delete`,
+ * `unarchive` all document "session id or session name" — but its CLI has no way to set one:
+ * 0.147 has no rename subcommand and no flag. `thread/name/set` on the app-server is the only
+ * writer, which is why naming a session used to stop at this extension's own store.
+ *
+ * The thread id is the session id. `thread/list` returns entries whose `id` and `sessionId`
+ * are the same value (verified against 0.147, 2026-08-10), so no lookup is needed — and if
+ * that ever stops being true the failure is self-explaining, because the server answers an
+ * unknown id with "no rollout found for thread id …".
+ *
+ * Runs over stdio rather than the WebSocket transport: this is a client-only call with no TUI
+ * to attach, so it needs neither a listening socket nor a `WebSocket` global, and therefore
+ * works on every editor this extension supports rather than only the experimental path.
+ */
+export async function setThreadName(
+  options: Omit<AppServerOptions, 'onNotification'>,
+  clientVersion: string,
+  sessionId: string,
+  name: string,
+): Promise<void> {
+  const client = new AppServerClient(options);
+  try {
+    await client.start(clientVersion);
+    await client.request('thread/name/set', { threadId: sessionId, name });
+  } finally {
+    client.dispose();
+  }
+}
