@@ -99,6 +99,8 @@ export const strings = {
   },
   sessions: {
     prompt: (): string => vscode.l10n.t('Choose a recent Codex session to resume'),
+    focusPrompt: (count: number): string =>
+      vscode.l10n.t('{0} Codex sessions are open — choose one to focus', count),
     resumeLabel: (timestamp: string, id: string): string =>
       vscode.l10n.t('{0} — {1}', timestamp, id),
   },

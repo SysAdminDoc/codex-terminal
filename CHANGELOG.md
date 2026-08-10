@@ -26,6 +26,11 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   any JSON parsing, since a rollout embeds the full contents of every file it writes — the
   largest here, 128 MB, lists its 48 files in 429 ms. If a cap is hit the list says so rather
   than passing a prefix off as the whole story.
+- Clicking the status bar with several sessions open asks which one to focus, showing each
+  session's project, what it last did, how long it has been going and how much context it has
+  used, working sessions first. It previously advertised a count and then focused whichever
+  session happened to be most recent — a coin flip exactly when several agents are running,
+  which is when the button is worth having. With one session it focuses it directly, as before.
 - Sessions now report what Codex last did, not just that it is busy. "Working" for eleven
   minutes is indistinguishable from stuck; "Working · ran npm run check" or "Working · edited
   monitor.ts" is a progress report. Codex describes every step it finishes in its session

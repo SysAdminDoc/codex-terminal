@@ -21,8 +21,11 @@ import { SessionMonitor } from './monitor';
 import { JournalStore, findLaunch, interruptedSessions, type JournalSession } from './journal';
 import {
   DEFAULT_STALL_SECONDS,
+  describeActivity,
   motionAllowed,
   peakContextUsed,
+  pickerOrder,
+  presentStatus,
   statusBarText,
 } from './present';
 import {
@@ -531,6 +534,43 @@ function sendFileReference(): void {
   // `false` leaves the reference on the prompt so a question can be typed after it.
   terminal.sendText(`${reference} `, false);
   log.info(strings.logs.sentReference(reference));
+}
+
+/**
+ * The status bar's click target.
+ *
+ * With one live session this focuses it, as it always did. With several it asks which,
+ * because the status bar advertises a count and then silently picked the most recent one —
+ * a coin flip precisely when several agents are running, which is when the button matters.
+ */
+async function focusCodex(): Promise<void> {
+  const sessions = sessionMonitor?.live() ?? [];
+  if (sessions.length === 0) {
+    void launch({ mode: 'new' });
+    return;
+  }
+  if (sessions.length === 1) {
+    sessions[0].terminal.show(false);
+    return;
+  }
+
+  const now = Date.now();
+  const stallSeconds = config().get<number>('stallSeconds', DEFAULT_STALL_SECONDS);
+  const animate = animationAllowed();
+  const picked = await vscode.window.showQuickPick(
+    pickerOrder(sessions).map((session) => ({
+      label: `$(${presentStatus(session.activity, animate).icon}) ${session.project || session.label}`,
+      description: describeActivity(session.activity, now, stallSeconds),
+      detail: session.cwd,
+      session,
+    })),
+    {
+      placeHolder: strings.sessions.focusPrompt(sessions.length),
+      matchOnDescription: true,
+      matchOnDetail: true,
+    },
+  );
+  picked?.session.terminal.show(false);
 }
 
 function focusSession(terminal: vscode.Terminal | undefined): void {
@@ -1067,12 +1107,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<CodexT
     [
       'codexTerminal.focus',
       () => {
-        const terminal = liveOwnedTerminal();
-        if (terminal) {
-          terminal.show(false);
-        } else {
-          void launch({ mode: 'new' });
-        }
+        void focusCodex();
       },
     ],
   ];

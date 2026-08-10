@@ -11,6 +11,7 @@ import {
   formatTokens,
   presentStatus,
   statusBarText,
+  pickerOrder,
 } from '../present';
 
 function activity(overrides: Partial<SessionActivity> = {}): SessionActivity {
@@ -119,4 +120,31 @@ test('the reduced-motion preference is read the way VS Code defines it', () => {
   assert.equal(motionAllowed('auto', true), false);
   assert.equal(motionAllowed('auto', false), true);
   assert.equal(motionAllowed(undefined), true);
+});
+
+test('the jump-to picker puts working sessions first, then the most recent', () => {
+  const at = (status: 'working' | 'idle' | 'silent', launchedAt: number) => ({
+    activity: { ...INITIAL_ACTIVITY, status },
+    launchedAt,
+  });
+  const ordered = pickerOrder([
+    at('idle', 300),
+    at('working', 100),
+    at('silent', 400),
+    at('working', 200),
+  ]);
+  assert.deepEqual(
+    ordered.map((entry) => `${entry.activity.status}:${entry.launchedAt}`),
+    ['working:200', 'working:100', 'silent:400', 'idle:300'],
+  );
+});
+
+test('ordering does not rank silent against idle', () => {
+  // Both mean "not busy"; implying an order between them would assert a distinction the
+  // session file cannot support. Only recency separates them.
+  const ordered = pickerOrder([
+    { activity: { ...INITIAL_ACTIVITY, status: 'silent' as const }, launchedAt: 1 },
+    { activity: { ...INITIAL_ACTIVITY, status: 'idle' as const }, launchedAt: 2 },
+  ]);
+  assert.deepEqual(ordered.map((entry) => entry.launchedAt), [2, 1]);
 });

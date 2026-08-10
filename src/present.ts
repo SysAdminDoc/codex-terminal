@@ -9,6 +9,7 @@
 import {
   contextUsed,
   elapsedSeconds,
+  isWorking,
   silentFor,
   type ActivityItem,
   type SessionActivity,
@@ -183,6 +184,23 @@ export function peakContextUsed(activities: readonly SessionActivity[]): number 
     }
   }
   return peak;
+}
+
+/**
+ * Order sessions for the jump-to picker: working first, then most recently launched.
+ *
+ * Working first because that is what the operator is looking for — the status bar counts
+ * working sessions, so a click on it should land near them rather than in launch order.
+ * `isWorking` is deliberately the only grouping: `silent` and `idle` are both "not busy", and
+ * ranking them against each other would imply a distinction the session file cannot support.
+ */
+export function pickerOrder<T extends { activity: SessionActivity; launchedAt: number }>(
+  sessions: readonly T[],
+): T[] {
+  return [...sessions].sort((left, right) => {
+    const busy = Number(isWorking(right.activity)) - Number(isWorking(left.activity));
+    return busy !== 0 ? busy : right.launchedAt - left.launchedAt;
+  });
 }
 
 /** Status bar text. `$(id)` is the workbench's inline-icon syntax, spin modifier included. */
