@@ -26,6 +26,17 @@ interface Manifest {
   };
 }
 
+/** Locales with a `package.nls.<locale>.json` and an `l10n/bundle.l10n.<locale>.json`. */
+const SHIPPED_LOCALES = ['es'];
+
+/** The `{0}`-style indices a string uses, sorted, so order changes in translation are fine. */
+function placeholders(value: string | undefined): string {
+  return [...String(value ?? '').matchAll(/\{(\d+)\}/g)]
+    .map((match) => match[1])
+    .sort()
+    .join(',');
+}
+
 function readManifest(): Manifest {
   return JSON.parse(
     readFileSync(path.resolve(__dirname, '../../package.json'), 'utf8'),
@@ -187,6 +198,55 @@ test('categories describe the extension for the marketplace', () => {
   assert.ok(categories.length > 0);
   for (const category of categories) {
     assert.ok(valid.has(category), `${category} is not a valid marketplace category`);
+  }
+});
+
+test('every shipped locale translates the whole manifest, with no orphan keys', () => {
+  // A partial language pack is invisible: VS Code silently falls back to English per key, so
+  // half a translation looks like a working one. Parity in both directions is the only check
+  // that fails when a new setting is added and the locale is not updated with it.
+  const root = path.resolve(__dirname, '../..');
+  const english = Object.keys(
+    JSON.parse(readFileSync(path.join(root, 'package.nls.json'), 'utf8')) as Record<string, string>,
+  );
+  for (const locale of SHIPPED_LOCALES) {
+    const translated = new Set(
+      Object.keys(
+        JSON.parse(
+          readFileSync(path.join(root, `package.nls.${locale}.json`), 'utf8'),
+        ) as Record<string, string>,
+      ),
+    );
+    const missing = english.filter((key) => !translated.has(key));
+    assert.deepEqual(missing, [], `package.nls.${locale}.json is missing: ${missing.join(', ')}`);
+    const orphans = [...translated].filter((key) => !english.includes(key));
+    assert.deepEqual(orphans, [], `package.nls.${locale}.json translates keys that no longer exist: ${orphans.join(', ')}`);
+  }
+});
+
+test('every shipped locale translates the whole extension-host bundle', () => {
+  const root = path.resolve(__dirname, '../..');
+  const english = JSON.parse(
+    readFileSync(path.join(root, 'l10n', 'bundle.l10n.json'), 'utf8'),
+  ) as Record<string, string>;
+  const keys = Object.keys(english);
+  assert.ok(keys.length > 0, 'the exported bundle must not be empty');
+
+  for (const locale of SHIPPED_LOCALES) {
+    const translated = JSON.parse(
+      readFileSync(path.join(root, 'l10n', `bundle.l10n.${locale}.json`), 'utf8'),
+    ) as Record<string, string>;
+    const missing = keys.filter((key) => !(key in translated));
+    assert.deepEqual(missing, [], `bundle.l10n.${locale}.json is missing: ${missing.slice(0, 5).join(' | ')}`);
+    const orphans = Object.keys(translated).filter((key) => !(key in english));
+    assert.deepEqual(orphans, [], `bundle.l10n.${locale}.json has strings the source no longer uses: ${orphans.slice(0, 5).join(' | ')}`);
+
+    // A dropped or renumbered placeholder is the failure that survives review: the string
+    // reads fine and renders `{0}` at the user, or silently loses the value entirely.
+    const mismatched = keys.filter(
+      (key) => placeholders(key) !== placeholders(translated[key]),
+    );
+    assert.deepEqual(mismatched, [], `placeholders differ in ${locale}: ${mismatched.slice(0, 5).join(' | ')}`);
   }
 });
 

@@ -7,6 +7,12 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **Spanish.** Both localization surfaces ship — the manifest (`package.nls.es.json`) and every
+  runtime string (`l10n/bundle.l10n.es.json`, 172 of them) — and an integration suite runs a
+  real editor in Spanish to prove the bundle is actually loaded rather than merely present. Key
+  and placeholder parity is asserted in both directions, so an English string added without a
+  translation now fails the build instead of silently falling back.
+
 - **Per-session cost estimates**, at prices you supply in `codexTerminal.modelRates` (USD per
   million tokens, prefix-matched so one `gpt-5.6` entry covers every alias). No price list
   ships: Codex records release aliases no public price page carries, and a bundled table would

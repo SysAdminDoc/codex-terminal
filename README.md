@@ -178,6 +178,17 @@ and nothing while wedged, so "finished" would be a guess. The threshold is 10 mi
 working turn was 269 seconds across 80,779 samples. Any new output puts the session straight back
 to working.
 
+### Languages
+
+English and Spanish ship. Set VS Code's display language (*Configure Display Language*, or the
+Spanish language pack) and the Launch panel, the History view, every command title and every
+setting description come back translated.
+
+Both surfaces are covered — `package.nls.es.json` for the manifest and `l10n/bundle.l10n.es.json`
+for everything the extension says at runtime — and a test asserts they stay complete in both
+directions, so adding an English string without a translation fails the build rather than
+falling back silently. Adding a locale means those two files and one entry in the test's list.
+
 ### Cost estimates, and why none ship with the extension
 
 A session row can show what it cost, but only at prices you supply:

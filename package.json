@@ -582,7 +582,7 @@
     "lint": "eslint src",
     "l10n:export": "vscode-l10n-dev export -o l10n ./src",
     "test": "npm run compile && node --test \"out/test/*.test.js\"",
-    "test:integration": "npm run compile && npm run bundle && vscode-test --label hostile --jobs 1",
+    "test:integration": "npm run compile && npm run bundle && vscode-test --jobs 1",
     "check": "npm run clean && npm run compile && npm run lint && node --test \"out/test/*.test.js\" && npm run bundle",
     "package": "npm run check && node scripts/package.mjs",
     "vscode:prepublish": "npm run clean && npm run bundle"
