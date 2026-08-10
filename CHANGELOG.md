@@ -24,6 +24,18 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- **An argument could break out of the command line and run something else.** Values were
+  quoted only when they matched a metacharacter set, and that set had no `;`, `$` or backtick —
+  so `--model=a;calc`, typed into the profile prompt or arriving through `codexTerminal.args`,
+  reached PowerShell's `-Command` as two statements and ran `calc`, while `x$HOME` expanded on
+  the way through. PowerShell and POSIX values are now quoted unconditionally: both use
+  single-quoted literals, in which nothing but the quote itself is special, so a value that did
+  not need quoting is unchanged by having been quoted — and there is no list left to miss a
+  character from. Verified by running fifteen hostile arguments through real pwsh, Windows
+  PowerShell and bash and comparing what the program received byte-for-byte. cmd.exe keeps
+  conditional quoting, because `cmd /C` strips the outermost quote pair under rules that depend
+  on how many it sees; its set gains the grouping parentheses it was missing.
+
 - **A hosted app-server could crash the extension host, or outlive its own port.** The spawn
   had no `'error'` listener, and an unlistened `'error'` on a child process is *thrown* — out of
   a callback, past the `try` around the call, and into the extension host as an unhandled

@@ -81,35 +81,78 @@ export function quotePosix(value: string): string {
 }
 
 /**
- * cmd.exe has no escape for `"` inside a quoted string, so a path containing one
+ * Characters cmd.exe can run *code* with, which is a shorter list than it looks.
+ *
+ * `;` and `,` are argument delimiters in cmd, not command separators — only `&`, `|`, `<`,
+ * `>`, `^` and grouping parentheses can start something executing, and `()` was missing here
+ * while being present in the (now removed) PowerShell/POSIX predicate.
+ *
+ * Deliberately not extended to `%`, `!`, `,`, `;` or `=`: quoting more values changes how many
+ * quotes `cmd /C` sees on the line, and it strips the outermost pair under rules that depend
+ * on that count. Widening this set is a behaviour change that needs a real terminal to verify,
+ * not a unit test — see the roadmap item.
+ */
+const CMD_METACHARACTERS = /[\s&|<>^()]/;
+
+/**
+ * cmd.exe has no escape for `"` inside a quoted string, so a value containing one
  * is unquotable. Quote when we must, leave bare otherwise.
+ *
+ * The conditional is not a stylistic choice here, unlike the other two families: `cmd /c`
+ * strips the outermost quotes of the whole command line under rules that depend on how many
+ * quotes it sees, so quoting things that do not need it changes what cmd does with the rest.
  */
 export function quoteCmd(value: string): string {
   if (value.includes('"')) {
     throw new Error(`cmd.exe cannot quote a path containing a double quote: ${value}`);
   }
-  return /[\s&|<>^]/.test(value) ? `"${value}"` : value;
+  return CMD_METACHARACTERS.test(value) ? `"${value}"` : value;
 }
 
-function needsQuoting(value: string): boolean {
-  return /[\s'"&|<>^()]/.test(value);
-}
-
-/** Build the command line the shell will execute, quoted for that shell's family. */
+/**
+ * Build the command line the shell will execute, quoted for that shell's family.
+ *
+ * PowerShell and POSIX values are quoted **unconditionally**. They used to be quoted only when
+ * they matched a metacharacter set, and that set was incomplete — it had no `;`, `$` or
+ * backtick, so `--model=a;calc` typed into the profile prompt reached `-Command` as two
+ * statements and ran `calc`, and `x$HOME` expanded on the way through. Any such list is a
+ * standing invitation to miss a character; quoting everything removes the question. Both
+ * families use single-quoted literals, in which nothing but the quote itself is special, so a
+ * value that did not need quoting is unchanged by having been quoted.
+ */
 export function buildCommandLine(command: string, args: string[], family: ShellFamily): string {
   if (family === 'powershell') {
-    // `&` is required before a quoted path, otherwise PowerShell treats the
-    // string as a value to echo rather than a program to run.
-    const head = needsQuoting(command) ? `& ${quotePowerShell(command)}` : command;
-    const tail = args.map((a) => (needsQuoting(a) ? quotePowerShell(a) : a));
-    return [head, ...tail].join(' ');
+    // `&` is the call operator: without it a quoted string is a value to echo, not a program
+    // to run. It is unconditional now because the quoting is.
+    return [`& ${quotePowerShell(command)}`, ...args.map(quotePowerShell)].join(' ');
   }
   if (family === 'cmd') {
     return [command, ...args].map(quoteCmd).join(' ');
   }
-  const head = needsQuoting(command) ? quotePosix(command) : command;
-  const tail = args.map((a) => (needsQuoting(a) ? quotePosix(a) : a));
-  return [head, ...tail].join(' ');
+  return [command, ...args].map(quotePosix).join(' ');
+}
+
+/** A command that has to be quoted is one that cannot be left bare in any of the families. */
+const NEEDS_QUOTING = /[\s'"&|<>^()$;`{}[\],*?~!=%]/;
+
+/**
+ * The same line, for `editorDefault`, where it is *typed* into a shell we did not choose.
+ *
+ * Arguments are quoted exactly as above, because that is the injection surface. The command
+ * itself is left bare when it can be — `codex`, the default, needs no quoting — because the
+ * quoted PowerShell form `& 'codex'` is a syntax error in cmd.exe, and in this one mode the
+ * shell on the other end is whatever the operator's default profile happens to be.
+ */
+export function buildTypedCommandLine(
+  command: string,
+  args: string[],
+  family: ShellFamily,
+): string {
+  const quote = family === 'powershell' ? quotePowerShell : quotePosix;
+  const head = NEEDS_QUOTING.test(command)
+    ? `${family === 'powershell' ? '& ' : ''}${quote(command)}`
+    : command;
+  return [head, ...args.map(quote)].join(' ');
 }
 
 function familyOf(shellPath: string): ShellFamily {
@@ -263,7 +306,7 @@ export function buildLaunchPlan(req: LaunchRequest): LaunchPlan {
       shellArgs: [],
       family: req.platform === 'win32' ? 'powershell' : 'posix',
       shellResolutionReason: shell.reason,
-      sendTextFallback: buildCommandLine(
+      sendTextFallback: buildTypedCommandLine(
         command,
         req.args,
         req.platform === 'win32' ? 'powershell' : 'posix',

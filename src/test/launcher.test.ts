@@ -4,6 +4,7 @@ import { test } from 'node:test';
 import {
   buildCommandLine,
   buildLaunchPlan,
+  buildTypedCommandLine,
   modeArgs,
   quoteCmd,
   quotePosix,
@@ -29,7 +30,7 @@ test('auto picks pwsh 7 when it is present', () => {
   const plan = buildLaunchPlan(req());
   assert.equal(plan.shellPath, 'C:\\Program Files\\PowerShell\\7\\pwsh.exe');
   assert.equal(plan.family, 'powershell');
-  assert.deepEqual(plan.shellArgs, ['-NoLogo', '-NoExit', '-Command', 'codex']);
+  assert.deepEqual(plan.shellArgs, ['-NoLogo', '-NoExit', '-Command', "& 'codex'"]);
 });
 
 test('auto falls back to Windows PowerShell when pwsh 7 is absent', () => {
@@ -63,7 +64,7 @@ test('editorDefault is the only mode that types the command', () => {
 
 test('keepShellOpen=false drops -NoExit so the tab closes with Codex', () => {
   const plan = buildLaunchPlan(req({ keepShellOpen: false }));
-  assert.deepEqual(plan.shellArgs, ['-NoLogo', '-Command', 'codex']);
+  assert.deepEqual(plan.shellArgs, ['-NoLogo', '-Command', "& 'codex'"]);
 });
 
 test('a Codex path with spaces gets PowerShell call-operator quoting', () => {
@@ -97,7 +98,7 @@ test('cmd.exe refuses a path it cannot quote rather than emitting a broken line'
 test('posix shells re-exec interactively so the tab survives Codex exiting', () => {
   const plan = buildLaunchPlan(req({ shell: 'bash', platform: 'linux' }));
   assert.equal(plan.family, 'posix');
-  assert.deepEqual(plan.shellArgs, ['-c', "codex; exec 'bash' -i"]);
+  assert.deepEqual(plan.shellArgs, ['-c', "'codex'; exec 'bash' -i"]);
 });
 
 test('posix quoting closes and reopens around an embedded quote', () => {
@@ -107,9 +108,9 @@ test('posix quoting closes and reopens around an embedded quote', () => {
 test('extra args are quoted per family', () => {
   assert.equal(
     buildCommandLine('codex', ['--config', 'model="gpt"'], 'powershell'),
-    `codex --config 'model="gpt"'`,
+    `& 'codex' '--config' 'model="gpt"'`,
   );
-  assert.equal(buildCommandLine('codex', ['--model', 'gpt-5.1'], 'posix'), 'codex --model gpt-5.1');
+  assert.equal(buildCommandLine('codex', ['--model', 'gpt-5.1'], 'posix'), "'codex' '--model' 'gpt-5.1'");
 });
 
 test('custom shell requires a path', () => {
@@ -171,7 +172,7 @@ test('mode args land ahead of the user args on the command line', () => {
     '-NoLogo',
     '-NoExit',
     '-Command',
-    'codex resume --last --model gpt-5.1',
+    "& 'codex' 'resume' '--last' '--model' 'gpt-5.1'",
   ]);
 });
 
@@ -180,4 +181,86 @@ test('forking a chosen session targets that id, not the last one', () => {
   // appended by the caller, so the subcommand must not carry --last.
   assert.deepEqual(modeArgs('forkPicker'), ['fork']);
   assert.deepEqual(modeArgs('forkLast'), ['fork', '--last']);
+});
+
+
+/**
+ * The defect this replaced: quoting was conditional on a metacharacter set that had no `;`,
+ * `$` or backtick, so `--model=a;calc` typed into the profile prompt reached `-Command` as two
+ * statements and ran `calc`, and `x$HOME` expanded on the way through. Any such list is a
+ * standing invitation to miss a character, so PowerShell and POSIX values are now quoted
+ * unconditionally. Verified against real pwsh, Windows PowerShell and bash: all fifteen
+ * arguments below arrive byte-for-byte.
+ */
+const HOSTILE_ARGUMENTS = [
+  '--model=a;calc',
+  'x$HOME',
+  'back`tick',
+  'brace{s}',
+  'star*glob',
+  'tilde~home',
+  'quest?ion',
+  'amp&ersand',
+  'pipe|d',
+  'paren(s)',
+  'a b c',
+  "it's",
+  'percent%PATH%',
+  'bang!x',
+  'comma,semi;eq=',
+];
+
+test('every hostile argument is quoted for PowerShell, whatever it contains', () => {
+  for (const argument of HOSTILE_ARGUMENTS) {
+    const line = buildCommandLine('codex', [argument], 'powershell');
+    assert.ok(line.startsWith("& 'codex' '"), line);
+    assert.ok(line.endsWith("'"), line);
+    // Nothing outside the quotes but the call operator and the command.
+    assert.equal(line, `& 'codex' ${quotePowerShell(argument)}`);
+  }
+});
+
+test('every hostile argument is quoted for POSIX, whatever it contains', () => {
+  for (const argument of HOSTILE_ARGUMENTS) {
+    assert.equal(
+      buildCommandLine('codex', [argument], 'posix'),
+      `'codex' ${quotePosix(argument)}`,
+    );
+  }
+});
+
+test('a value with no metacharacters is quoted anyway, and is unchanged by it', () => {
+  // Single-quoted literals honour no escapes, so quoting something that did not need it
+  // cannot alter it — which is what makes unconditional quoting safe rather than merely tidy.
+  assert.equal(buildCommandLine('codex', ['--version'], 'powershell'), "& 'codex' '--version'");
+  assert.equal(buildCommandLine('codex', ['--version'], 'posix'), "'codex' '--version'");
+});
+
+test('cmd quotes everything it could otherwise execute', () => {
+  // `;` and `,` are argument delimiters in cmd rather than command separators; only these can
+  // start something running, and `()` was the one missing from the set.
+  for (const argument of ['amp&ersand', 'pipe|d', 'redirect>out', 'in<put', 'caret^x', 'paren(s)', 'a b']) {
+    assert.ok(
+      buildCommandLine('codex', [argument], 'cmd').includes(`"${argument}"`),
+      `${argument} was left bare`,
+    );
+  }
+});
+
+
+test('editorDefault types a bare command, because the shell is not ours to assume', () => {
+  // The typed line lands in whatever profile the operator has set. `& 'codex'` is valid
+  // PowerShell and a syntax error in cmd.exe, so the command stays bare when it can - while
+  // the arguments, which are the injection surface, are quoted either way.
+  assert.equal(buildTypedCommandLine('codex', [], 'powershell'), 'codex');
+  assert.equal(
+    buildTypedCommandLine('codex', ['--model=a;calc'], 'powershell'),
+    "codex '--model=a;calc'",
+  );
+  assert.equal(buildTypedCommandLine('codex', ['x$HOME'], 'posix'), "codex 'x$HOME'");
+  // A command that cannot be left bare still gets the call operator it needs.
+  assert.equal(
+    buildTypedCommandLine('C:/Program Files/codex.cmd', [], 'powershell'),
+    "& 'C:/Program Files/codex.cmd'",
+  );
 });
