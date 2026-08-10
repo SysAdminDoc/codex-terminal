@@ -672,12 +672,14 @@ function createStatusBarItem(context: vscode.ExtensionContext, monitor: SessionM
       ? peakContextUsed(sessions.map((session) => session.activity))
       : undefined;
     item.text = statusBarText(working, live, peak, animationAllowed());
-    item.tooltip =
+    const stalled = monitor.stalledCount(config().get<number>('stallSeconds', DEFAULT_STALL_SECONDS));
+    const base =
       working > 0
         ? strings.status.workingTooltip(working, live)
         : live > 0
           ? strings.status.liveTooltip(live)
           : strings.status.tooltip();
+    item.tooltip = stalled > 0 ? `${base} ${strings.status.stalledTooltip(stalled)}` : base;
     item.accessibilityInformation = {
       label:
         working > 0

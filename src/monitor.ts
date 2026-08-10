@@ -2,6 +2,7 @@ import * as vscode from 'vscode';
 
 import {
   INITIAL_ACTIVITY,
+  isStalled,
   isWorking,
   reduceActivity,
   type SessionActivity,
@@ -132,6 +133,11 @@ export class SessionMonitor implements vscode.Disposable {
 
   workingCount(): number {
     return this.live().filter((entry) => isWorking(entry.activity)).length;
+  }
+
+  /** Working sessions whose rollout has been silent past the threshold. */
+  stalledCount(thresholdSeconds: number, now = Date.now()): number {
+    return this.live().filter((entry) => isStalled(entry.activity, now, thresholdSeconds)).length;
   }
 
   forTerminal(terminal: vscode.Terminal): LiveSession | undefined {

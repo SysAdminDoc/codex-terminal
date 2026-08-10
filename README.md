@@ -107,6 +107,18 @@ The real Codex TUI, started in the workspace folder:
 | `codexTerminal.titleItems` | `["activity", "project-name", "app-name"]` | Codex title items. The default gives the live activity indicator, the project name, and the constant `Codex` marker used to recognise our tabs after a window reload. |
 | `codexTerminal.history.maxSessions` | `200` | Maximum recent sessions shown in the History view. |
 
+### Where the activity indicator actually appears
+
+While Codex is working you get a spinner in the **Launch panel**, a count on the **activity-bar
+badge**, and a spinner in the **status bar** — plus Codex's own live indicator in the **tab
+title** under `tabTitle: live`.
+
+The one place it cannot appear is the tab's **icon**. No stable VS Code API changes a terminal
+icon after the terminal is created, and the command that changes it takes no icon argument, so
+it can only open a picker. Animation is therefore in the tab's *text* and in the sidebar, not
+on the icon. If you set `workbench.reduceMotion`, every spinner becomes a still icon and the
+wording carries the state instead.
+
 ### Why `tabTitle: static` cannot animate
 
 Supplying a name to a terminal does more than set a label. VS Code records an extension-supplied

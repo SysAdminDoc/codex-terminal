@@ -149,6 +149,10 @@ export const strings = {
       vscode.l10n.t('Codex Terminal: Open Codex CLI in a terminal'),
     workingTooltip: (working: number, total: number): string =>
       vscode.l10n.t('Codex is working in {0} of {1} open sessions. Click to focus.', working, total),
+    stalledTooltip: (stalled: number): string =>
+      stalled === 1
+        ? vscode.l10n.t('1 of them has produced no output for a while.')
+        : vscode.l10n.t('{0} of them have produced no output for a while.', stalled),
     liveTooltip: (total: number): string =>
       total === 1
         ? vscode.l10n.t('1 idle Codex session. Click to focus.')
