@@ -119,6 +119,10 @@ export const strings = {
       vscode.l10n.t('Codex turn completed in {0}.', workspace),
     notificationsEnabled: (workspace: string): string =>
       vscode.l10n.t('turn-completion notifications enabled for {0}', workspace),
+    needsNode: (): string =>
+      vscode.l10n.t(
+        'turn-completion notifications need Node on PATH to run the hook; none was found, so none were enabled',
+      ),
     enableFailed: (message: string): string =>
       vscode.l10n.t('Could not enable turn-completion notifications: {0}', message),
   },

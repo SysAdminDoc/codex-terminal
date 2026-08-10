@@ -62,6 +62,7 @@
   "{0}, interrupted {1}. Click to restore the session.": "{0}, interrupted {1}. Click to restore the session.",
   "Codex turn completed in {0}.": "Codex turn completed in {0}.",
   "turn-completion notifications enabled for {0}": "turn-completion notifications enabled for {0}",
+  "turn-completion notifications need Node on PATH to run the hook; none was found, so none were enabled": "turn-completion notifications need Node on PATH to run the hook; none was found, so none were enabled",
   "Could not enable turn-completion notifications: {0}": "Could not enable turn-completion notifications: {0}",
   "Choose the workspace folder for Codex": "Choose the workspace folder for Codex",
   "$(edit) Enter a profile name…": "$(edit) Enter a profile name…",

@@ -62,6 +62,7 @@
   "{0}, interrupted {1}. Click to restore the session.": "{0}, interrumpida {1}. Haga clic para restaurar la sesión.",
   "Codex turn completed in {0}.": "Turno de Codex completado en {0}.",
   "turn-completion notifications enabled for {0}": "notificaciones de fin de turno activadas para {0}",
+  "turn-completion notifications need Node on PATH to run the hook; none was found, so none were enabled": "las notificaciones de fin de turno necesitan Node en PATH para ejecutar el hook; no se encontró ninguno, así que no se activó ninguna",
   "Could not enable turn-completion notifications: {0}": "No se pudieron activar las notificaciones de fin de turno: {0}",
   "Choose the workspace folder for Codex": "Elija la carpeta del área de trabajo para Codex",
   "$(edit) Enter a profile name…": "$(edit) Escriba un nombre de perfil…",

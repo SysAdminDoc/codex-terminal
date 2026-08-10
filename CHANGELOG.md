@@ -24,6 +24,21 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- **Turn-completion notifications never fired.** The notify hook was registered with
+  `process.execPath`, which inside the extension host is the editor's own Electron binary — it
+  behaves as a script runtime only while `ELECTRON_RUN_AS_NODE` is set, and the editor deletes
+  that variable from the environment a terminal runs in. Codex spawns the notify program from
+  there, so it was handing a `.cjs` file to an editor. The hook now runs on a real `node`
+  resolved from `PATH`, and when there is none no hook is registered and the log says why. A
+  `node.cmd` shim is rejected too: Codex spawns the program directly and `CreateProcess` cannot
+  run a batch file. The unit test covering this could not previously fail, because it ran under
+  `node --test`, where `process.execPath` genuinely is Node.
+
+- **A home directory containing an apostrophe broke every launch.** The notify hook's path went
+  into a TOML literal string, which has no escapes, so `C:\Users\O'Brien\…` threw — including
+  from the contributed terminal profile, which has no handler, so the profile itself failed.
+  Such paths now use TOML's multi-line literal form.
+
 - **A rollout was read into memory whole.** The tailer allocated the entire unread span as one
   buffer, turned it into one string and split it into one array — and the crash-recovery path
   deliberately starts at byte zero, as does any file that has been replaced rather than appended

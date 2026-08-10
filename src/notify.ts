@@ -15,11 +15,66 @@ export interface NotifyBridgeOptions {
   onTurnEnded: (event: NotifyEvent) => void;
 }
 
+/**
+ * A TOML string that survives every shell this extension launches through.
+ *
+ * Literal (single-quoted) rather than basic, for the same reason `titleItems` is: cmd.exe has
+ * no escape for `"` inside a quoted argument, so a double-quoted TOML string is unquotable
+ * there. A literal string has no escapes at all, so a path containing an apostrophe needs the
+ * multi-line form — `C:\Users\O'Brien\…` is an ordinary Windows home directory, and it used to
+ * throw on every single launch with notifications on.
+ */
 function tomlLiteral(value: string): string {
-  if (value.includes("'")) {
-    throw new Error('Notify hook paths containing apostrophes are not supported.');
+  if (!value.includes("'")) {
+    return `'${value}'`;
   }
-  return `'${value}'`;
+  if (value.includes("'''") || value.startsWith("'") || value.endsWith("'")) {
+    throw new Error(`Path cannot be represented as a TOML literal string: ${value}`);
+  }
+  return `'''${value}'''`;
+}
+
+export interface NodeProbe {
+  execPath: string;
+  /** `PATH`, unsplit. */
+  pathValue: string | undefined;
+  isWindows: boolean;
+  exists: (candidate: string) => boolean;
+}
+
+/**
+ * Find a Node that will actually run the hook script.
+ *
+ * `process.execPath` is not it. In the extension host that is the editor's own Electron
+ * binary, which behaves as Node only because the host sets `ELECTRON_RUN_AS_NODE=1` — and the
+ * editor deletes that variable when it builds the environment a terminal runs in. Codex spawns
+ * the notify program from the terminal's environment, so the hook was being handed to an
+ * editor binary with a `.cjs` file as its argument: it opens a window, it does not write the
+ * event, and nothing anywhere says so.
+ *
+ * Returns undefined rather than guessing when no Node can be found, so the bridge can decline
+ * to register a hook that would misfire.
+ */
+export function resolveNodeExecutable(probe: NodeProbe): string | undefined {
+  const executableName = probe.isWindows ? 'node.exe' : 'node';
+  // The common case outside an editor — and the case the unit tests run in.
+  if (path.basename(probe.execPath).toLowerCase() === executableName) {
+    return probe.execPath;
+  }
+  const separator = probe.isWindows ? ';' : ':';
+  // Only `.exe` on Windows, deliberately, even though `PATHEXT` would also offer `.cmd`.
+  // Codex spawns the notify program directly, and `CreateProcess` cannot run a batch file
+  // without a shell — a `node.cmd` shim would resolve here and then fail to launch there.
+  const extensions = probe.isWindows ? ['.exe'] : [''];
+  for (const directory of (probe.pathValue ?? '').split(separator).filter(Boolean)) {
+    for (const extension of extensions) {
+      const candidate = path.join(directory.replace(/^"|"$/g, ''), `node${extension}`);
+      if (probe.exists(candidate)) {
+        return candidate;
+      }
+    }
+  }
+  return undefined;
 }
 
 /** Build the invocation-scoped Codex config override without touching config.toml. */

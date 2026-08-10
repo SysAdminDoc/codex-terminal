@@ -25,7 +25,7 @@ import {
   projectName,
   renderTerminalName,
 } from './naming';
-import { NotifyBridge } from './notify';
+import { NotifyBridge, resolveNodeExecutable } from './notify';
 import {
   DEFAULT_STALL_SECONDS,
   describeActivity,
@@ -444,9 +444,23 @@ export async function syncNotifyBridge(): Promise<void> {
 
   const workspaceName =
     vscode.workspace.name ?? vscode.workspace.workspaceFolders?.[0]?.name ?? 'workspace';
+  // Not `process.execPath`: in the extension host that is the editor's Electron binary, and
+  // the editor deletes `ELECTRON_RUN_AS_NODE` from the environment a terminal runs in — so
+  // Codex would hand the hook script to an editor, which opens a window instead of writing
+  // the event. Without a real Node there is nothing to register that would work.
+  const node = resolveNodeExecutable({
+    execPath: process.execPath,
+    pathValue: process.env.PATH,
+    isWindows: process.platform === 'win32',
+    exists: existsSync,
+  });
+  if (!node) {
+    log().info(strings.notifications.needsNode());
+    return;
+  }
   const bridge = new NotifyBridge({
     directory: path.join(services().context.globalStorageUri.fsPath, 'notify'),
-    executable: process.execPath,
+    executable: node,
     workspaceName,
     onTurnEnded: (event) => {
       services().history.refresh();

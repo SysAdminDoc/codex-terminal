@@ -107,7 +107,9 @@ The real Codex TUI, started in the workspace folder:
   launches `codex resume <id>`. If no readable metadata exists, it falls back to Codex's picker.
 - **Turn-completion notifications** — enable `codexTerminal.notifyOnCompletion` to install a
   per-launch notify hook in the extension's storage. The setting is opt-in and does not write to
-  Codex's user configuration.
+  Codex's user configuration. It needs a `node` on your `PATH`: Codex runs the hook from the
+  terminal's environment, where the editor's own binary is not a usable script runtime. Without
+  one, no hook is registered and the log says so rather than leaving a hook that misfires.
 
 ## What it reads and writes
 
