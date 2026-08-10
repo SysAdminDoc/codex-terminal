@@ -2,6 +2,7 @@ import * as vscode from 'vscode';
 
 import { exportTranscript } from './sessions';
 import { strings } from './strings';
+import type { TranscriptRenderOptions } from './transcript';
 
 /**
  * Transcripts as virtual documents rather than untitled buffers.
@@ -40,6 +41,8 @@ export class TranscriptContentProvider
 
   readonly onDidChange = this.changes.event;
 
+  constructor(private readonly options: () => TranscriptRenderOptions = () => ({})) {}
+
   async provideTextDocumentContent(uri: vscode.Uri): Promise<string> {
     const parameters = new URLSearchParams(uri.query);
     const filePath = parameters.get('path');
@@ -47,7 +50,7 @@ export class TranscriptContentProvider
       return strings.history.exportFailed(uri.toString());
     }
     const project = parameters.get('project') ?? '';
-    const result = await exportTranscript(filePath, project);
+    const result = await exportTranscript(filePath, project, this.options());
     // A footer rather than a toast: the caveat belongs with the text it describes, and it is
     // still there when the operator scrolls to the end and wonders why it stops.
     return result.truncated

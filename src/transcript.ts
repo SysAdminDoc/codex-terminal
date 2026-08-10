@@ -284,12 +284,29 @@ export function summarise(text: string, maxLength = 120): string {
 }
 
 export interface TranscriptRenderOptions {
-  /** Include tool calls and their output. Off by default: they dominate a rollout. */
+  /**
+   * Include the tool *invocations* — the commands run and the patches applied.
+   *
+   * Separate from their output because the two differ in volume by an order of magnitude.
+   * On a real 128 MB rollout the prose alone is 35 KB; adding calls and output together
+   * produced 3.9 MB, which is not a document anyone reads.
+   */
   includeToolCalls?: boolean;
+  /** Include what the tools printed back. Defaults to whatever `includeToolCalls` is. */
+  includeToolOutput?: boolean;
   /** Include the injected prompt scaffolding. */
   includeContext?: boolean;
   /** Truncate any single block to this many characters. */
   maxBlockLength?: number;
+  /**
+   * Separate, much tighter cap for tool blocks.
+   *
+   * A tool call is worth reading for *what was run*, not for its payload: an `apply_patch`
+   * invocation carries the entire new contents of every file it writes, which is why a
+   * transcript with tool calls at the prose cap came to 3.8 MB against 35 KB without them.
+   * A few hundred characters shows the command and the files; the rest is already on disk.
+   */
+  maxToolBlockLength?: number;
 }
 
 const ROLE_HEADINGS: Record<TranscriptRole, string> = {
@@ -333,23 +350,32 @@ export function renderTranscriptEntry(
   entry: TranscriptEntry,
   options: TranscriptRenderOptions = {},
 ): string | undefined {
-  const { includeToolCalls = false, includeContext = false, maxBlockLength = 20000 } = options;
+  const {
+    includeToolCalls = false,
+    includeToolOutput = includeToolCalls,
+    includeContext = false,
+    maxBlockLength = 20000,
+    maxToolBlockLength = 400,
+  } = options;
 
   if (entry.role === 'developer' && !includeContext) {
     return undefined;
   }
-  if ((entry.role === 'tool' || entry.role === 'output') && !includeToolCalls) {
+  if (entry.role === 'tool' && !includeToolCalls) {
+    return undefined;
+  }
+  if (entry.role === 'output' && !includeToolOutput) {
     return undefined;
   }
   if (entry.role === 'user' && !includeContext && isInjectedContext(entry.text)) {
     return undefined;
   }
 
+  const isTool = entry.role === 'tool' || entry.role === 'output';
+  const limit = isTool ? maxToolBlockLength : maxBlockLength;
   const truncated =
-    entry.text.length > maxBlockLength
-      ? `${entry.text.slice(0, maxBlockLength)}\n\n… truncated (${
-          entry.text.length - maxBlockLength
-        } more characters)`
+    entry.text.length > limit
+      ? `${entry.text.slice(0, limit)}\n\n… truncated (${entry.text.length - limit} more characters)`
       : entry.text;
 
   const heading =

@@ -162,3 +162,32 @@ test('repeated changes to one file collapse to their net effect', () => {
     [{ path: 'c', kind: 'update' }],
   );
 });
+
+test('tool calls and tool output are gated separately', () => {
+  const call = { role: 'tool' as const, name: 'exec', text: 'npm run check' };
+  const output = { role: 'output' as const, name: 'exec', text: 'ok' };
+
+  assert.equal(renderTranscriptEntry(call), undefined, 'both off by default');
+  assert.equal(renderTranscriptEntry(output), undefined);
+
+  // Commands without their output is the useful middle setting: it answers "what did it do"
+  // without the payload that made the full export 3.8 MB against 35 KB of prose.
+  assert.ok(renderTranscriptEntry(call, { includeToolCalls: true }));
+  assert.equal(renderTranscriptEntry(output, { includeToolCalls: true, includeToolOutput: false }), undefined);
+  assert.ok(renderTranscriptEntry(output, { includeToolOutput: true }));
+});
+
+test('a tool block is capped far tighter than prose', () => {
+  const long = 'x'.repeat(5000);
+  const tool = renderTranscriptEntry(
+    { role: 'tool', name: 'apply_patch', text: long },
+    { includeToolCalls: true },
+  );
+  // An apply_patch call carries the whole new file; the transcript wants the command, not
+  // a second copy of the source tree.
+  assert.ok(tool && tool.length < 1200, `tool block was ${tool?.length} characters`);
+  assert.match(tool as string, /truncated \(4600 more characters\)/);
+
+  const prose = renderTranscriptEntry({ role: 'assistant', text: long });
+  assert.ok(prose && prose.length > 4900, 'prose keeps the far larger budget');
+});

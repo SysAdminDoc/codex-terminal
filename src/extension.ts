@@ -1071,7 +1071,10 @@ export async function activate(context: vscode.ExtensionContext): Promise<CodexT
     historyWatcher.onDidDelete(() => historyViewProvider?.scheduleRefresh(true)),
   );
 
-  transcriptProvider = new TranscriptContentProvider();
+  transcriptProvider = new TranscriptContentProvider(() => ({
+    includeToolCalls: config().get<boolean>('transcript.includeToolCalls', true),
+    includeToolOutput: config().get<boolean>('transcript.includeToolOutput', false),
+  }));
   context.subscriptions.push(
     transcriptProvider,
     vscode.workspace.registerTextDocumentContentProvider(TRANSCRIPT_SCHEME, transcriptProvider),

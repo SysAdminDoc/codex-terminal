@@ -113,6 +113,8 @@ The real Codex TUI, started in the workspace folder:
 | `codexTerminal.tabTitle` | `live` | `live` leaves the tab name unset so Codex's own title — including its activity indicator — drives the tab. `static` shows a fixed `project — Codex` label and **cannot animate**; see below. |
 | `codexTerminal.titleItems` | `["activity", "project-name", "app-name"]` | Codex title items. The default gives the live activity indicator, the project name, and the constant `Codex` marker used to recognise our tabs after a window reload. |
 | `codexTerminal.history.maxSessions` | `200` | Maximum recent sessions shown in the History view. |
+| `codexTerminal.transcript.includeToolCalls` | `true` | Include the commands Codex ran and the patches it applied in an exported transcript. Each block is capped: an `apply_patch` call carries the entire new contents of every file it writes. |
+| `codexTerminal.transcript.includeToolOutput` | `false` | Also include what those commands printed back. Off by default — tool output is the bulk of a session and is rarely what you came back to read. |
 
 ### Where the activity indicator actually appears
 

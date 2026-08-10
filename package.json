@@ -472,6 +472,16 @@
           "description": "%setting.titleItems.description%",
           "scope": "machine-overridable"
         },
+        "codexTerminal.transcript.includeToolCalls": {
+          "type": "boolean",
+          "default": true,
+          "description": "%setting.transcript.includeToolCalls.description%"
+        },
+        "codexTerminal.transcript.includeToolOutput": {
+          "type": "boolean",
+          "default": false,
+          "description": "%setting.transcript.includeToolOutput.description%"
+        },
         "codexTerminal.history.maxSessions": {
           "type": "integer",
           "minimum": 1,

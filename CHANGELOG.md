@@ -7,6 +7,15 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **Exported transcripts now contain the commands Codex ran and the patches it applied.** The
+  renderer could already do this — the switch existed, defaulted to off, and nothing could
+  reach it, so every transcript was prose only. Turning it straight on was not the answer
+  either: on a real 23.9 MB rollout the full export came to 3.8 MB against 35 KB of prose,
+  because an `apply_patch` call embeds the entire new contents of every file it writes. Tool
+  blocks now have their own much tighter cap, which brings the default to 345 KB and keeps the
+  commands, the files and the searches while dropping the second copy of the source tree.
+  Command invocations and their output are separately controlled by
+  `codexTerminal.transcript.includeToolCalls` (on) and `…includeToolOutput` (off).
 - **Expanding a History session lists the files it changed**, tagged added, edited or
   deleted, each opening the file — the first thing anyone asks of a finished agent session
   and, until now, unanswerable without reading the raw rollout. Codex records every write it
