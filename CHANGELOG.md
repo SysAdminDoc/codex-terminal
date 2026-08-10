@@ -7,6 +7,11 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- A working session that has produced no output for a while now says so, rather than showing
+  an unqualified "Working" forever. Codex writes nothing while waiting for an approval and
+  nothing while stuck, and the two cannot be distinguished from its session file, so the
+  elapsed silence is reported and the tooltip explains the limit. Threshold:
+  `codexTerminal.stallSeconds`.
 - Live context and token usage per session. Each running session shows tokens used and the
   percentage of the model's context window consumed, and the status bar carries the highest
   usage across sessions — the one about to force a compaction. Controlled by

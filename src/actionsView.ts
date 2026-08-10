@@ -1,8 +1,14 @@
 import * as vscode from 'vscode';
 
-import { contextUsed, elapsedSeconds } from './activity';
+import { contextUsed, elapsedSeconds, isStalled } from './activity';
 import type { LiveSession, SessionMonitor } from './monitor';
-import { describeActivity, formatDuration, formatTokens, presentStatus } from './present';
+import {
+  DEFAULT_STALL_SECONDS,
+  describeActivity,
+  formatDuration,
+  formatTokens,
+  presentStatus,
+} from './present';
 import { strings } from './strings';
 
 /**
@@ -106,11 +112,11 @@ class RunningGroupItem extends vscode.TreeItem {
 }
 
 class RunningSessionItem extends vscode.TreeItem {
-  constructor(node: RunningSession, now: number) {
+  constructor(node: RunningSession, now: number, stallSeconds: number) {
     const { session } = node;
     super(session.project || session.label, vscode.TreeItemCollapsibleState.None);
     const presentation = presentStatus(session.activity);
-    this.description = describeActivity(session.activity, now);
+    this.description = describeActivity(session.activity, now, stallSeconds);
     this.iconPath = new vscode.ThemeIcon(
       presentation.icon,
       presentation.color ? new vscode.ThemeColor(presentation.color) : undefined,
@@ -118,7 +124,7 @@ class RunningSessionItem extends vscode.TreeItem {
     this.contextValue = session.sessionId
       ? 'codexTerminal.runningSession.bound'
       : 'codexTerminal.runningSession';
-    this.tooltip = buildTooltip(session, now);
+    this.tooltip = buildTooltip(session, now, stallSeconds);
     this.command = {
       command: 'codexTerminal.focusSession',
       title: strings.running.focusTitle(),
@@ -134,7 +140,11 @@ class RunningSessionItem extends vscode.TreeItem {
   }
 }
 
-function buildTooltip(session: LiveSession, now: number): vscode.MarkdownString {
+function buildTooltip(
+  session: LiveSession,
+  now: number,
+  stallSeconds: number,
+): vscode.MarkdownString {
   const presentation = presentStatus(session.activity);
   const lines = [
     `**${session.project || session.label}** — ${presentation.label}`,
@@ -162,6 +172,11 @@ function buildTooltip(session: LiveSession, now: number): vscode.MarkdownString 
       ? `- ${strings.running.sessionId(session.sessionId)}`
       : `- _${strings.running.notBound()}_`,
   );
+  if (isStalled(session.activity, now, stallSeconds)) {
+    // Be explicit about the limit of what a rollout tail can see, rather than letting a
+    // silent session read as a stuck one.
+    lines.push('', `_${strings.running.silenceCaveat()}_`);
+  }
   if (session.activity.lastMessage) {
     lines.push('', `> ${session.activity.lastMessage.replace(/\s+/g, ' ').slice(0, 300)}`);
   }
@@ -174,7 +189,10 @@ export class ActionsViewProvider implements vscode.TreeDataProvider<ActionNode>,
 
   readonly onDidChangeTreeData = this.changes.event;
 
-  constructor(private readonly monitor: SessionMonitor) {
+  constructor(
+    private readonly monitor: SessionMonitor,
+    private readonly stallSeconds: () => number = () => DEFAULT_STALL_SECONDS,
+  ) {
     this.monitorSubscription = monitor.onDidChange(() => this.changes.fire());
   }
 
@@ -183,7 +201,7 @@ export class ActionsViewProvider implements vscode.TreeDataProvider<ActionNode>,
       return new RunningGroupItem(this.monitor.live().length, this.monitor.workingCount());
     }
     if ('kind' in node && node.kind === 'running-session') {
-      return new RunningSessionItem(node, Date.now());
+      return new RunningSessionItem(node, Date.now(), this.stallSeconds());
     }
     return new ActionItem(node);
   }

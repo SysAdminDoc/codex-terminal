@@ -6,7 +6,7 @@
  * animated variants only work when the `~spin` modifier is spelled correctly.
  */
 
-import { contextUsed, elapsedSeconds, type SessionActivity } from './activity';
+import { contextUsed, elapsedSeconds, silentFor, type SessionActivity } from './activity';
 
 /**
  * `~spin` is a codicon *modifier*: the workbench turns `loading~spin` into
@@ -14,6 +14,9 @@ import { contextUsed, elapsedSeconds, type SessionActivity } from './activity';
  * only animation primitive the tree, the status bar and quick picks all honour.
  */
 export const SPINNER_ICON = 'loading~spin';
+
+/** Silence beyond this is worth reporting; below it, a quiet moment is just a quiet moment. */
+export const DEFAULT_STALL_SECONDS = 45;
 
 export interface StatusPresentation {
   icon: string;
@@ -65,11 +68,22 @@ export function formatTokens(tokens: number): string {
  * of the context window it has eaten. Absent facts are dropped rather than shown as
  * placeholders, so a session that has just started reads cleanly.
  */
-export function describeActivity(activity: SessionActivity, now: number): string {
+export function describeActivity(
+  activity: SessionActivity,
+  now: number,
+  stallSeconds = DEFAULT_STALL_SECONDS,
+): string {
   const parts: string[] = [presentStatus(activity).label];
   const elapsed = elapsedSeconds(activity, now);
   if (elapsed !== undefined) {
     parts.push(formatDuration(elapsed));
+  }
+  // Say what is observable. Codex is silent both while awaiting an approval and while
+  // wedged, and a rollout tail cannot tell those apart — so report the silence, not a
+  // state we would be guessing at.
+  const silent = silentFor(activity, now);
+  if (silent !== undefined && silent >= stallSeconds) {
+    parts.push(`no output for ${formatDuration(silent)}`);
   }
   if (activity.totalTokens) {
     parts.push(`${formatTokens(activity.totalTokens)} tokens`);

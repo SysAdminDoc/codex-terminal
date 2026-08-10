@@ -89,3 +89,15 @@ test('the status bar animates only while something is working', () => {
   assert.equal(statusBarText(0, 3), '$(sparkle) Codex 3');
   assert.equal(statusBarText(2, 3), `$(${SPINNER_ICON}) Codex 2/3`);
 });
+
+test('a long-silent working session says so instead of just claiming to work', () => {
+  const state = activity({
+    status: 'working',
+    turnStartedAt: 1_000_000,
+    lastEventAt: '2026-08-09T16:00:00.000Z',
+  });
+  const now = Date.parse('2026-08-09T16:02:00.000Z');
+  // 'Working' alone for two minutes of silence is a claim the rollout cannot support.
+  assert.match(describeActivity(state, now, 45), /no output for 2m 0s/);
+  assert.doesNotMatch(describeActivity(state, now, 600), /no output/);
+});

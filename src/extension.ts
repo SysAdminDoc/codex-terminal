@@ -19,7 +19,7 @@ import { codexProfilesDirectory, profileNamesFromFiles } from './profiles';
 import { NotifyBridge } from './notify';
 import { SessionMonitor } from './monitor';
 import { JournalStore, interruptedSessions, type JournalSession } from './journal';
-import { peakContextUsed, statusBarText } from './present';
+import { DEFAULT_STALL_SECONDS, peakContextUsed, statusBarText } from './present';
 import {
   codexHomeDirectory,
   codexSessionsDirectory,
@@ -904,7 +904,9 @@ export async function activate(context: vscode.ExtensionContext): Promise<CodexT
     }),
   );
 
-  const actionsProvider = new ActionsViewProvider(monitor);
+  const actionsProvider = new ActionsViewProvider(monitor, () =>
+    config().get<number>('stallSeconds', DEFAULT_STALL_SECONDS),
+  );
   historyViewProvider = new HistoryViewProvider(() =>
     config().get<number>('history.maxSessions', 200),
   );

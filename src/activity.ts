@@ -155,6 +155,36 @@ export function isWorking(activity: SessionActivity): boolean {
   return activity.status === 'working';
 }
 
+/**
+ * How long the rollout has been silent while the session still claims to be working.
+ *
+ * A rollout tail cannot see everything. Codex writes nothing while it waits for the
+ * operator to answer an approval prompt, and nothing while it is genuinely wedged, so both
+ * look identical to a turn that simply started and never finished. Reporting elapsed
+ * silence is the honest middle ground: it says what is observable — no output for N
+ * seconds — instead of asserting a state that cannot be distinguished from here.
+ */
+export function silentFor(activity: SessionActivity, now: number): number | undefined {
+  if (activity.status !== 'working' || !activity.lastEventAt) {
+    return undefined;
+  }
+  const last = Date.parse(activity.lastEventAt);
+  if (Number.isNaN(last)) {
+    return undefined;
+  }
+  return Math.max(0, Math.floor((now - last) / 1000));
+}
+
+/** True once a working session has produced no output for `thresholdSeconds`. */
+export function isStalled(
+  activity: SessionActivity,
+  now: number,
+  thresholdSeconds: number,
+): boolean {
+  const silent = silentFor(activity, now);
+  return silent !== undefined && silent >= thresholdSeconds;
+}
+
 /** Whole seconds the running turn has been going, for the tooltip readout. */
 export function elapsedSeconds(activity: SessionActivity, now: number): number | undefined {
   if (activity.status !== 'working' || activity.turnStartedAt === undefined) {

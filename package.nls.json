@@ -62,6 +62,7 @@
   "setting.showStatusBarItem.description": "Deprecated alias for showStatusBarButton.",
   "setting.showStatusBarItem.deprecation": "Use codexTerminal.showStatusBarButton; this setting is migrated automatically once per extension version.",
   "setting.showEditorTitleButton.description": "Show a Codex button in the editor title bar.",
+  "setting.stallSeconds.description": "Seconds of silence after which a working Codex session is reported as producing no output. Codex writes nothing to its session file while it waits for an approval and nothing while it is stuck, and the two cannot be told apart from outside, so the elapsed silence is reported rather than a guessed state.",
   "setting.showContextInStatusBar.description": "Append the highest context usage across live Codex sessions to the status bar item. The session closest to its limit is the one about to force a compaction.",
   "setting.notifyOnCompletion.description": "Show a notification when a Codex turn completes. Uses an invocation-scoped notify hook and never edits ~/.codex/config.toml.",
   "setting.titleItems.description": "Codex items rendered in the terminal tab title. The default shows a live activity spinner and the project name.",

@@ -40,6 +40,10 @@ export const strings = {
     context: (tokens: string, percent: number): string =>
       vscode.l10n.t('{0} tokens — {1}% of the context window', tokens, percent),
     sessionId: (id: string): string => vscode.l10n.t('Session `{0}`', id),
+    silenceCaveat: (): string =>
+      vscode.l10n.t(
+        'Codex writes nothing to its session file while waiting for an approval, and nothing while stuck. Check the terminal to tell them apart.',
+      ),
     notBound: (): string =>
       vscode.l10n.t('Not yet matched to a Codex session; it will bind once Codex starts writing.'),
     accessibilitySession: (name: string, status: string): string =>

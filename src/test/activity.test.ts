@@ -5,9 +5,11 @@ import {
   INITIAL_ACTIVITY,
   contextUsed,
   elapsedSeconds,
+  isStalled,
   isWorking,
   reduceActivity,
   reduceActivityLine,
+  silentFor,
 } from '../activity';
 
 /**
@@ -160,4 +162,20 @@ test('a compaction does not disturb the activity state', () => {
   );
   assert.equal(after.status, 'working');
   assert.equal(after.turnId, working.turnId);
+});
+
+test('silence is measured only while a session claims to be working', () => {
+  const working = reduceActivityLine(INITIAL_ACTIVITY, TASK_STARTED);
+  const lastEvent = Date.parse('2026-08-09T16:27:34.545Z');
+  assert.equal(silentFor(working, lastEvent + 90_000), 90);
+
+  // An idle session is not silent, it is finished; reporting silence would imply a hang.
+  assert.equal(silentFor(reduceActivityLine(working, TASK_COMPLETE), Date.now()), undefined);
+});
+
+test('a working session becomes stalled only past the threshold', () => {
+  const working = reduceActivityLine(INITIAL_ACTIVITY, TASK_STARTED);
+  const lastEvent = Date.parse('2026-08-09T16:27:34.545Z');
+  assert.equal(isStalled(working, lastEvent + 10_000, 45), false);
+  assert.equal(isStalled(working, lastEvent + 45_000, 45), true);
 });

@@ -409,6 +409,13 @@
           "default": true,
           "description": "%setting.showContextInStatusBar.description%"
         },
+        "codexTerminal.stallSeconds": {
+          "type": "integer",
+          "minimum": 5,
+          "maximum": 3600,
+          "default": 45,
+          "description": "%setting.stallSeconds.description%"
+        },
         "codexTerminal.notifyOnCompletion": {
           "type": "boolean",
           "default": false,
