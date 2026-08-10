@@ -7,6 +7,17 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- Sessions now report what Codex last did, not just that it is busy. "Working" for eleven
+  minutes is indistinguishable from stuck; "Working · ran npm run check" or "Working · edited
+  monitor.ts" is a progress report. Codex describes every step it finishes in its session
+  file — commands, file edits, web searches, compactions — and the extension had been
+  discarding all of it: 16,062 such records across ten recent sessions here, none of them
+  read. Shell wrappers are stripped so the row shows the script rather than a repeated
+  40-character path to `pwsh.exe`, and multi-file edits collapse to two names and a count.
+  The wording stays in the past tense on purpose: Codex records a step only once it has
+  finished, so "ran" is true where "running" would be a guess. Unrecognised step types leave
+  the previous one in place, so a future Codex release cannot blank the row.
+
 - Reloading the window no longer costs you the live view of the sessions that survived it.
   Reloads are routine — every extension update asks for one — and the tabs came back with the
   spinner stopped, the context gauge empty and no transcript link, for the rest of that

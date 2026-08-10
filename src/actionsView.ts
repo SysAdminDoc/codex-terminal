@@ -5,6 +5,7 @@ import type { LiveSession, SessionMonitor } from './monitor';
 import {
   DEFAULT_STALL_SECONDS,
   describeActivity,
+  describeItem,
   formatDuration,
   formatTokens,
   presentStatus,
@@ -166,6 +167,12 @@ function buildTooltip(
         Math.round(used * 100),
       )}`,
     );
+  }
+  // Shown whatever the status, unlike the row: on an idle session the last step is the
+  // answer to "what did it just do", which is the question a finished session raises.
+  const step = describeItem(session.activity.lastItem);
+  if (step) {
+    lines.push(`- ${strings.running.lastStep(step)}`);
   }
   lines.push(
     session.sessionId

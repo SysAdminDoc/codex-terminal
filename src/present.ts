@@ -6,7 +6,13 @@
  * animated variants only work when the `~spin` modifier is spelled correctly.
  */
 
-import { contextUsed, elapsedSeconds, silentFor, type SessionActivity } from './activity';
+import {
+  contextUsed,
+  elapsedSeconds,
+  silentFor,
+  type ActivityItem,
+  type SessionActivity,
+} from './activity';
 
 /**
  * `~spin` is a codicon *modifier*: the workbench turns `loading~spin` into
@@ -85,6 +91,37 @@ export function formatTokens(tokens: number): string {
 }
 
 /**
+ * The last completed step, in words.
+ *
+ * Past tense throughout, because that is what the record says: Codex writes `item_completed`
+ * and nothing at all when a step begins, so "Ran" is true where "Running" would be a guess.
+ * A step with no subject still names its kind — knowing Codex is thinking beats a blank.
+ */
+export function describeItem(item: ActivityItem | undefined): string | undefined {
+  if (!item) {
+    return undefined;
+  }
+  switch (item.kind) {
+    case 'command':
+      return item.subject ? `ran ${item.subject}` : 'ran a command';
+    case 'fileChange':
+      return item.subject ? `edited ${item.subject}` : 'edited files';
+    case 'search':
+      return item.subject ? `searched ${item.subject}` : 'searched the web';
+    case 'message':
+      return item.subject ? `said ${item.subject}` : 'replied';
+    case 'prompt':
+      return item.subject ? `you said ${item.subject}` : 'took your prompt';
+    case 'reasoning':
+      return item.subject ? `thinking: ${item.subject}` : 'thinking';
+    case 'compaction':
+      return 'compacted the context';
+    default:
+      return undefined;
+  }
+}
+
+/**
  * The right-hand text on a live session row: what it is doing, for how long, and how much
  * of the context window it has eaten. Absent facts are dropped rather than shown as
  * placeholders, so a session that has just started reads cleanly.
@@ -95,6 +132,12 @@ export function describeActivity(
   stallSeconds = DEFAULT_STALL_SECONDS,
 ): string {
   const parts: string[] = [presentStatus(activity).label];
+  // Only while working. On an idle session the last step is history, and repeating it
+  // beside "Idle" reads as though something is still happening.
+  const step = activity.status === 'working' ? describeItem(activity.lastItem) : undefined;
+  if (step) {
+    parts.push(step);
+  }
   const elapsed = elapsedSeconds(activity, now);
   if (elapsed !== undefined) {
     parts.push(formatDuration(elapsed));

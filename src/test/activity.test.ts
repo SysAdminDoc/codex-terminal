@@ -3,6 +3,7 @@ import { test } from 'node:test';
 
 import {
   INITIAL_ACTIVITY,
+  MAX_SUBJECT_LENGTH,
   contextUsed,
   elapsedSeconds,
   isStalled,
@@ -178,4 +179,122 @@ test('a working session becomes stalled only past the threshold', () => {
   const lastEvent = Date.parse('2026-08-09T16:27:34.545Z');
   assert.equal(isStalled(working, lastEvent + 10_000, 45), false);
   assert.equal(isStalled(working, lastEvent + 45_000, 45), true);
+});
+
+/**
+ * `item_completed` fixtures.
+ *
+ * Field spellings are taken from real rollouts (`type: "CommandExecution"` in PascalCase,
+ * `changes` keyed by absolute path, `Extension` carrying `query`); the *content* is
+ * synthetic, because the real lines hold the operator's prompts and repository paths and
+ * this repository is public.
+ */
+function itemLine(ordinal: number, item: unknown): string {
+  return JSON.stringify({
+    timestamp: '2026-08-10T12:02:11.001Z',
+    ordinal,
+    type: 'event_msg',
+    payload: { type: 'item_completed', item },
+  });
+}
+
+test('a shell command is reduced to the script, not the interpreter path', () => {
+  const state = reduceActivityLine(
+    INITIAL_ACTIVITY,
+    itemLine(1, {
+      type: 'CommandExecution',
+      id: 'exec-1',
+      command: ['C:\\Program Files\\PowerShell\\7\\pwsh.exe', '-Command', 'npm run   check'],
+    }),
+  );
+  assert.equal(state.lastItem?.kind, 'command');
+  // Whitespace collapsed, and the 40-character pwsh path that prefixes every single
+  // command dropped — otherwise every row reads identically.
+  assert.equal(state.lastItem?.subject, 'npm run check');
+});
+
+test('a non-shell command keeps its own name and arguments', () => {
+  const state = reduceActivityLine(
+    INITIAL_ACTIVITY,
+    itemLine(1, { type: 'CommandExecution', id: 'e', command: ['/usr/bin/git', 'status', '-sb'] }),
+  );
+  assert.equal(state.lastItem?.subject, 'git status -sb');
+});
+
+test('file changes are named by basename and counted past the second', () => {
+  const one = reduceActivityLine(
+    INITIAL_ACTIVITY,
+    itemLine(1, {
+      type: 'FileChange',
+      id: 'e',
+      changes: { 'C:\\repos\\app\\src\\monitor.ts': { type: 'update', content: 'x' } },
+    }),
+  );
+  assert.equal(one.lastItem?.kind, 'fileChange');
+  assert.equal(one.lastItem?.subject, 'monitor.ts');
+
+  const many = reduceActivityLine(
+    INITIAL_ACTIVITY,
+    itemLine(1, {
+      type: 'FileChange',
+      id: 'e',
+      changes: {
+        '/repo/a.ts': { type: 'add' },
+        '/repo/b.ts': { type: 'update' },
+        '/repo/c.ts': { type: 'delete' },
+        '/repo/d.ts': { type: 'add' },
+      },
+    }),
+  );
+  assert.equal(many.lastItem?.subject, 'a.ts, b.ts +2 more');
+});
+
+test('a web search reports its query and a compaction reports itself', () => {
+  const search = reduceActivityLine(
+    INITIAL_ACTIVITY,
+    itemLine(1, { type: 'Extension', kind: 'web.search', id: 'e', query: 'vscode terminal api' }),
+  );
+  assert.equal(search.lastItem?.kind, 'search');
+  assert.equal(search.lastItem?.subject, 'vscode terminal api');
+
+  const compaction = reduceActivityLine(
+    INITIAL_ACTIVITY,
+    itemLine(1, { type: 'ContextCompaction', id: 'e' }),
+  );
+  assert.deepEqual(compaction.lastItem, { kind: 'compaction', subject: '' });
+});
+
+test('an over-long subject is truncated rather than allowed to fill the row', () => {
+  const state = reduceActivityLine(
+    INITIAL_ACTIVITY,
+    itemLine(1, { type: 'CommandExecution', id: 'e', command: ['git', 'x'.repeat(500)] }),
+  );
+  assert.ok((state.lastItem?.subject.length ?? 0) <= MAX_SUBJECT_LENGTH);
+  assert.ok(state.lastItem?.subject.endsWith('…'));
+});
+
+test('an unrecognised item kind leaves the previous step in place', () => {
+  const first = reduceActivityLine(
+    INITIAL_ACTIVITY,
+    itemLine(1, { type: 'CommandExecution', id: 'e', command: ['git', 'status'] }),
+  );
+  // A future Codex release adding an item type must cost the display nothing.
+  const second = reduceActivityLine(first, itemLine(2, { type: 'SomethingNewIn2027', id: 'e' }));
+  assert.equal(second.lastItem?.subject, 'git status');
+  assert.equal(second.ordinal, 2, 'the record is still folded, only its item is unknown');
+});
+
+test('a malformed item does not throw or wipe the state', () => {
+  const first = reduceActivityLine(
+    INITIAL_ACTIVITY,
+    itemLine(1, { type: 'CommandExecution', id: 'e', command: ['git', 'status'] }),
+  );
+  for (const broken of [null, 'text', 42, { type: 'FileChange', changes: null }]) {
+    const next = reduceActivityLine(first, itemLine(first.ordinal + 1, broken));
+    assert.ok(next, 'folding a malformed item must not throw');
+  }
+  assert.equal(
+    reduceActivityLine(first, itemLine(2, { type: 'FileChange', changes: null })).lastItem?.subject,
+    '',
+  );
 });
