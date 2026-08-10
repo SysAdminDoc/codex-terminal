@@ -210,6 +210,11 @@ export const strings = {
       vscode.l10n.t('Reverted the workbench settings Codex Terminal had changed: {0}', keys),
     skippedRevert: (key: string): string =>
       vscode.l10n.t('left {0} alone: it no longer holds the value Codex Terminal wrote', key),
+    keptOperatorValue: (key: string): string =>
+      vscode.l10n.t(
+        'left {0} at your value: Codex Terminal writes a workbench setting once, never twice',
+        key,
+      ),
     applied: (key: string, from: string, to: string): string =>
       vscode.l10n.t('Set {0} from {1} to {2}.', key, from, to),
     reverted: (key: string, to: string): string => vscode.l10n.t('Restored {0} to {1}.', key, to),

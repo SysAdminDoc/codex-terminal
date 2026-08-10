@@ -5,7 +5,24 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+
+- **`codexTerminal.applyWorkbenchSettings`.** Whether the extension may set the three
+  `terminal.integrated.*` settings a Codex tab needs. *Revert Workbench Settings* now turns it
+  off, which is what makes a revert survive the configuration-change event the revert itself
+  raises. Turning it back on re-applies from scratch.
+
 ### Fixed
+
+- **A reverted workbench setting could not be kept.** `terminal.integrated.confirmOnKill` was
+  re-planned from its current value on every configuration change — and the operator's own edit
+  is what fires that change — so setting it back to `editor` was overwritten within
+  milliseconds, including the write *Revert Workbench Settings* had just made. The setting was
+  unrestorable for as long as the extension was installed, and it governs close confirmation for
+  every terminal in the editor, not only Codex's. Each of the three keys is now written once:
+  the override ledger, which already recorded what every key held beforehand, now also decides
+  what may be written again, and a key that no longer holds what the extension wrote is left
+  alone and logged.
 
 - **The context readout was a constant.** It divided the session's *lifetime* token total by the
   model's context window and clamped the result at 100%, and the lifetime total is unbounded —

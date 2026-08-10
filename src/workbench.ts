@@ -140,6 +140,61 @@ export function planRestore(
   return undefined;
 }
 
+/** What the workbench currently holds, as the planner needs to see it. */
+export interface WorkbenchState {
+  confirmOnKill: string | undefined;
+  agentCliTitle: boolean | undefined;
+  tabDescription: string | undefined;
+  /** `tabTitle: live` is the only mode that needs `${sequence}` in the description. */
+  liveTabTitle: boolean;
+}
+
+export interface WorkbenchPlan {
+  changes: SettingChange[];
+  /** Keys left alone because the operator has since set them themselves. */
+  declined: string[];
+}
+
+/**
+ * Decide which workbench settings to write, honouring edits the operator has already made.
+ *
+ * The ledger is what makes this possible, and using it here is the whole fix. Activation and
+ * the configuration-change listener both call this, and the listener fires on the operator's
+ * own edit — so re-planning from the current value alone meant every attempt to set
+ * `confirmOnKill` back to `editor` was overwritten within milliseconds, including the write
+ * the extension's own revert command had just made. The setting could not be kept.
+ *
+ * A key the extension has written before is now only rewritten while it still holds exactly
+ * what was written. Once it holds anything else, that is a decision, and decisions are kept.
+ */
+export function planWorkbenchChanges(state: WorkbenchState, ledger: OverrideLedger): WorkbenchPlan {
+  const candidates: Array<SettingChange | undefined> = [
+    planConfirmOnKill(state.confirmOnKill),
+    planAgentCliTitle(state.agentCliTitle),
+    state.liveTabTitle ? planTabDescription(state.tabDescription) : undefined,
+  ];
+
+  const changes: SettingChange[] = [];
+  const declined: string[] = [];
+  for (const change of candidates) {
+    if (!change) {
+      continue;
+    }
+    // A candidate exists only when the setting does *not* already hold what this extension
+    // wants. So a ledger entry here means the key was written once and has since moved — by
+    // the operator, by a settings sync, or by the revert command. Whichever it was, the
+    // current value is not ours to overwrite a second time. Re-arming is deliberate and
+    // explicit: `revertWorkbenchSettings` clears the ledger, and turning
+    // `codexTerminal.applyWorkbenchSettings` back on plans from scratch.
+    if (ledger[change.key]) {
+      declined.push(change.key);
+      continue;
+    }
+    changes.push(change);
+  }
+  return { changes, declined };
+}
+
 export function planAgentCliTitle(current: boolean | undefined): SettingChange | undefined {
   if (current === DEFAULT_AGENT_CLI_TITLE) {
     return undefined;

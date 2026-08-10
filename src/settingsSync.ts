@@ -3,15 +3,21 @@ import * as vscode from 'vscode';
 import {
   AGENT_CLI_TITLE_SETTING,
   CONFIRM_ON_KILL_SETTING,
-  planAgentCliTitle,
-  planConfirmOnKill,
   planRestore,
-  planTabDescription,
+  planWorkbenchChanges,
   recordOverrides,
   type OverrideLedger,
   type SettingChange,
 } from './workbench';
-import { OVERRIDE_LEDGER_KEY, log, services, tabTitleMode } from './services';
+import {
+  APPLY_WORKBENCH_SETTING,
+  OVERRIDE_LEDGER_KEY,
+  config,
+  log,
+  services,
+  tabTitleMode,
+  workbenchSettingsEnabled,
+} from './services';
 import { strings } from './strings';
 
 /**
@@ -32,27 +38,23 @@ function settingText(value: unknown): string {
  * the per-terminal template, and it is the reason a working tab shows Codex's spinner.
  */
 export async function applyWorkbenchPreferences(): Promise<void> {
+  if (!workbenchSettingsEnabled()) {
+    return;
+  }
   const root = vscode.workspace.getConfiguration();
   // Kept as full `SettingChange`s rather than key/value pairs: `from` is what makes the
   // change reversible, and discarding it here is what left these settings permanent.
-  const changes: SettingChange[] = [];
-  const confirmOnKill = planConfirmOnKill(root.get<string>(CONFIRM_ON_KILL_SETTING, 'editor'));
-  if (confirmOnKill) {
-    changes.push(confirmOnKill);
-  }
-  const agentCliTitle = planAgentCliTitle(
-    root.get<boolean>(AGENT_CLI_TITLE_SETTING, true),
+  const { changes, declined } = planWorkbenchChanges(
+    {
+      confirmOnKill: root.get<string>(CONFIRM_ON_KILL_SETTING, 'editor'),
+      agentCliTitle: root.get<boolean>(AGENT_CLI_TITLE_SETTING, true),
+      tabDescription: root.get<string>('terminal.integrated.tabs.description'),
+      liveTabTitle: tabTitleMode() === 'live',
+    },
+    readOverrideLedger(),
   );
-  if (agentCliTitle) {
-    changes.push(agentCliTitle);
-  }
-  if (tabTitleMode() === 'live') {
-    const description = planTabDescription(
-      root.get<string>('terminal.integrated.tabs.description'),
-    );
-    if (description) {
-      changes.push(description);
-    }
+  for (const key of declined) {
+    log().info(strings.workbench.keptOperatorValue(key));
   }
 
   const applied: SettingChange[] = [];
@@ -133,6 +135,15 @@ export async function revertWorkbenchPreferences(): Promise<void> {
   }
 
   await services().context.globalState.update(OVERRIDE_LEDGER_KEY, undefined);
+  // Turning the preference off is what makes the revert stick. Without it, clearing the
+  // ledger re-arms the planner, and the write this function just made would be undone by the
+  // configuration-change listener that same write fires — which is precisely how these
+  // settings became impossible to keep reverted.
+  await config().update(
+    APPLY_WORKBENCH_SETTING,
+    false,
+    vscode.ConfigurationTarget.Global,
+  );
   void vscode.window.showInformationMessage(
     reverted.length > 0
       ? strings.workbench.revertedAll(reverted.join(', '))

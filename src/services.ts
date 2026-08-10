@@ -83,6 +83,18 @@ export function tabTitleMode(): TabTitleMode {
   return config().get<TabTitleMode>('tabTitle', 'live') === 'static' ? 'static' : 'live';
 }
 
+/** The setting name is exported so the revert command can turn it off by the same key. */
+export const APPLY_WORKBENCH_SETTING = 'applyWorkbenchSettings';
+
+/**
+ * Whether the extension may write the three `terminal.integrated.*` settings a Codex tab
+ * needs. Turned off by `revertWorkbenchSettings`, which is what makes a revert survive the
+ * configuration-change event it raises.
+ */
+export function workbenchSettingsEnabled(): boolean {
+  return config().get<boolean>(APPLY_WORKBENCH_SETTING, true);
+}
+
 /** `globalState` key holding what the workbench settings looked like before we touched them. */
 export const OVERRIDE_LEDGER_KEY = 'codexTerminal.workbenchOverrides';
 /** `globalState` key for the operator's own names, keyed by Codex session id. */

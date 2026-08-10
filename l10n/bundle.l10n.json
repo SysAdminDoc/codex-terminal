@@ -105,6 +105,7 @@
   "Revert": "Revert",
   "Reverted the workbench settings Codex Terminal had changed: {0}": "Reverted the workbench settings Codex Terminal had changed: {0}",
   "left {0} alone: it no longer holds the value Codex Terminal wrote": "left {0} alone: it no longer holds the value Codex Terminal wrote",
+  "left {0} at your value: Codex Terminal writes a workbench setting once, never twice": "left {0} at your value: Codex Terminal writes a workbench setting once, never twice",
   "Set {0} from {1} to {2}.": "Set {0} from {1} to {2}.",
   "Restored {0} to {1}.": "Restored {0} to {1}.",
   "Codex Terminal has not changed any workbench settings.": "Codex Terminal has not changed any workbench settings.",

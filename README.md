@@ -64,9 +64,12 @@ The real Codex TUI, started in the workspace folder:
   closing a Codex tab immediately terminates its running processes.
 - **Workbench settings it changes** — three global settings are required for a Codex tab to show
   its live title (`terminal.integrated.confirmOnKill`, `terminal.integrated.tabs.description`,
-  `terminal.integrated.tabs.allowAgentCliTitle`). The extension says once what it changed and
-  records what each held beforehand; **Codex Terminal: Revert Workbench Settings** puts them
-  back. A setting you have since changed yourself is left alone.
+  `terminal.integrated.tabs.allowAgentCliTitle`). Each is written **once**: the extension records
+  what it held beforehand, says what it changed, and never writes that key again. Change one
+  yourself and it stays changed, across configuration events and window reloads.
+  **Codex Terminal: Revert Workbench Settings** puts all three back and turns
+  `codexTerminal.applyWorkbenchSettings` off, so the revert survives a reload; turning that
+  setting back on re-applies from scratch.
 - **History** — the **History** view in the Codex Terminal activity-bar container reads Codex's
   local `.jsonl` rollouts, groups them by **repository** — every git worktree of a repository
   sits under one entry, with a level naming each worktree when there is more than one — and keeps the first real prompt as a preview.
@@ -141,6 +144,7 @@ announces and can revert.
 | `codexTerminal.titleItems` | `["activity", "project-name", "app-name"]` | Codex title items. The default gives the live activity indicator, the project name, and the constant `Codex` marker used to recognise our tabs after a window reload. |
 | `codexTerminal.history.maxSessions` | `200` | Maximum recent sessions shown in the History view. |
 | `codexTerminal.modelRates` | `{}` | Your token prices per model, in USD per million tokens, used to estimate what a session cost. Empty by default; see below. |
+| `codexTerminal.applyWorkbenchSettings` | `true` | Whether the extension may set the three `terminal.integrated.*` settings a Codex tab needs. Each is written once and never rewritten; **Revert Workbench Settings** turns this off. Off means the tab cannot show Codex's live title. |
 | `codexTerminal.appServer.enabled` | `false` | **Experimental.** Host a `codex app-server` for this window and attach launched terminals to it with `--remote ws://127.0.0.1:<port>`, so Codex reports activity over its own protocol instead of it being inferred from session files. Needs an editor built on Node 22 or newer; every failure falls back to a plain `codex` launch and logs why. |
 | `codexTerminal.monitor.enabled` | `true` | Read Codex's session files for live activity and crash recovery. Off stops all reading of your conversations — and with it both the live status and interrupted-session recovery, since each needs to know which conversation a tab belongs to. Launching, resuming and history are unaffected. |
 | `codexTerminal.journal.storeMessages` | `true` | Keep Codex's closing message per turn in the crash journal. Off keeps conversation text out of it; identifiers and timestamps, which is all recovery needs, are still recorded. |

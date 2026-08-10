@@ -537,6 +537,11 @@
           "description": "%setting.titleItems.description%",
           "scope": "machine-overridable"
         },
+        "codexTerminal.applyWorkbenchSettings": {
+          "type": "boolean",
+          "default": true,
+          "markdownDescription": "%setting.applyWorkbenchSettings.markdownDescription%"
+        },
         "codexTerminal.appServer.enabled": {
           "type": "boolean",
           "default": false,

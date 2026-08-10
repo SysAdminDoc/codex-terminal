@@ -6,9 +6,12 @@ import {
   planAgentCliTitle,
   planConfirmOnKill,
   planTabDescription,
+  planWorkbenchChanges,
   titleItemsArgs,
   planRestore,
   recordOverrides,
+  type OverrideLedger,
+  type WorkbenchState,
 } from '../workbench';
 import { DEFAULT_TITLE_ITEMS } from '../naming';
 import { buildLaunchPlan } from '../launcher';
@@ -134,4 +137,110 @@ test('an edited tab description keeps the edit and loses only our token', () => 
   assert.ok(restore);
   assert.ok(!restore.to?.includes('${sequence}'));
   assert.ok(restore.to?.includes('${cwdFolder}'), 'their addition survives');
+});
+
+
+/** A workbench with every setting at VS Code's own default, i.e. nothing applied yet. */
+function untouched(overrides: Partial<WorkbenchState> = {}): WorkbenchState {
+  return {
+    confirmOnKill: 'editor',
+    agentCliTitle: false,
+    tabDescription: undefined,
+    liveTabTitle: true,
+    ...overrides,
+  };
+}
+
+test('a fresh workbench is planned in full', () => {
+  const plan = planWorkbenchChanges(untouched(), {});
+  assert.deepEqual(
+    plan.changes.map((change) => change.key),
+    [
+      'terminal.integrated.confirmOnKill',
+      'terminal.integrated.tabs.allowAgentCliTitle',
+      'terminal.integrated.tabs.description',
+    ],
+  );
+  assert.deepEqual(plan.declined, []);
+});
+
+test('a setting already holding what we want is neither changed nor declined', () => {
+  const plan = planWorkbenchChanges(
+    untouched({ confirmOnKill: 'never', agentCliTitle: true, tabDescription: '${sequence}' }),
+    {},
+  );
+  assert.deepEqual(plan.changes, []);
+  assert.deepEqual(plan.declined, []);
+});
+
+/**
+ * The defect this planner exists to fix. The configuration-change listener calls the apply
+ * path, and the operator's own edit is what fires it — so re-planning from the current value
+ * meant every attempt to put `confirmOnKill` back was overwritten within milliseconds, and the
+ * setting could not be kept at anything but `never` while the extension was installed.
+ */
+test('a setting the operator has moved back is left alone once it has been written', () => {
+  const ledger: OverrideLedger = {
+    'terminal.integrated.confirmOnKill': {
+      key: 'terminal.integrated.confirmOnKill',
+      previous: 'editor',
+      applied: 'never',
+    },
+  };
+  const plan = planWorkbenchChanges(untouched({ confirmOnKill: 'editor' }), ledger);
+  assert.deepEqual(plan.declined, ['terminal.integrated.confirmOnKill']);
+  assert.ok(!plan.changes.some((change) => change.key === 'terminal.integrated.confirmOnKill'));
+  // The keys that were never written are still planned: declining one is not opting out of all.
+  assert.deepEqual(
+    plan.changes.map((change) => change.key),
+    ['terminal.integrated.tabs.allowAgentCliTitle', 'terminal.integrated.tabs.description'],
+  );
+});
+
+test('re-applying is idempotent across repeated configuration-change events', () => {
+  let state = untouched();
+  let ledger: OverrideLedger = {};
+  for (let round = 0; round < 3; round += 1) {
+    const plan = planWorkbenchChanges(state, ledger);
+    ledger = recordOverrides(ledger, plan.changes);
+    // Simulate the writes landing.
+    for (const change of plan.changes) {
+      if (change.key === 'terminal.integrated.confirmOnKill') {
+        state.confirmOnKill = change.to;
+      }
+      if (change.key === 'terminal.integrated.tabs.allowAgentCliTitle') {
+        state.agentCliTitle = true;
+      }
+      if (change.key === 'terminal.integrated.tabs.description') {
+        state.tabDescription = change.to;
+      }
+    }
+    // Only the first round may write anything; a second notification is a bug, not a nag.
+    assert.equal(plan.changes.length === 0, round > 0, `round ${round} wrote settings`);
+  }
+});
+
+test('the tab description is not re-appended after the operator removes the token', () => {
+  const ledger = recordOverrides({}, [
+    {
+      key: 'terminal.integrated.tabs.description',
+      from: undefined,
+      to: '${task}${separator}${local}${separator}${cwdFolder}${separator}${sequence}',
+    },
+  ]);
+  const plan = planWorkbenchChanges(
+    untouched({
+      confirmOnKill: 'never',
+      agentCliTitle: true,
+      tabDescription: '${task}${separator}${cwdFolder}',
+    }),
+    ledger,
+  );
+  assert.deepEqual(plan.changes, []);
+  assert.deepEqual(plan.declined, ['terminal.integrated.tabs.description']);
+});
+
+test('a static tab title never plans the description at all', () => {
+  const plan = planWorkbenchChanges(untouched({ liveTabTitle: false }), {});
+  assert.ok(!plan.changes.some((change) => change.key === 'terminal.integrated.tabs.description'));
 });
