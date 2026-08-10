@@ -10,7 +10,9 @@ import {
   isWorking,
   reduceActivity,
   reduceActivityLine,
+  settleActivity,
   silentFor,
+  SILENT_AFTER_SECONDS,
 } from '../activity';
 
 /**
@@ -297,4 +299,60 @@ test('a malformed item does not throw or wipe the state', () => {
     reduceActivityLine(first, itemLine(2, { type: 'FileChange', changes: null })).lastItem?.subject,
     '',
   );
+});
+
+test('a turn that stops reporting is no longer counted as working', () => {
+  const working = reduceActivity(INITIAL_ACTIVITY, [TASK_STARTED]);
+  const startedAt = Date.parse(working.lastEventAt as string);
+
+  // Inside the window that real turns actually go quiet for, the claim stands. The largest
+  // intra-turn gap measured across 25 real sessions was 269s.
+  const stillWorking = settleActivity(working, startedAt + 300_000, 45);
+  assert.equal(stillWorking.status, 'working');
+  assert.equal(stillWorking, working, 'an unchanged state is returned by identity');
+
+  const settled = settleActivity(working, startedAt + SILENT_AFTER_SECONDS * 1000 + 1, 45);
+  assert.equal(settled.status, 'silent');
+  assert.equal(isWorking(settled), false, 'the badge and spinner must stop counting it');
+});
+
+test('giving up never happens sooner than the operator asked to be told about silence', () => {
+  const working = reduceActivity(INITIAL_ACTIVITY, [TASK_STARTED]);
+  const startedAt = Date.parse(working.lastEventAt as string);
+  // An operator who raises the stall threshold is saying their sessions go quiet for longer.
+  const patient = settleActivity(working, startedAt + 700_000, 3600);
+  assert.equal(patient.status, 'working');
+  assert.equal(settleActivity(working, startedAt + 7_300_000, 3600).status, 'silent');
+});
+
+test('elapsed silence is still reported once a session has been given up on', () => {
+  const working = reduceActivity(INITIAL_ACTIVITY, [TASK_STARTED]);
+  const startedAt = Date.parse(working.lastEventAt as string);
+  const now = startedAt + SILENT_AFTER_SECONDS * 1000 + 60_000;
+  const settled = settleActivity(working, now, 45);
+  // The elapsed silence is the single most useful thing left to say about it.
+  assert.equal(silentFor(settled, now), Math.floor((now - startedAt) / 1000));
+});
+
+test('one new record disproves silence and the session works again', () => {
+  const working = reduceActivity(INITIAL_ACTIVITY, [TASK_STARTED]);
+  const startedAt = Date.parse(working.lastEventAt as string);
+  const settled = settleActivity(working, startedAt + 3_600_000, 45);
+  assert.equal(settled.status, 'silent');
+
+  // An answered approval prompt resumes the turn without a fresh task_started.
+  const resumed = reduceActivityLine(
+    settled,
+    itemLine(settled.ordinal + 1, { type: 'CommandExecution', id: 'e', command: ['git', 'log'] }),
+  );
+  assert.equal(resumed.status, 'working');
+  assert.equal(resumed.lastItem?.subject, 'git log');
+});
+
+test('a completed turn after silence still lands as idle, not working', () => {
+  const working = reduceActivity(INITIAL_ACTIVITY, [TASK_STARTED]);
+  const startedAt = Date.parse(working.lastEventAt as string);
+  const settled = settleActivity(working, startedAt + 3_600_000, 45);
+  const done = reduceActivity(settled, [TASK_COMPLETE]);
+  assert.equal(done.status, 'idle');
 });

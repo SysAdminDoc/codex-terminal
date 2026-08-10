@@ -5,6 +5,7 @@ import {
   isStalled,
   isWorking,
   reduceActivity,
+  settleActivity,
   type SessionActivity,
 } from './activity';
 import { bindRollout, scanRollouts } from './binder';
@@ -64,6 +65,8 @@ export interface SessionMonitorOptions {
   workspaceName?: string;
   codexHome: () => string;
   log: vscode.LogOutputChannel;
+  /** `codexTerminal.stallSeconds`, which sets the floor for giving up on a silent turn. */
+  stallSeconds?: () => number;
 }
 
 let keyCounter = 0;
@@ -225,6 +228,10 @@ export class SessionMonitor implements vscode.Disposable {
           }`,
         );
       }
+      // Runs whether or not the tail moved. A session goes silent precisely by producing no
+      // lines, so a check that only ran on new output could never fire for the case it exists
+      // to catch.
+      changed = this.settleOne(entry) || changed;
     }
 
     // The heartbeat has to keep ticking even on a quiet poll, or a live window starts
@@ -249,6 +256,22 @@ export class SessionMonitor implements vscode.Disposable {
       return false;
     }
     entry.activity = next;
+    this.persist(entry);
+    return true;
+  }
+
+  /** Give up on a turn that has stopped reporting, and say so once in the log. */
+  private settleOne(entry: Tracked): boolean {
+    const stallSeconds = this.options.stallSeconds?.() ?? 45;
+    const settled = settleActivity(entry.activity, Date.now(), stallSeconds);
+    if (settled === entry.activity) {
+      return false;
+    }
+    entry.activity = settled;
+    this.options.log.info(
+      `${entry.label} has written nothing for a long time; no longer counting it as working ` +
+        '(Codex does not always record the end of a turn)',
+    );
     this.persist(entry);
     return true;
   }

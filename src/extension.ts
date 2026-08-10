@@ -888,6 +888,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<CodexT
     workspaceName: vscode.workspace.name,
     codexHome: () => codexHomeDirectory(),
     log,
+    stallSeconds: () => config().get<number>('stallSeconds', DEFAULT_STALL_SECONDS),
   });
   sessionMonitor = monitor;
   context.subscriptions.push(monitor);

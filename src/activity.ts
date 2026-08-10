@@ -10,7 +10,12 @@
  * real rollout lines, and a caller can fold a 100 MB rollout without holding it in memory.
  */
 
-export type ActivityStatus = 'working' | 'idle' | 'aborted' | 'unknown';
+/**
+ * `silent` is not a state Codex reports — it is what this extension concludes when a turn
+ * has claimed to be working for implausibly long without writing anything. See
+ * `settleActivity` for why that conclusion is drawn and why it stops short of `idle`.
+ */
+export type ActivityStatus = 'working' | 'idle' | 'aborted' | 'silent' | 'unknown';
 
 /**
  * What Codex last finished doing.
@@ -234,7 +239,15 @@ export function reduceActivityLine(state: SessionActivity, line: string): Sessio
 
   const payload = record.payload;
   const timestamp = typeof record.timestamp === 'string' ? record.timestamp : state.lastEventAt;
-  const base: SessionActivity = { ...state, ordinal, lastEventAt: timestamp };
+  const base: SessionActivity = {
+    ...state,
+    ordinal,
+    lastEventAt: timestamp,
+    // `silent` is a conclusion drawn purely from records *not* arriving. One arriving
+    // disproves it, so the session goes back to working unless this very record says
+    // otherwise below — an answered approval prompt resumes without a fresh `task_started`.
+    ...(state.status === 'silent' ? { status: 'working' as const } : {}),
+  };
 
   switch (payload.type) {
     case 'task_started':
@@ -302,7 +315,10 @@ export function isWorking(activity: SessionActivity): boolean {
  * seconds — instead of asserting a state that cannot be distinguished from here.
  */
 export function silentFor(activity: SessionActivity, now: number): number | undefined {
-  if (activity.status !== 'working' || !activity.lastEventAt) {
+  // `silent` is included deliberately: the elapsed silence is the single most useful thing
+  // to say about a session in that state, and gating it on `working` alone would hide it at
+  // exactly the point it became worth reporting.
+  if ((activity.status !== 'working' && activity.status !== 'silent') || !activity.lastEventAt) {
     return undefined;
   }
   const last = Date.parse(activity.lastEventAt);
@@ -320,6 +336,49 @@ export function isStalled(
 ): boolean {
   const silent = silentFor(activity, now);
   return silent !== undefined && silent >= thresholdSeconds;
+}
+
+/**
+ * How long a working turn may go quiet before its own claim stops being believable.
+ *
+ * Measured rather than chosen. Across 80,779 gaps between consecutive events *inside* real
+ * turns (25 sessions on this machine, 2026-08-10): median 1.8s, p99 30s, p99.9 128s, and
+ * the largest gap observed while genuinely working was 269s. Nothing exceeded 300s, so 600s
+ * keeps better than a 2x margin over the worst real case.
+ */
+export const SILENT_AFTER_SECONDS = 600;
+
+/**
+ * Stop believing a turn that has been silent far past anything a real turn does.
+ *
+ * Codex does not always record the end of a turn: across 25 recent sessions there were 52
+ * `task_started` against 40 `task_complete`, and no `turn_aborted` at all, so an interrupted
+ * turn leaves the session pinned at `working` for the life of the window — spinner running,
+ * badge counting it, status bar calling it busy, while the operator sits at an idle prompt.
+ *
+ * The demotion stops at `silent` rather than `idle` on purpose. Codex writes nothing while
+ * waiting for an approval and nothing while wedged, and a rollout tail cannot tell those from
+ * a finished turn; calling it `idle` would swap one confident wrong answer for another. What
+ * *is* certain is that it is not working, so the count, the spinner and the badge become
+ * correct while the label stays honest about the uncertainty.
+ *
+ * `stallSeconds * 2` is a floor: an operator who raises the stall threshold is saying their
+ * sessions go quiet for longer, and the give-up point has to move with it.
+ */
+export function settleActivity(
+  activity: SessionActivity,
+  now: number,
+  stallSeconds: number,
+  silentAfterSeconds = SILENT_AFTER_SECONDS,
+): SessionActivity {
+  if (activity.status !== 'working') {
+    return activity;
+  }
+  const silent = silentFor(activity, now);
+  if (silent === undefined || silent < Math.max(silentAfterSeconds, stallSeconds * 2)) {
+    return activity;
+  }
+  return { ...activity, status: 'silent' };
 }
 
 /** Whole seconds the running turn has been going, for the tooltip readout. */

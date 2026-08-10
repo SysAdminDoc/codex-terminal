@@ -124,6 +124,25 @@ it can only open a picker. Animation is therefore in the tab's *text* and in the
 on the icon. If you set `workbench.reduceMotion`, every spinner becomes a still icon and the
 wording carries the state instead.
 
+Each running session also says what Codex last finished doing — `Working · ran npm run check`,
+`Working · edited monitor.ts`, `Working · searched vscode terminal api`. The wording is past
+tense because Codex records a step only once it completes; there is no "started" event to read.
+
+### The `Silent` state
+
+Codex does not always record the end of a turn — across 25 recent sessions on the machine this
+was measured on there were 52 turn starts against 40 completions, and no abort events at all. A
+turn interrupted with Ctrl-C therefore leaves its session claiming to be working forever, which
+is the one thing a status indicator must not do.
+
+A session that has written nothing for far longer than any real turn goes quiet for is marked
+**Silent**: it stops spinning, stops counting toward the badge, and reports how long it has been
+quiet. It is deliberately not called *Idle* — Codex writes nothing while waiting for an approval
+and nothing while wedged, so "finished" would be a guess. The threshold is 10 minutes, or twice
+`codexTerminal.stallSeconds` if you have raised it; the largest gap measured *inside* a genuinely
+working turn was 269 seconds across 80,779 samples. Any new output puts the session straight back
+to working.
+
 ### Why `tabTitle: static` cannot animate
 
 Supplying a name to a terminal does more than set a label. VS Code records an extension-supplied

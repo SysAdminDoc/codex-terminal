@@ -40,6 +40,18 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- A session interrupted mid-turn no longer spins forever. Codex does not reliably record the
+  end of a turn — 52 turn starts against 40 completions across 25 recent sessions here, and no
+  abort events at all — so a turn stopped with Ctrl-C left its session claiming to be working
+  for the life of the window: tab spinning, badge counting it, status bar calling it busy,
+  while the operator sat at an idle prompt. A session that has written nothing for far longer
+  than any real turn goes quiet for is now marked **Silent** and stops counting as working.
+  Deliberately not *Idle*: Codex writes nothing while awaiting an approval and nothing while
+  wedged, so "finished" would swap one confident wrong answer for another. The threshold is
+  measured, not picked — the largest gap inside a genuinely working turn was 269 seconds
+  across 80,779 samples, so 10 minutes leaves better than a 2× margin. Any new output returns
+  the session to working immediately. Applied to the 25 most recent real sessions, this
+  correctly demoted 10 abandoned ones and left the 2 genuinely running untouched.
 - Closing a window normally is no longer reported as a crash. The stamp that records a
   deliberate shutdown was written asynchronously from `deactivate`, which the editor does not
   wait for, so it often never landed — and the next window then offered to recover terminals

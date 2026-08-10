@@ -62,6 +62,11 @@ export function presentStatus(
         color: 'charts.yellow',
         label: activity.abortReason === 'interrupted' ? 'Interrupted' : 'Stopped',
       };
+    case 'silent':
+      // `question` is the honest glyph: the session is definitely not working, and what it
+      // is instead — waiting on an approval, wedged, or quietly finished — is unknowable
+      // from the session file.
+      return { icon: 'question', color: 'charts.yellow', label: 'Silent' };
     case 'idle':
       return { icon: 'check', color: 'charts.green', label: 'Idle' };
     default:
@@ -132,9 +137,13 @@ export function describeActivity(
   stallSeconds = DEFAULT_STALL_SECONDS,
 ): string {
   const parts: string[] = [presentStatus(activity).label];
-  // Only while working. On an idle session the last step is history, and repeating it
-  // beside "Idle" reads as though something is still happening.
-  const step = activity.status === 'working' ? describeItem(activity.lastItem) : undefined;
+  // Only while working or silent. On an idle session the last step is history, and repeating
+  // it beside "Idle" reads as though something is still happening — but on a silent one it is
+  // the best clue to where the session stopped.
+  const step =
+    activity.status === 'working' || activity.status === 'silent'
+      ? describeItem(activity.lastItem)
+      : undefined;
   if (step) {
     parts.push(step);
   }
