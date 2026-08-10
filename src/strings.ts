@@ -226,6 +226,8 @@ export const strings = {
         : vscode.l10n.t(
             'Codex Terminal activated (workbench.statusBar.visible=false — status bar button cannot render; use the activity bar)',
         ),
+    activationCost: (milliseconds: number): string =>
+      vscode.l10n.t('activation took {0}ms', String(milliseconds)),
   },
   doctor: {
     running: (): string =>

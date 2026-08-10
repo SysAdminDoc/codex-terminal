@@ -5,6 +5,17 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Changed
+
+- Crash recovery is now offered without being asked for. The extension previously did not run
+  until you opened its view or invoked a command, so after the crash this feature exists for,
+  the editor reopened and said nothing. It now activates on `onStartupFinished` — the slot
+  that fires *after* the workbench has started, not the eager one that delays it — and
+  activation is asserted to stay inside a budget rather than merely intended to: measured at
+  25 ms against a 2.0 GB session store, budget 250 ms, checked by the integration suite.
+  Everything that can wait (workbench preferences, the notification bridge, journal pruning,
+  the recovery scan) is started without being awaited.
+
 ### Fixed
 
 - Closing a window normally is no longer reported as a crash. The stamp that records a

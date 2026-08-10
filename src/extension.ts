@@ -72,6 +72,8 @@ let sessionMonitor: SessionMonitor | undefined;
 export interface CodexTerminalExtensionApi {
   getActionCount: () => number;
   getTerminalProfileOptions: () => Promise<vscode.TerminalOptions | undefined>;
+  /** Wall-clock milliseconds spent inside `activate`, for the startup budget check. */
+  getActivationMs: () => number;
 }
 
 /**
@@ -837,7 +839,16 @@ async function runSettingsMigrations(context: vscode.ExtensionContext): Promise<
   }
 }
 
+/**
+ * Activation runs on `onStartupFinished`, in every window, whether or not Codex is used
+ * there. That is the price of offering crash recovery without being asked for it — an
+ * extension that has not activated cannot notice that the last window died. The bargain is
+ * that activation stays cheap: no synchronous disk walk, and everything that can wait is
+ * started with `void` rather than awaited. `getActivationMs` exists so the cost is a number
+ * the test suite can hold us to rather than an assurance.
+ */
 export async function activate(context: vscode.ExtensionContext): Promise<CodexTerminalExtensionApi> {
+  const activationStartedAt = Date.now();
   log = vscode.window.createOutputChannel('Codex Terminal', { log: true });
   context.subscriptions.push(log);
   extensionContext = context;
@@ -847,7 +858,6 @@ export async function activate(context: vscode.ExtensionContext): Promise<CodexT
     const message = error instanceof Error ? error.message : String(error);
     log.error(strings.migration.failed(message));
   }
-  await applyWorkbenchPreferences();
 
   const windowId = vscode.env.sessionId;
   const store = new JournalStore(
@@ -1044,13 +1054,19 @@ export async function activate(context: vscode.ExtensionContext): Promise<CodexT
       },
     },
   );
+  // Everything below is deliberately not awaited: none of it has to finish before the
+  // window is usable, and activation now happens on every startup.
+  void applyWorkbenchPreferences();
   void syncNotifyBridge();
   void monitor.pruneJournals();
   void offerRecovery(store, windowId);
 
+  const activationMs = Date.now() - activationStartedAt;
+  log.info(strings.logs.activationCost(activationMs));
   return {
     getActionCount: () => actionsProvider.getChildren().length,
     getTerminalProfileOptions: async () => (await provideTerminalProfile())?.options,
+    getActivationMs: () => activationMs,
   };
 }
 

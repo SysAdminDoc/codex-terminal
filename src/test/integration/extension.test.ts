@@ -7,7 +7,20 @@ import { suite, test } from 'mocha';
 interface TestApi {
   getActionCount: () => number;
   getTerminalProfileOptions: () => Promise<vscode.TerminalOptions | undefined>;
+  getActivationMs: () => number;
 }
+
+/**
+ * Ceiling for `activate`, in milliseconds.
+ *
+ * The extension activates on `onStartupFinished` in every window, because an extension that
+ * has not activated cannot notice that the previous one died — and crash recovery is the
+ * point. That makes activation cost everyone's problem, so it is asserted rather than
+ * assured. Measured at 25ms on Windows 11 against a 2.0 GB rollout store, 2026-08-10; the
+ * budget is an order of magnitude above that so it fails on a regression in kind — a
+ * synchronous directory walk, an awaited settings write — not on a slower machine.
+ */
+const ACTIVATION_BUDGET_MS = 250;
 
 const OWNERSHIP_ENV_VAR = 'CODEX_TERMINAL_OWNED';
 
@@ -115,6 +128,22 @@ suite('Codex Terminal hostile settings integration', () => {
         terminal.dispose();
       }
     });
+  });
+
+  test('activation stays inside its startup budget', async () => {
+    const extension = vscode.extensions.getExtension<TestApi>('sysadmindoc.codex-terminal');
+    assert.ok(extension);
+    const api = await extension.activate();
+    const cost = api.getActivationMs();
+    // Printed whatever the verdict: a passing number that has been creeping is the useful
+    // signal, and it is invisible if it is only reported on failure.
+    console.log(`[activation] ${cost}ms (budget ${ACTIVATION_BUDGET_MS}ms)`);
+    assert.ok(
+      cost <= ACTIVATION_BUDGET_MS,
+      `activate took ${cost}ms against a ${ACTIVATION_BUDGET_MS}ms budget — something on the ` +
+        'activation path started blocking. Everything that can wait should be started with ' +
+        '`void`, not awaited.',
+    );
   });
 
   test('the contributed profile resolves a shell path', async () => {

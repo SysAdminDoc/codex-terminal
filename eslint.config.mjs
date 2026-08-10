@@ -46,4 +46,12 @@ export default [
       curly: 'error',
     },
   },
+  {
+    // The integration suite is a test harness, not extension code: it never ships (see
+    // `.vscodeignore`) and stdout *is* its report channel. The measured activation cost is
+    // only useful if it prints on a pass too, so a creeping number is visible before it
+    // becomes a failure.
+    files: ['src/test/integration/**/*.ts'],
+    rules: { 'no-console': 'off' },
+  },
 ];

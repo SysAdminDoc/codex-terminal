@@ -50,10 +50,21 @@ test('command-bearing settings stay machine-overridable', () => {
   }
 });
 
-test('the extension does not force activation in every window at startup', () => {
+test('startup activation is deferred, never eager', () => {
   const manifestPath = path.resolve(__dirname, '../../package.json');
   const manifest = JSON.parse(readFileSync(manifestPath, 'utf8')) as Manifest;
-  assert.ok(!manifest.activationEvents?.includes('onStartupFinished'));
+  const events = manifest.activationEvents ?? [];
+
+  // `onStartupFinished` is required, not merely tolerated: crash recovery and the journal
+  // heartbeat both live in `activate`, so without it the editor reopens after the crash this
+  // feature exists for and says nothing until the operator goes looking. The event fires
+  // *after* the workbench has started — it is the sanctioned slot for exactly this work.
+  assert.ok(
+    events.includes('onStartupFinished'),
+    'recovery cannot be offered by an extension that has not activated',
+  );
+  // `*` is the one that would actually cost the operator startup time.
+  assert.ok(!events.includes('*'), 'eager activation blocks the window opening');
 });
 
 test('history view and live title settings remain contributed', () => {
