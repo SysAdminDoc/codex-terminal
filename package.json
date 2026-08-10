@@ -116,6 +116,11 @@
         "category": "%category.codexTerminal%"
       },
       {
+        "command": "codexTerminal.checkAppServer",
+        "title": "%command.checkAppServer.title%",
+        "category": "%category.codexTerminal%"
+      },
+      {
         "command": "codexTerminal.doctor",
         "title": "%command.doctor.title%",
         "category": "%category.codexTerminal%"

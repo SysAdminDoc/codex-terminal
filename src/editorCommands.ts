@@ -1,11 +1,13 @@
+import { existsSync } from 'node:fs';
 import * as path from 'node:path';
 import * as vscode from 'vscode';
 
+import { AppServerClient, type AppServerHandshake } from './appServer';
 import { collectDoctorReport } from './doctor';
-import { liveOwnedTerminal, readLaunchRequest, resolveCwd } from './launch';
+import { liveOwnedTerminal, preflightCodexCommand, readLaunchRequest, resolveCwd } from './launch';
 import { DEFAULT_TITLE_ITEMS } from './naming';
 import { buildFileReference } from './reference';
-import { config, log, reportError } from './services';
+import { config, log, reportError, services } from './services';
 import { strings } from './strings';
 
 /** Commands driven from the editor: diagnostics, and getting a selection to Codex. */
@@ -120,4 +122,77 @@ export async function askAboutSelection(): Promise<void> {
   target.terminal.show(false);
   target.terminal.sendText(line, true);
   log().info(strings.logs.sentReference(line));
+}
+
+
+/**
+ * Connect to `codex app-server` once, report what came back, and disconnect.
+ *
+ * A probe rather than a live connection. Adopting the app-server as this extension's control
+ * plane is a real architectural decision — it would replace the rollout reader — and the first
+ * question is simply whether this machine can talk to it at all. Answering that costs one
+ * handshake and leaves nothing running.
+ *
+ * `resolveCommandPath` lands on `codex.cmd` on Windows, which Node refuses to spawn without a
+ * shell (BatBadBut, CVE-2024-27980) and reports as a bare `EINVAL`. The npm shim sits next to
+ * a JS entry point, so the client is pointed at that instead and run under this Node.
+ */
+export async function checkAppServer(): Promise<void> {
+  const command = config().get<string>('command', 'codex');
+  const resolved = preflightCodexCommand(command);
+  if (!resolved) {
+    return;
+  }
+
+  const entry = nodeEntryFor(resolved);
+  const client = new AppServerClient({
+    command: entry ?? resolved,
+    ...(entry ? { nodeExecutable: process.execPath } : {}),
+    log: log(),
+    onNotification: (method) => log().info(`app-server notification: ${method}`),
+  });
+  try {
+    const handshake = await vscode.window.withProgress(
+      { location: vscode.ProgressLocation.Notification, title: strings.appServer.connecting() },
+      () => client.start(String(services().context.extension.packageJSON.version)),
+    );
+    const report = describeHandshake(handshake);
+    log().info(report);
+    const choice = await vscode.window.showInformationMessage(report, strings.errors.showLog());
+    if (choice === strings.errors.showLog()) {
+      log().show(true);
+    }
+  } catch (error) {
+    reportError(error, strings.appServer.failed());
+  } finally {
+    client.dispose();
+  }
+}
+
+function describeHandshake(handshake: AppServerHandshake): string {
+  return strings.appServer.connected(
+    handshake.userAgent ?? 'unknown',
+    handshake.codexHome ?? 'unknown',
+    handshake.platformOs ?? 'unknown',
+  );
+}
+
+/**
+ * The JS entry behind an npm `codex.cmd` shim, if that is what was resolved.
+ *
+ * Returns undefined for a real executable, which is the normal case everywhere but Windows.
+ */
+export function nodeEntryFor(resolved: string): string | undefined {
+  if (!/\.cmd$/i.test(resolved)) {
+    return undefined;
+  }
+  const entry = path.join(
+    path.dirname(resolved),
+    'node_modules',
+    '@openai',
+    'codex',
+    'bin',
+    'codex.js',
+  );
+  return existsSync(entry) ? entry : undefined;
 }

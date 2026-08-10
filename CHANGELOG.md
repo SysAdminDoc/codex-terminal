@@ -7,6 +7,17 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **Codex Terminal: Check Codex App Server** — a one-shot connection check against
+  `codex app-server`, Codex's own control plane. Adopting it would replace three modules that
+  currently reverse-engineer session state from rollout files, so the first question is whether
+  a machine can talk to it at all; this answers that in one handshake and leaves nothing
+  running. Two things about the wire format were established by probing the installed binary
+  rather than assumed, and either would break a textbook client: responses carry **no
+  `jsonrpc` field**, so a client that validates it discards every message the server sends; and
+  `initialize` advertises **no capabilities**, so support has to be probed by calling rather
+  than read from the handshake. On Windows the npm `codex` is a `.cmd` shim that Node refuses
+  to spawn (BatBadBut, CVE-2024-27980, reported as a bare `EINVAL`), so the client resolves
+  past it to the JS entry point.
 - **History groups by repository, and names the worktree.** Running several agents against one
   repository with a worktree each is the case worktrees exist for, and grouping by working
   directory scattered exactly those sessions across unrelated-looking projects. Sessions from

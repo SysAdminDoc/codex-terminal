@@ -89,7 +89,7 @@ The real Codex TUI, started in the workspace folder:
 - **Command Palette** — `Codex Terminal: New Session`, `Resume Last Session`,
   `Resume Session (picker)`, `Fork Last Session`, `Focus Codex Terminal`,
   `New Session with Profile…`, `Send File Reference to Codex`, `Ask Codex About Selection…`,
-  `Revert Workbench Settings`, `Doctor`, `Show Log`.
+  `Revert Workbench Settings`, `Check Codex App Server`, `Doctor`, `Show Log`.
 - **Right-click in the editor** — *Send File Reference to Codex* puts `@src/file.ts#L10-L20`
   on the Codex prompt without submitting it, so you can type the question after it.
   *Ask Codex About Selection…* takes the question in an input box and submits reference and

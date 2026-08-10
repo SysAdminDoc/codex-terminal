@@ -197,6 +197,17 @@ export const strings = {
     notBound: (): string =>
       vscode.l10n.t('This session has no Codex session id yet, so it cannot be named.'),
   },
+  appServer: {
+    connecting: (): string => vscode.l10n.t('Connecting to codex app-server…'),
+    connected: (userAgent: string, home: string, os: string): string =>
+      vscode.l10n.t(
+        'codex app-server reachable — {0}, CODEX_HOME {1}, platform {2}. Nothing is left running; this was a connection check.',
+        userAgent,
+        home,
+        os,
+      ),
+    failed: (): string => vscode.l10n.t('Could not reach codex app-server'),
+  },
   warnings: {
     noEditor: (): string => vscode.l10n.t('Codex Terminal: no active editor to reference.'),
     noTerminal: (): string =>

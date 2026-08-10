@@ -2,7 +2,12 @@ import * as path from 'node:path';
 import * as vscode from 'vscode';
 
 import { ActionsViewProvider } from './actionsView';
-import { askAboutSelection, runDoctor, sendFileReference } from './editorCommands';
+import {
+  askAboutSelection,
+  checkAppServer,
+  runDoctor,
+  sendFileReference,
+} from './editorCommands';
 import { HistoryViewProvider } from './historyView';
 import {
   copyHistorySessionId,
@@ -193,6 +198,12 @@ export async function activate(context: vscode.ExtensionContext): Promise<CodexT
       'codexTerminal.askAboutSelection',
       () => {
         void askAboutSelection();
+      },
+    ],
+    [
+      'codexTerminal.checkAppServer',
+      () => {
+        void checkAppServer();
       },
     ],
     [
