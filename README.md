@@ -1,6 +1,6 @@
 # Codex Terminal
 
-[![Version](https://img.shields.io/badge/version-0.3.0-cba6f7?style=flat-square)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-0.4.0-cba6f7?style=flat-square)](CHANGELOG.md)
 [![License](https://img.shields.io/badge/license-MIT-89b4fa?style=flat-square)](LICENSE)
 [![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux-a6e3a1?style=flat-square)](#requirements)
 [![Editors](https://img.shields.io/badge/editors-VS%20Code%20%7C%20VSCodium-f9e2af?style=flat-square)](#requirements)
@@ -64,8 +64,13 @@ The real Codex TUI, started in the workspace folder:
   closing a Codex tab immediately terminates its running processes.
 - **History** — the **History** view in the Codex Terminal activity-bar container reads Codex's
   local `.jsonl` rollouts, groups them by project, and keeps the first real prompt as a preview.
-  Click a session to open a readable Markdown transcript; the inline actions resume it, copy its
-  id, or open the raw rollout. New and changed rollouts refresh the view automatically.
+  **Click a session to resume it** in a terminal, in the directory it was originally written in;
+  the inline actions open a readable Markdown transcript or copy its id, and the context menu adds
+  the raw rollout. New and changed rollouts refresh the view automatically.
+- **Interrupted sessions** — if a window closes without shutting down cleanly, the next window
+  offers the Codex sessions it had open under an **Interrupted sessions** group at the top of the
+  History view. Restoring one resumes that conversation where it stopped. Sessions that never
+  reached a rollout are not offered, because there is nothing to return to.
 - **Command Palette** — `Codex Terminal: New Session`, `Resume Last Session`,
   `Resume Session (picker)`, `Fork Last Session`, `Focus Codex Terminal`,
   `New Session with Profile…`, `Send File Reference to Codex`, `Doctor`, `Show Log`.
@@ -98,8 +103,17 @@ The real Codex TUI, started in the workspace folder:
 | `codexTerminal.showStatusBarButton` | `true` | The old `showStatusBarItem` key is migrated once per extension version. |
 | `codexTerminal.showEditorTitleButton` | `true` | |
 | `codexTerminal.notifyOnCompletion` | `false` | Opt in to turn-completion notifications without modifying `~/.codex/config.toml`. |
-| `codexTerminal.titleItems` | `["activity", "project-name"]` | Codex title items. The default provides the live activity indicator and project name. |
+| `codexTerminal.tabTitle` | `live` | `live` leaves the tab name unset so Codex's own title — including its activity indicator — drives the tab. `static` shows a fixed `project — Codex` label and **cannot animate**; see below. |
+| `codexTerminal.titleItems` | `["activity", "project-name", "app-name"]` | Codex title items. The default gives the live activity indicator, the project name, and the constant `Codex` marker used to recognise our tabs after a window reload. |
 | `codexTerminal.history.maxSessions` | `200` | Maximum recent sessions shown in the History view. |
+
+### Why `tabTitle: static` cannot animate
+
+Supplying a name to a terminal does more than set a label. VS Code records an extension-supplied
+name as the instance's *static title* and, on that path, never subscribes to the title the process
+emits — so a named terminal has no live title to show, in either its title or its description.
+Codex publishes its activity indicator through exactly that channel. `live` therefore leaves the
+name unset and lets Codex own the tab text; `static` trades the animation for a fixed label.
 
 ### `editorDefault` is the one racy mode
 
@@ -155,8 +169,8 @@ VS Code, Insiders, Cursor).
 Command line:
 
 ```powershell
-codium --install-extension codex-terminal-0.3.0.vsix   # VSCodium
-code   --install-extension codex-terminal-0.3.0.vsix   # VS Code
+codium --install-extension codex-terminal-0.4.0.vsix   # VSCodium
+code   --install-extension codex-terminal-0.4.0.vsix   # VS Code
 ```
 
 Or from inside the editor: **Extensions** view → `...` menu (top of the sidebar) →
@@ -172,7 +186,7 @@ Codex icon then appears in the activity bar.
 npm install
 npm run check     # clean, compile, lint, test, bundle
 npm run l10n:export # refresh the default English localization bundle
-npm run package   # -> dist/codex-terminal-0.3.0.vsix
+npm run package   # -> dist/codex-terminal-0.4.0.vsix
 ```
 
 `npm run check` runs the headless unit suite over shell quoting, command resolution, session

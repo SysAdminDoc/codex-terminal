@@ -3,6 +3,26 @@
 All notable changes to Codex Terminal are documented here.
 This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.0] - 2026-08-10
+
+### Added
+
+- A **History** view that reads Codex's local rollouts, groups them by project, and resumes a
+  conversation in its original working directory when clicked.
+- Live session activity in the Launch panel, folded from the rollout's own turn events, with an
+  animated indicator while Codex is working plus elapsed time and context usage.
+- Crash recovery: each window journals the Codex sessions it has open, and a window that closes
+  without shutting down cleanly has those sessions offered back under **Interrupted sessions**.
+- `codexTerminal.tabTitle`, choosing between Codex's live tab title and a fixed label.
+- Markdown transcript export for any recorded session.
+
+### Changed
+
+- `codexTerminal.titleItems` now defaults to `["activity", "project-name", "app-name"]`; the
+  constant app name is what identifies our tabs after a window reload.
+- Terminals are recognised as ours by an environment marker rather than by their label, so
+  ownership survives Codex owning the tab text.
+
 ## [0.3.0] - 2026-08-09
 
 ### Fixed
