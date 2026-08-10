@@ -3,7 +3,7 @@
   "displayName": "%extension.displayName%",
   "description": "%extension.description%",
   "l10n": "./l10n",
-  "version": "0.9.0",
+  "version": "0.10.0",
   "publisher": "sysadmindoc",
   "license": "MIT",
   "author": "SysAdminDoc",
@@ -591,7 +591,7 @@
     "test:integration": "npm run compile && npm run bundle && vscode-test --jobs 1",
     "check": "npm run clean && npm run compile && npm run l10n:export && npm run lint && node --test \"out/test/*.test.js\" && npm run bundle",
     "package": "npm run check && node scripts/package.mjs",
-    "vscode:prepublish": "npm run clean && npm run bundle"
+    "vscode:prepublish": "npm run bundle"
   },
   "devDependencies": {
     "@eslint/js": "10.0.1",

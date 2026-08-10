@@ -3,7 +3,7 @@
 All notable changes to Codex Terminal are documented here.
 This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.10.0] - 2026-08-10
 
 ### Added
 
@@ -33,6 +33,12 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - **Reverting `terminal.integrated.tabs.allowAgentCliTitle` wrote a string into a boolean.**
   The override ledger stores every previous value as text, and the revert path wrote it back
   verbatim, so the setting ended up holding `"false"` rather than `false`.
+
+- **The packaged bundle was never the one the checks validated.** `vscode:prepublish` re-ran
+  `clean` after `npm run check` had already compiled, linted, tested and bundled, so the
+  artefact that shipped was a fresh build of the same source rather than the verified one. It
+  now bundles without wiping `dist/`, and the bundle inside the VSIX hashes identically to the
+  one `check` produced.
 
 - **Editor context could be typed into somebody else's terminal.** *Send File Reference* and
   *Ask Codex about Selection* fell back to `window.activeTerminal` when no Codex session was

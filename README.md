@@ -1,6 +1,6 @@
 # Codex Terminal
 
-[![Version](https://img.shields.io/badge/version-0.9.0-cba6f7?style=flat-square)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-0.10.0-cba6f7?style=flat-square)](CHANGELOG.md)
 [![License](https://img.shields.io/badge/license-MIT-89b4fa?style=flat-square)](LICENSE)
 [![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux-a6e3a1?style=flat-square)](#requirements)
 [![Editors](https://img.shields.io/badge/editors-VS%20Code%20%7C%20VSCodium-f9e2af?style=flat-square)](#requirements)
@@ -344,8 +344,8 @@ VS Code, Insiders, Cursor).
 Command line:
 
 ```powershell
-codium --install-extension codex-terminal-0.9.0.vsix   # VSCodium
-code   --install-extension codex-terminal-0.9.0.vsix   # VS Code
+codium --install-extension codex-terminal-0.10.0.vsix   # VSCodium
+code   --install-extension codex-terminal-0.10.0.vsix   # VS Code
 ```
 
 Or from inside the editor: **Extensions** view → `...` menu (top of the sidebar) →
@@ -361,7 +361,7 @@ Codex icon then appears in the activity bar.
 npm install
 npm run check     # clean, compile, lint, test, bundle
 npm run l10n:export # refresh the default English localization bundle
-npm run package   # -> dist/codex-terminal-0.9.0.vsix
+npm run package   # -> dist/codex-terminal-0.10.0.vsix
 ```
 
 `npm run check` runs the headless unit suite over shell quoting, command resolution, session
@@ -378,10 +378,10 @@ via `SOURCE_DATE_EPOCH`, which makes the `.vsix` byte-identical for a given comm
 To confirm a downloaded `.vsix` is what this repository builds:
 
 ```powershell
-git checkout v0.9.0
+git checkout v0.10.0
 npm ci
 npm run package
-Get-FileHash -Algorithm SHA256 dist\codex-terminal-0.9.0.vsix
+Get-FileHash -Algorithm SHA256 dist\codex-terminal-0.10.0.vsix
 ```
 
 The hash must match `SHA256SUMS.txt` on the release. A mismatch means the file you downloaded
