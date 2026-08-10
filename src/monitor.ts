@@ -8,7 +8,13 @@ import {
   type SessionActivity,
 } from './activity';
 import { bindRollout, scanRollouts } from './binder';
-import { JournalStore, emptyJournal, upsertSession, type JournalState } from './journal';
+import {
+  JournalStore,
+  emptyJournal,
+  stampShutdown,
+  upsertSession,
+  type JournalState,
+} from './journal';
 import { codexSessionsDirectory } from './sessions';
 import { RolloutTailer } from './tail';
 
@@ -70,6 +76,8 @@ export class SessionMonitor implements vscode.Disposable {
   private journal: JournalState;
   private writing = false;
   private writeAgain = false;
+  /** Set by `shutdown`, so a queued async write cannot land after the sync stamp. */
+  private stopped = false;
 
   readonly onDidChange = this.changes.event;
 
@@ -263,14 +271,19 @@ export class SessionMonitor implements vscode.Disposable {
 
   /** Serialise writers so a burst of activity cannot interleave two renames. */
   private async writeJournal(): Promise<void> {
-    if (this.writing) {
-      this.writeAgain = true;
+    if (this.stopped || this.writing) {
+      this.writeAgain = !this.stopped;
       return;
     }
     this.writing = true;
     try {
       do {
         this.writeAgain = false;
+        // Re-checked each pass: `shutdown` may have stamped the file while the previous
+        // iteration was awaiting, and writing again would erase the stamp.
+        if (this.stopped) {
+          return;
+        }
         this.journal = { ...this.journal, heartbeatAt: Date.now() };
         await this.options.store.write(this.journal);
       } while (this.writeAgain);
@@ -299,25 +312,21 @@ export class SessionMonitor implements vscode.Disposable {
 
   /**
    * Stamp a clean shutdown so the next window does not offer to recover these sessions.
-   * Synchronous work only — `deactivate` does not await.
+   *
+   * Synchronous throughout, and that is the point: `deactivate` is called while the host is
+   * tearing down and nothing waits for a promise returned from it, so an awaited write here
+   * frequently never lands. `stopped` is set first so a write already queued behind this one
+   * cannot come back and overwrite the stamp with an un-stamped journal.
    */
-  async shutdown(): Promise<void> {
+  shutdown(): void {
+    this.stopped = true;
     if (this.timer) {
       clearInterval(this.timer);
       this.timer = undefined;
     }
-    const now = Date.now();
-    this.journal = {
-      ...this.journal,
-      heartbeatAt: now,
-      cleanShutdownAt: now,
-      sessions: this.journal.sessions.map((session) => ({
-        ...session,
-        closedAt: session.closedAt ?? now,
-      })),
-    };
+    this.journal = stampShutdown(this.journal, Date.now());
     try {
-      await this.options.store.write(this.journal);
+      this.options.store.writeSync(this.journal);
     } catch {
       // Nothing useful to do while the host is tearing down.
     }

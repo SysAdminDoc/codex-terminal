@@ -13,6 +13,7 @@ import {
   isDisposable,
   parseJournal,
   recoverableSessions,
+  stampShutdown,
   upsertSession,
   type JournalSession,
   type JournalState,
@@ -215,4 +216,42 @@ test('a window id cannot escape the journal directory', async () => {
     // Written where we expected, not two directories up.
     assert.ok(await readFile(path.join(directory, entries[0]), 'utf8'));
   });
+});
+
+test('a shutdown stamp closes every open session and clears the crashed signal', () => {
+  const before = journal({
+    heartbeatAt: NOW - 300_000,
+    sessions: [
+      session({ key: 'w-1', closedAt: undefined }),
+      session({ key: 'w-2', closedAt: NOW - 60_000 }),
+    ],
+  });
+
+  const after = stampShutdown(before, NOW);
+
+  assert.equal(after.cleanShutdownAt, NOW);
+  assert.equal(after.heartbeatAt, NOW);
+  assert.equal(after.sessions[0].closedAt, NOW, 'an open session is closed at the stamp');
+  assert.equal(after.sessions[1].closedAt, NOW - 60_000, 'an already-closed session keeps its time');
+  assert.equal(isCrashed(after, NOW + STALE_HEARTBEAT_MS * 10), false);
+  assert.deepEqual(recoverableSessions(after), [], 'nothing is left to offer back');
+});
+
+test('the shutdown stamp is written without awaiting anything', async (t) => {
+  // `deactivate` gets no promise honoured by the host, so the stamp has to land on the
+  // synchronous path or it does not land at all.
+  const directory = await mkdtemp(path.join(tmpdir(), 'codex-journal-sync-'));
+  t.after(() => rm(directory, { recursive: true, force: true }));
+  const store = new JournalStore(directory, 'window-a');
+
+  store.writeSync(stampShutdown(journal({ sessions: [session()] }), NOW));
+
+  const [written] = await store.readAll();
+  assert.equal(written.cleanShutdownAt, NOW);
+  assert.equal(written.sessions[0].closedAt, NOW);
+  assert.deepEqual(
+    (await readdir(directory)).filter((entry) => entry.endsWith('.tmp')),
+    [],
+    'the temporary file is renamed away, not left behind',
+  );
 });

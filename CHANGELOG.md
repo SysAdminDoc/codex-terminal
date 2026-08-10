@@ -3,6 +3,17 @@
 All notable changes to Codex Terminal are documented here.
 This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Fixed
+
+- Closing a window normally is no longer reported as a crash. The stamp that records a
+  deliberate shutdown was written asynchronously from `deactivate`, which the editor does not
+  wait for, so it often never landed — and the next window then offered to recover terminals
+  that had been closed on purpose. False recovery prompts are worse than none, because they
+  teach you to dismiss the prompt that matters. The stamp is now written synchronously, and a
+  journal write already queued behind it can no longer overwrite it.
+
 ## [0.5.0] - 2026-08-10
 
 ### Added

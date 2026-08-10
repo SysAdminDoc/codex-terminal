@@ -1,3 +1,4 @@
+import { mkdirSync, renameSync, writeFileSync } from 'node:fs';
 import { mkdir, readFile, readdir, rename, unlink, writeFile } from 'node:fs/promises';
 import * as path from 'node:path';
 
@@ -90,6 +91,25 @@ export function recoverableSessions(state: JournalState): JournalSession[] {
   return state.sessions.filter(
     (session) => session.closedAt === undefined && session.sessionId !== undefined,
   );
+}
+
+/**
+ * Close every open session and mark the window as having shut down deliberately.
+ *
+ * Separated from the monitor so the rule is testable: it is the single thing standing
+ * between a normal window close and the next window offering to "recover" the terminals
+ * that were closed on purpose.
+ */
+export function stampShutdown(state: JournalState, now: number): JournalState {
+  return {
+    ...state,
+    heartbeatAt: now,
+    cleanShutdownAt: now,
+    sessions: state.sessions.map((session) => ({
+      ...session,
+      closedAt: session.closedAt ?? now,
+    })),
+  };
 }
 
 /** True when this journal belonged to a window that died without shutting down. */
@@ -205,6 +225,25 @@ export class JournalStore {
     const temporary = `${this.filePath}.tmp`;
     await writeFile(temporary, JSON.stringify(state), 'utf8');
     await rename(temporary, this.filePath);
+  }
+
+  /**
+   * Synchronous twin of `write`, for the shutdown stamp only.
+   *
+   * `deactivate` is the last chance to say this window closed on purpose, and the host does
+   * not wait around for promises returned from it. An awaited write there is a race the
+   * extension loses often enough to matter: with no stamp the next window reads a stale
+   * heartbeat, concludes the window crashed, and offers to recover terminals the operator
+   * closed deliberately. False recovery prompts are worse than none — they teach the
+   * operator to dismiss the prompt that counts.
+   *
+   * Same tmp-then-rename as the async path, so a kill mid-write still cannot tear the JSON.
+   */
+  writeSync(state: JournalState): void {
+    mkdirSync(this.directory, { recursive: true });
+    const temporary = `${this.filePath}.tmp`;
+    writeFileSync(temporary, JSON.stringify(state), 'utf8');
+    renameSync(temporary, this.filePath);
   }
 
   /** Every journal in the directory, this window's included, skipping unreadable files. */

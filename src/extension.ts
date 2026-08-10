@@ -1059,7 +1059,8 @@ export function deactivate(): void {
   notifyBridge = undefined;
   extensionContext = undefined;
   // Stamps the journal so the next window does not treat these sessions as crashed.
-  void sessionMonitor?.shutdown();
+  // Synchronous on purpose: nothing waits for a promise returned from `deactivate`.
+  sessionMonitor?.shutdown();
   sessionMonitor = undefined;
   terminalRegistry?.dispose();
   terminalRegistry = undefined;
