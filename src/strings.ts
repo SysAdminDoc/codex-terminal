@@ -203,6 +203,14 @@ export const strings = {
       count === 1
         ? vscode.l10n.t('adopted 1 surviving Codex terminal')
         : vscode.l10n.t('adopted {0} surviving Codex terminals', count),
+    rebound: (rebound: number, adopted: number): string =>
+      vscode.l10n.t(
+        'rebound {0} of {1} adopted terminal(s) to their sessions from the journal',
+        rebound,
+        adopted,
+      ),
+    rebindUnavailable: (label: string, reason: string): string =>
+      vscode.l10n.t('{0} could not be rebound to its session ({1}); it stays live but unlabelled', label, reason),
     launch: (
       mode: string,
       shell: string,

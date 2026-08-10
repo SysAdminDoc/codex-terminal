@@ -13,12 +13,12 @@ import {
 } from './launcher';
 import { buildFileReference } from './reference';
 import { ActionsViewProvider } from './actionsView';
-import { TerminalRegistry } from './terminals';
+import { TerminalRegistry, terminalLaunchKey } from './terminals';
 import { collectDoctorReport, runCommand } from './doctor';
 import { codexProfilesDirectory, profileNamesFromFiles } from './profiles';
 import { NotifyBridge } from './notify';
 import { SessionMonitor } from './monitor';
-import { JournalStore, interruptedSessions, type JournalSession } from './journal';
+import { JournalStore, findLaunch, interruptedSessions, type JournalSession } from './journal';
 import {
   DEFAULT_STALL_SECONDS,
   motionAllowed,
@@ -38,6 +38,7 @@ import { migrateSettings, type MigrationTarget } from './migrate';
 import {
   DEFAULT_TERMINAL_NAME_TEMPLATE,
   DEFAULT_TITLE_ITEMS,
+  LAUNCH_KEY_ENV_VAR,
   OWNERSHIP_ENV_VAR,
   projectName,
   renderTerminalName,
@@ -218,6 +219,12 @@ interface LaunchOptions {
   sessionId?: string;
   /** Overrides the resolved workspace cwd, so a saved chat resumes where it was written. */
   cwd?: string;
+  /**
+   * Journal key for this launch, stamped into the terminal environment so a window reload
+   * can find the conversation again. Absent for the contributed terminal profile, whose
+   * terminal the terminal service owns and which this extension never tracks.
+   */
+  launchKey?: string;
 }
 
 /** Shared between the commands and the contributed terminal profile. */
@@ -244,7 +251,11 @@ async function terminalOptions(
 
   const options: vscode.TerminalOptions = {
     cwd,
-    env: { ...cfg.get<Record<string, string>>('env', {}), [OWNERSHIP_ENV_VAR]: '1' },
+    env: {
+      ...cfg.get<Record<string, string>>('env', {}),
+      [OWNERSHIP_ENV_VAR]: '1',
+      ...(request.launchKey ? { [LAUNCH_KEY_ENV_VAR]: request.launchKey } : {}),
+    },
     iconPath: new vscode.ThemeIcon('sparkle'),
     color: iconColor(),
     isTransient: false,
@@ -328,7 +339,13 @@ async function launch(request: LaunchOptions): Promise<void> {
       return;
     }
 
-    const { options, plan, cwd, project, label } = await terminalOptions(request, true);
+    // Reserved before the terminal exists: the key has to be in the environment at creation,
+    // and the journal has to record the same one, or a reload finds nothing to match.
+    const launchKey = sessionMonitor?.nextLaunchKey();
+    const { options, plan, cwd, project, label } = await terminalOptions(
+      { ...request, launchKey },
+      true,
+    );
     const terminal = vscode.window.createTerminal(options);
     if (cwd) {
       sessionMonitor?.track(terminal, {
@@ -338,6 +355,7 @@ async function launch(request: LaunchOptions): Promise<void> {
         mode: request.mode,
         profile: request.profile,
         sessionId: request.sessionId,
+        key: launchKey,
       });
     }
     terminal.show(false);
@@ -881,10 +899,38 @@ export async function activate(context: vscode.ExtensionContext): Promise<CodexT
   );
   if (adopted > 0) {
     log.info(strings.logs.adopted(adopted));
-    // Survivors of a reload can be shown and focused, but their rollout cannot be
-    // inferred after the fact: the launch instant that makes the match unambiguous is
-    // exactly what the reload destroyed.
+    // Read before anything is tracked. A reload can reuse the previous window's id, in which
+    // case this window's first journal write lands on the very file being read here.
+    const journals = await store.readAll();
+    let rebound = 0;
     for (const tracked of terminalRegistry.live()) {
+      const key = terminalLaunchKey(tracked.terminal);
+      const record = key ? findLaunch(journals, key) : undefined;
+      // The rollout has to still be on disk: it can have been archived or deleted between
+      // the two windows, and binding to a missing file would show a session that never moves.
+      if (record?.sessionId && record.rolloutPath && existsSync(record.rolloutPath)) {
+        monitor.track(tracked.terminal, {
+          cwd: record.cwd || tracked.cwd || '',
+          project: record.project,
+          label: record.label,
+          mode: record.mode,
+          profile: record.profile,
+          key: record.key,
+          sessionId: record.sessionId,
+          rolloutPath: record.rolloutPath,
+        });
+        rebound += 1;
+        continue;
+      }
+
+      // No stamp, or a launch that never reached a rollout: the tab still works and can be
+      // focused, but nothing can say which conversation it holds.
+      log.info(
+        strings.logs.rebindUnavailable(
+          tracked.terminal.name,
+          !key ? 'no launch key' : !record ? 'no journal record' : 'rollout file is gone',
+        ),
+      );
       monitor.track(tracked.terminal, {
         cwd: tracked.cwd ?? '',
         project: tracked.cwd ? path.basename(tracked.cwd) : tracked.terminal.name,
@@ -893,6 +939,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<CodexT
         bindable: false,
       });
     }
+    log.info(strings.logs.rebound(rebound, adopted));
   }
 
   const commands: Array<[string, () => void]> = [

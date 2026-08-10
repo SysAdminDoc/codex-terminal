@@ -53,6 +53,18 @@ export const DEFAULT_TITLE_ITEMS = ['activity', 'project-name', 'app-name'] as c
 /** Stamped into every terminal we launch; read back from `creationOptions.env`. */
 export const OWNERSHIP_ENV_VAR = 'CODEX_TERMINAL_OWNED';
 
+/**
+ * The launch's journal key, stamped into the same environment.
+ *
+ * A window reload restarts the extension host but keeps the shell processes, so the tabs come
+ * back with no idea which conversation each one was. The launch instant that made the original
+ * match unambiguous is gone, and re-deriving it is hopeless — but it never has to be
+ * re-derived: the journal already recorded this key next to the resolved session id and rollout
+ * path, and `creationOptions.env` is the one channel that survives the reload intact. Reading
+ * the key back and looking it up turns an unrecoverable guess into a lookup.
+ */
+export const LAUNCH_KEY_ENV_VAR = 'CODEX_TERMINAL_KEY';
+
 export type TabTitleMode = 'live' | 'static';
 
 const MODE_SUFFIX: Record<TerminalNameContext['mode'], string> = {

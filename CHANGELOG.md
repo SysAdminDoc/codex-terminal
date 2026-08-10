@@ -5,6 +5,17 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+
+- Reloading the window no longer costs you the live view of the sessions that survived it.
+  Reloads are routine — every extension update asks for one — and the tabs came back with the
+  spinner stopped, the context gauge empty and no transcript link, for the rest of that
+  window's life. Each launch now stamps its journal key into the terminal's own environment,
+  which is the one thing a reload preserves, so the new window reads the key back and looks
+  the conversation up instead of trying to re-derive a binding from a launch instant that no
+  longer exists. A terminal with no stamp, or whose rollout has since been archived or
+  deleted, still opens and focuses as before, and the log says which of those it was.
+
 ### Changed
 
 - Crash recovery is now offered without being asked for. The extension previously did not run

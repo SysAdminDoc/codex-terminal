@@ -1,6 +1,6 @@
 import * as vscode from 'vscode';
 
-import { OWNERSHIP_ENV_VAR, isOwnedTerminalName } from './naming';
+import { LAUNCH_KEY_ENV_VAR, OWNERSHIP_ENV_VAR, isOwnedTerminalName } from './naming';
 
 export interface TrackedTerminal {
   terminal: vscode.Terminal;
@@ -89,6 +89,21 @@ function isOwnedTerminal(terminal: vscode.Terminal, baseName: string): boolean {
   return 'name' in creationOptions && typeof creationOptions.name === 'string'
     ? isOwnedTerminalName(creationOptions.name, baseName)
     : false;
+}
+
+/**
+ * The journal key this terminal was launched under, if it carries one.
+ *
+ * Absent for terminals created before the stamp existed and for anything adopted purely on
+ * its name, which is why the caller has to cope with `undefined` rather than assume a match.
+ */
+export function terminalLaunchKey(terminal: vscode.Terminal): string | undefined {
+  const options = terminal.creationOptions;
+  if (!('env' in options)) {
+    return undefined;
+  }
+  const key = options.env?.[LAUNCH_KEY_ENV_VAR];
+  return typeof key === 'string' && key.length > 0 ? key : undefined;
 }
 
 function terminalCwd(terminal: vscode.Terminal): string | undefined {

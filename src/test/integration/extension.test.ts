@@ -23,6 +23,7 @@ interface TestApi {
 const ACTIVATION_BUDGET_MS = 250;
 
 const OWNERSHIP_ENV_VAR = 'CODEX_TERMINAL_OWNED';
+const LAUNCH_KEY_ENV_VAR = 'CODEX_TERMINAL_KEY';
 
 /**
  * Recognise our terminal the way the extension does.
@@ -128,6 +129,30 @@ suite('Codex Terminal hostile settings integration', () => {
         terminal.dispose();
       }
     });
+  });
+
+  test('every launched terminal carries the journal key a reload needs', async () => {
+    // The whole rebind-after-reload path rests on this one assumption: that the environment
+    // handed to `createTerminal` is still readable from `creationOptions` afterwards. Assert
+    // it against a real host rather than trusting it, because if it were ever untrue the
+    // feature would fail silently and look like a binding bug.
+    const first = await openCodexTerminal('codexTerminal.new');
+    const second = await openCodexTerminal('codexTerminal.new');
+    try {
+      const keyOf = (terminal: vscode.Terminal): string | undefined => {
+        const options = terminal.creationOptions as vscode.TerminalOptions;
+        const value = options.env?.[LAUNCH_KEY_ENV_VAR];
+        return typeof value === 'string' ? value : undefined;
+      };
+      const firstKey = keyOf(first);
+      const secondKey = keyOf(second);
+      assert.ok(firstKey, `no ${LAUNCH_KEY_ENV_VAR} on the launched terminal`);
+      assert.ok(secondKey);
+      assert.notEqual(firstKey, secondKey, 'two launches must not share a journal key');
+    } finally {
+      first.dispose();
+      second.dispose();
+    }
   });
 
   test('activation stays inside its startup budget', async () => {

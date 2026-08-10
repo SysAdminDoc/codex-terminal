@@ -152,6 +152,31 @@ export function interruptedSessions(
   return [...byId.values()].sort((left, right) => right.lastActiveAt - left.lastActiveAt);
 }
 
+/**
+ * Find one launch across every journal, by the key stamped into its terminal environment.
+ *
+ * Deliberately ignores `closedAt` and the crashed/clean distinction, both of which are about
+ * *offering* a session back. This answers a different question — "which conversation was this
+ * surviving tab" — and a reload stamps the outgoing journal as cleanly shut down on its way
+ * out, so honouring those flags would reject every record it is meant to find.
+ *
+ * The newest record wins: a session recovered once and then reloaded again appears twice.
+ */
+export function findLaunch(
+  journals: readonly JournalState[],
+  key: string,
+): JournalSession | undefined {
+  let best: JournalSession | undefined;
+  for (const journal of journals) {
+    for (const session of journal.sessions) {
+      if (session.key === key && (!best || session.lastActiveAt > best.lastActiveAt)) {
+        best = session;
+      }
+    }
+  }
+  return best;
+}
+
 /** Journal files that are finished with: cleanly closed, or old enough to be noise. */
 export function isDisposable(
   state: JournalState,

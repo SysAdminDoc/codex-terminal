@@ -85,6 +85,18 @@ export class SessionMonitor implements vscode.Disposable {
     this.journal = emptyJournal(options.windowId, options.workspaceName);
   }
 
+  /**
+   * Reserve the key a launch will be journalled under.
+   *
+   * Handed out before the terminal exists because it has to reach the terminal's own
+   * environment, which can only be set at creation. That stamp is what lets a reloaded
+   * window find this launch again.
+   */
+  nextLaunchKey(): string {
+    keyCounter += 1;
+    return `${this.options.windowId}-${keyCounter}`;
+  }
+
   /** Record a launch and start looking for the rollout Codex is about to create. */
   track(
     terminal: vscode.Terminal,
@@ -97,11 +109,17 @@ export class SessionMonitor implements vscode.Disposable {
       /** Known up front only when resuming a specific session. */
       sessionId?: string;
       bindable?: boolean;
+      /** Reserved by `nextLaunchKey`; generated here when a caller did not need one. */
+      key?: string;
+      /**
+       * Set only when re-adopting after a reload, where the binding is read back from the
+       * journal instead of inferred. Tailing then resumes without any rollout scan.
+       */
+      rolloutPath?: string;
     },
   ): void {
-    keyCounter += 1;
     const entry: Tracked = {
-      key: `${this.options.windowId}-${keyCounter}`,
+      key: details.key ?? this.nextLaunchKey(),
       terminal,
       cwd: details.cwd,
       project: details.project,
@@ -109,10 +127,21 @@ export class SessionMonitor implements vscode.Disposable {
       mode: details.mode,
       profile: details.profile,
       launchedAt: Date.now(),
+      // Only the restore path knows the id up front, because there it arrives from the same
+      // journal record as the rollout path. On a plain resume `details.sessionId` is the id
+      // being resumed *from*, which is not necessarily the id Codex is about to write to —
+      // that one is settled by binding, and guessing it here would mislabel the session.
+      ...(details.rolloutPath ? { sessionId: details.sessionId } : {}),
+      rolloutPath: details.rolloutPath,
       activity: INITIAL_ACTIVITY,
       bindable: details.bindable ?? true,
       closed: false,
     };
+    if (details.rolloutPath) {
+      // The first poll folds the file from the start, which is exactly what recovering the
+      // activity state of a conversation already in progress requires.
+      entry.tailer = new RolloutTailer(details.rolloutPath);
+    }
     this.tracked.push(entry);
     this.persist(entry);
     this.changes.fire();

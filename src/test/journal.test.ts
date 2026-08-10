@@ -8,6 +8,7 @@ import {
   JournalStore,
   STALE_HEARTBEAT_MS,
   emptyJournal,
+  findLaunch,
   interruptedSessions,
   isCrashed,
   isDisposable,
@@ -254,4 +255,35 @@ test('the shutdown stamp is written without awaiting anything', async (t) => {
     [],
     'the temporary file is renamed away, not left behind',
   );
+});
+
+test('a launch is found across journals by the key stamped into its terminal', () => {
+  const other = journal({ windowId: 'other', sessions: [session({ key: 'other-1' })] });
+  const mine = journal({
+    windowId: 'mine',
+    sessions: [session({ key: 'mine-1', sessionId: 'wanted' }), session({ key: 'mine-2' })],
+  });
+
+  assert.equal(findLaunch([other, mine], 'mine-1')?.sessionId, 'wanted');
+  assert.equal(findLaunch([other, mine], 'nobody-9'), undefined);
+});
+
+test('a launch closed by a reload is still findable', () => {
+  // The outgoing window stamps every session closed on its way out. Honouring that here
+  // would reject exactly the records this lookup exists to find.
+  const state = stampShutdown(journal({ sessions: [session({ key: 'w-1' })] }), NOW);
+  assert.equal(findLaunch([state], 'w-1')?.sessionId, session().sessionId);
+});
+
+test('a launch recorded by two windows resolves to the newer record', () => {
+  const older = journal({
+    windowId: 'a',
+    sessions: [session({ key: 'shared', lastActiveAt: NOW - 300_000, completedTurns: 1 })],
+  });
+  const newer = journal({
+    windowId: 'b',
+    sessions: [session({ key: 'shared', lastActiveAt: NOW - 10_000, completedTurns: 7 })],
+  });
+  assert.equal(findLaunch([older, newer], 'shared')?.completedTurns, 7);
+  assert.equal(findLaunch([newer, older], 'shared')?.completedTurns, 7);
 });
