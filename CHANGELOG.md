@@ -24,6 +24,14 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- **A Spanish editor drew Spanish and spoke English.** Every status label, every "last step"
+  description, the tokens/context/plan-window readout and — most importantly — the accessible
+  name of a running-session row were inline English literals in `present.ts`, which imports no
+  `vscode` and so could not reach `vscode.l10n.t`. Thirty-eight strings are now injected at
+  activation, translated in both shipped locales, and asserted by the Spanish integration suite
+  running in a real editor. The English defaults live in the module, so a caller that has not
+  configured it behaves exactly as before.
+
 - **`journal.storeMessages: false` did not remove what was already stored.** It stopped new
   text being written, but the journal update merges over the previous record, so a message
   already on disk survived every later update and stayed for the full seven-day retention — an

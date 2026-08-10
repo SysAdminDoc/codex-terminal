@@ -37,6 +37,21 @@ suite('Spanish display language', () => {
     assert.equal(vscode.l10n.t('{0} sessions', 3), '3 sesiones');
   });
 
+  test('what a screen reader hears is translated, not just what is drawn', async () => {
+    const extension = vscode.extensions.getExtension('sysadmindoc.codex-terminal');
+    assert.ok(extension);
+    await extension.activate();
+
+    // `announceActivity` builds the accessible name of a running-session row out of these,
+    // and they were inline English literals until they were not — a Spanish editor drew
+    // Spanish and spoke English, which no unit test and no screenshot would show.
+    assert.equal(vscode.l10n.t('Working'), 'Trabajando');
+    assert.equal(vscode.l10n.t('no recent output'), 'sin salida reciente');
+    assert.equal(vscode.l10n.t('{0} turns completed', 3), '3 turnos completados');
+    assert.equal(vscode.l10n.t('weekly limit'), 'límite semanal');
+    assert.equal(vscode.l10n.t('resets in {0}', '3d 4h'), 'se reinicia en 3d 4h');
+  });
+
   test('the manifest is translated too, not just the runtime strings', () => {
     const extension = vscode.extensions.getExtension('sysadmindoc.codex-terminal');
     assert.ok(extension);

@@ -9,9 +9,12 @@ import {
   motionAllowed,
   describeRateLimit,
   describeWindowLength,
+  configurePresentation,
   peakContextUsed,
   peakRateLimit,
+  resetPresentation,
   tightestWindow,
+  type PresentationLabels,
   formatDuration,
   formatTokens,
   presentStatus,
@@ -280,4 +283,92 @@ test('what a row says out loud still excludes the numbers that tick', () => {
   const start = Date.parse('2026-08-09T16:00:00.000Z');
   assert.equal(announceActivity(state, start), announceActivity(state, start + 30_000));
   assert.ok(!announceActivity(state, start).includes('%'));
+});
+
+
+/**
+ * The regression this guards: every word in this module used to be an inline English literal,
+ * and `announceActivity` is the **accessible name** of a running-session row — so a Spanish
+ * editor rendered Spanish everywhere and spoke English to a screen reader.
+ */
+test('every word on a session row comes from the configured labels', () => {
+  const marked: PresentationLabels = {
+    working: 'ES:Trabajando',
+    interrupted: 'ES:Interrumpido',
+    stopped: 'ES:Detenido',
+    silent: 'ES:Silencio',
+    idle: 'ES:Inactivo',
+    starting: 'ES:Iniciando',
+    ranCommand: (subject) => `ES:ejecutó ${subject}`,
+    ranSomeCommand: 'ES:ejecutó un comando',
+    editedFiles: (subject) => `ES:editó ${subject}`,
+    editedSomeFiles: 'ES:editó archivos',
+    searched: (subject) => `ES:buscó ${subject}`,
+    searchedTheWeb: 'ES:buscó en la web',
+    said: (subject) => `ES:dijo ${subject}`,
+    replied: 'ES:respondió',
+    youSaid: (subject) => `ES:usted dijo ${subject}`,
+    tookYourPrompt: 'ES:recibió su instrucción',
+    thinkingAbout: (subject) => `ES:pensando ${subject}`,
+    thinking: 'ES:pensando',
+    compacted: 'ES:compactó',
+    noOutputFor: (duration) => `ES:sin salida ${duration}`,
+    tokens: (count) => `ES:${count} tokens`,
+    contextPercent: (percent) => `ES:${percent}% contexto`,
+    windowPercent: (percent, window) => `ES:${percent}% ${window}`,
+    noRecentOutput: 'ES:sin salida reciente',
+    turnsCompleted: (count) => `ES:${count} turnos`,
+    planLimit: 'ES:límite',
+    weeklyLimit: 'ES:límite semanal',
+    fiveHourLimit: 'ES:límite de 5 horas',
+    dayLimit: (days) => `ES:${days} días`,
+    hourLimit: (hours) => `ES:${hours} horas`,
+    minuteLimit: (minutes) => `ES:${minutes} minutos`,
+    percentOfWindow: (percent, window) => `ES:${percent}% del ${window}`,
+    resetting: 'ES:reiniciando',
+    resetsIn: (countdown) => `ES:se reinicia en ${countdown}`,
+    now: 'ES:ahora',
+  };
+  configurePresentation(marked);
+  try {
+    const state = activity({
+      status: 'working',
+      turnStartedAt: 1_000_000,
+      totalTokens: 16_805,
+      contextTokens: 15_667,
+      contextWindow: 258_400,
+      lastItem: { kind: 'command', subject: 'npm test' },
+      completedTurns: 2,
+      lastEventAt: '2026-08-09T16:00:00.000Z',
+      rateLimits: { primary: { usedPercent: 73, windowMinutes: 10_080, resetsAt: 9_000_000 } },
+    });
+    const row = describeActivity(state, 1_045_000);
+    const spoken = announceActivity(state, 1_045_000);
+    const tooltip = describeRateLimit(tightestWindow(state), 1_045_000);
+
+    // Nothing may reach the screen or the screen reader that did not come from the labels.
+    for (const [what, text] of [['row', row], ['spoken', spoken], ['tooltip', tooltip ?? '']]) {
+      for (const word of text.split(' · ').join(', ').split(', ')) {
+        // Durations are the one exception: `45s`, `3d 4h` are numerals with unit letters
+        // that are the same in every locale this ships, and formatDuration owns them.
+        assert.ok(
+          word.startsWith('ES:') || /^[\d\s%.]+[dhms]?$|^[\d\s%.dhms]+$/.test(word),
+          `${what}: ${word}`,
+        );
+      }
+    }
+    assert.ok(spoken.includes('ES:Trabajando'), spoken);
+    assert.ok(spoken.includes('ES:2 turnos'), spoken);
+    assert.ok(row.includes('ES:ejecutó npm test'), row);
+    assert.ok(tooltip?.includes('ES:73% del ES:límite semanal'), tooltip);
+    assert.equal(presentStatus(activity({ status: 'idle' })).label, 'ES:Inactivo');
+  } finally {
+    resetPresentation();
+  }
+});
+
+test('with nothing configured the English defaults are still what ships', () => {
+  resetPresentation();
+  assert.equal(presentStatus(activity({ status: 'idle' })).label, 'Idle');
+  assert.equal(describeWindowLength(10_080), 'weekly limit');
 });

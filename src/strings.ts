@@ -1,6 +1,7 @@
 import * as vscode from 'vscode';
 import type { DoctorReport } from './doctor';
 import type { MigrationEvent } from './migrate';
+import type { PresentationLabels } from './present';
 
 /** All extension-host text goes through vscode.l10n so the default English build stays intact. */
 export const strings = {
@@ -460,3 +461,55 @@ export const strings = {
     failed: (message: string): string => vscode.l10n.t('Settings migration failed: {0}', message),
   },
 };
+
+/**
+ * The words `present.ts` puts on screen.
+ *
+ * Separate from `strings` because `present.ts` imports no `vscode` — that is what lets its
+ * mapping run under plain `node --test` — so the localised set is handed to it at activation
+ * instead of being reached for. `announceActivity` is the accessible name of a running-session
+ * row, so leaving these as inline literals meant a Spanish editor spoke English.
+ */
+export const presentationLabels = (): PresentationLabels => ({
+  working: vscode.l10n.t('Working'),
+  interrupted: vscode.l10n.t('Interrupted'),
+  stopped: vscode.l10n.t('Stopped'),
+  silent: vscode.l10n.t('Silent'),
+  idle: vscode.l10n.t('Idle'),
+  starting: vscode.l10n.t('Starting…'),
+
+  ranCommand: (subject) => vscode.l10n.t('ran {0}', subject),
+  ranSomeCommand: vscode.l10n.t('ran a command'),
+  editedFiles: (subject) => vscode.l10n.t('edited {0}', subject),
+  editedSomeFiles: vscode.l10n.t('edited files'),
+  searched: (subject) => vscode.l10n.t('searched {0}', subject),
+  searchedTheWeb: vscode.l10n.t('searched the web'),
+  said: (subject) => vscode.l10n.t('said {0}', subject),
+  replied: vscode.l10n.t('replied'),
+  youSaid: (subject) => vscode.l10n.t('you said {0}', subject),
+  tookYourPrompt: vscode.l10n.t('took your prompt'),
+  thinkingAbout: (subject) => vscode.l10n.t('thinking: {0}', subject),
+  thinking: vscode.l10n.t('thinking'),
+  compacted: vscode.l10n.t('compacted the context'),
+
+  noOutputFor: (duration) => vscode.l10n.t('no output for {0}', duration),
+  tokens: (count) => vscode.l10n.t('{0} tokens', count),
+  contextPercent: (percent) => vscode.l10n.t('{0}% context', percent),
+  windowPercent: (percent, window) => vscode.l10n.t('{0}% {1}', percent, window),
+
+  noRecentOutput: vscode.l10n.t('no recent output'),
+  turnsCompleted: (count) =>
+    count === 1 ? vscode.l10n.t('1 turn completed') : vscode.l10n.t('{0} turns completed', count),
+
+  planLimit: vscode.l10n.t('plan limit'),
+  weeklyLimit: vscode.l10n.t('weekly limit'),
+  fiveHourLimit: vscode.l10n.t('5-hour limit'),
+  dayLimit: (days) => vscode.l10n.t('{0}-day limit', days),
+  hourLimit: (hours) => vscode.l10n.t('{0}-hour limit', hours),
+  minuteLimit: (minutes) => vscode.l10n.t('{0}-minute limit', minutes),
+
+  percentOfWindow: (percent, window) => vscode.l10n.t('{0}% of the {1}', percent, window),
+  resetting: vscode.l10n.t('resetting'),
+  resetsIn: (countdown) => vscode.l10n.t('resets in {0}', countdown),
+  now: vscode.l10n.t('now'),
+});

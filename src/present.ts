@@ -24,6 +24,116 @@ import { estimateCost, formatCost, type RateTable } from './cost';
  */
 export const SPINNER_ICON = 'loading~spin';
 
+/**
+ * Every word this module puts on screen, injected rather than imported.
+ *
+ * `present.ts` stays free of `vscode`, which is the whole reason its mapping is unit tested —
+ * so it cannot reach `vscode.l10n.t` itself. These labels used to be English string literals
+ * inline, and `announceActivity` is the **accessible name** of a running-session row, so a
+ * Spanish editor read English aloud while showing Spanish everywhere else.
+ *
+ * The defaults below are the English set, so tests and any caller that has not configured the
+ * module behave exactly as before.
+ */
+export interface PresentationLabels {
+  working: string;
+  interrupted: string;
+  stopped: string;
+  silent: string;
+  idle: string;
+  starting: string;
+
+  ranCommand: (subject: string) => string;
+  ranSomeCommand: string;
+  editedFiles: (subject: string) => string;
+  editedSomeFiles: string;
+  searched: (subject: string) => string;
+  searchedTheWeb: string;
+  said: (subject: string) => string;
+  replied: string;
+  youSaid: (subject: string) => string;
+  tookYourPrompt: string;
+  thinkingAbout: (subject: string) => string;
+  thinking: string;
+  compacted: string;
+
+  noOutputFor: (duration: string) => string;
+  tokens: (count: string) => string;
+  contextPercent: (percent: number) => string;
+  windowPercent: (percent: number, window: string) => string;
+
+  noRecentOutput: string;
+  turnsCompleted: (count: number) => string;
+
+  planLimit: string;
+  weeklyLimit: string;
+  fiveHourLimit: string;
+  dayLimit: (days: number) => string;
+  hourLimit: (hours: number) => string;
+  minuteLimit: (minutes: number) => string;
+
+  percentOfWindow: (percent: number, window: string) => string;
+  resetting: string;
+  resetsIn: (countdown: string) => string;
+  now: string;
+}
+
+const ENGLISH: PresentationLabels = {
+  working: 'Working',
+  interrupted: 'Interrupted',
+  stopped: 'Stopped',
+  silent: 'Silent',
+  idle: 'Idle',
+  starting: 'Starting…',
+
+  ranCommand: (subject) => `ran ${subject}`,
+  ranSomeCommand: 'ran a command',
+  editedFiles: (subject) => `edited ${subject}`,
+  editedSomeFiles: 'edited files',
+  searched: (subject) => `searched ${subject}`,
+  searchedTheWeb: 'searched the web',
+  said: (subject) => `said ${subject}`,
+  replied: 'replied',
+  youSaid: (subject) => `you said ${subject}`,
+  tookYourPrompt: 'took your prompt',
+  thinkingAbout: (subject) => `thinking: ${subject}`,
+  thinking: 'thinking',
+  compacted: 'compacted the context',
+
+  noOutputFor: (duration) => `no output for ${duration}`,
+  tokens: (count) => `${count} tokens`,
+  contextPercent: (percent) => `${percent}% context`,
+  windowPercent: (percent, window) => `${percent}% ${window}`,
+
+  noRecentOutput: 'no recent output',
+  turnsCompleted: (count) => (count === 1 ? '1 turn completed' : `${count} turns completed`),
+
+  planLimit: 'plan limit',
+  weeklyLimit: 'weekly limit',
+  fiveHourLimit: '5-hour limit',
+  dayLimit: (days) => `${days}-day limit`,
+  hourLimit: (hours) => `${hours}-hour limit`,
+  minuteLimit: (minutes) => `${minutes}-minute limit`,
+
+  percentOfWindow: (percent, window) => `${percent}% of the ${window}`,
+  resetting: 'resetting',
+  resetsIn: (countdown) => `resets in ${countdown}`,
+  now: 'now',
+};
+
+let labels: PresentationLabels = ENGLISH;
+
+/** Called once during activation with the localised set. */
+export function configurePresentation(next: PresentationLabels): void {
+  labels = next;
+}
+
+/** Restores the English defaults. For tests, so one case cannot leak into the next. */
+export function resetPresentation(): void {
+  labels = ENGLISH;
+}
+
+
 /** Silence beyond this is worth reporting; below it, a quiet moment is just a quiet moment. */
 export const DEFAULT_STALL_SECONDS = 45;
 
@@ -58,22 +168,22 @@ export function presentStatus(
   switch (activity.status) {
     case 'working':
       // `sync` reads as in-progress without moving; the label still says Working.
-      return { icon: animate ? SPINNER_ICON : 'sync', color: 'charts.blue', label: 'Working' };
+      return { icon: animate ? SPINNER_ICON : 'sync', color: 'charts.blue', label: labels.working };
     case 'aborted':
       return {
         icon: 'circle-slash',
         color: 'charts.yellow',
-        label: activity.abortReason === 'interrupted' ? 'Interrupted' : 'Stopped',
+        label: activity.abortReason === 'interrupted' ? labels.interrupted : labels.stopped,
       };
     case 'silent':
       // `question` is the honest glyph: the session is definitely not working, and what it
       // is instead — waiting on an approval, wedged, or quietly finished — is unknowable
       // from the session file.
-      return { icon: 'question', color: 'charts.yellow', label: 'Silent' };
+      return { icon: 'question', color: 'charts.yellow', label: labels.silent };
     case 'idle':
-      return { icon: 'check', color: 'charts.green', label: 'Idle' };
+      return { icon: 'check', color: 'charts.green', label: labels.idle };
     default:
-      return { icon: 'terminal', label: 'Starting…' };
+      return { icon: 'terminal', label: labels.starting };
   }
 }
 
@@ -96,7 +206,7 @@ export function formatDuration(seconds: number): string {
  */
 export function formatCountdown(seconds: number): string {
   if (seconds <= 0) {
-    return 'now';
+    return labels.now;
   }
   const days = Math.floor(seconds / 86_400);
   const hours = Math.floor((seconds % 86_400) / 3_600);
@@ -115,18 +225,18 @@ export function formatCountdown(seconds: number): string {
  */
 export function describeWindowLength(minutes: number | undefined): string {
   if (minutes === undefined) {
-    return 'plan limit';
+    return labels.planLimit;
   }
   if (minutes === 10_080) {
-    return 'weekly limit';
+    return labels.weeklyLimit;
   }
   if (minutes === 300) {
-    return '5-hour limit';
+    return labels.fiveHourLimit;
   }
   if (minutes % 1440 === 0) {
-    return `${minutes / 1440}-day limit`;
+    return labels.dayLimit(minutes / 1440);
   }
-  return minutes % 60 === 0 ? `${minutes / 60}-hour limit` : `${minutes}-minute limit`;
+  return minutes % 60 === 0 ? labels.hourLimit(minutes / 60) : labels.minuteLimit(minutes);
 }
 
 /**
@@ -164,11 +274,14 @@ export function describeRateLimit(
     return undefined;
   }
   const parts = [
-    `${Math.round(window.usedPercent)}% of the ${describeWindowLength(window.windowMinutes)}`,
+    labels.percentOfWindow(
+      Math.round(window.usedPercent),
+      describeWindowLength(window.windowMinutes),
+    ),
   ];
   if (window.resetsAt !== undefined) {
     const seconds = Math.round((window.resetsAt - now) / 1000);
-    parts.push(seconds <= 0 ? 'resetting' : `resets in ${formatCountdown(seconds)}`);
+    parts.push(seconds <= 0 ? labels.resetting : labels.resetsIn(formatCountdown(seconds)));
   }
   return parts.join(' · ');
 }
@@ -210,19 +323,19 @@ export function describeItem(item: ActivityItem | undefined): string | undefined
   }
   switch (item.kind) {
     case 'command':
-      return item.subject ? `ran ${item.subject}` : 'ran a command';
+      return item.subject ? labels.ranCommand(item.subject) : labels.ranSomeCommand;
     case 'fileChange':
-      return item.subject ? `edited ${item.subject}` : 'edited files';
+      return item.subject ? labels.editedFiles(item.subject) : labels.editedSomeFiles;
     case 'search':
-      return item.subject ? `searched ${item.subject}` : 'searched the web';
+      return item.subject ? labels.searched(item.subject) : labels.searchedTheWeb;
     case 'message':
-      return item.subject ? `said ${item.subject}` : 'replied';
+      return item.subject ? labels.said(item.subject) : labels.replied;
     case 'prompt':
-      return item.subject ? `you said ${item.subject}` : 'took your prompt';
+      return item.subject ? labels.youSaid(item.subject) : labels.tookYourPrompt;
     case 'reasoning':
-      return item.subject ? `thinking: ${item.subject}` : 'thinking';
+      return item.subject ? labels.thinkingAbout(item.subject) : labels.thinking;
     case 'compaction':
-      return 'compacted the context';
+      return labels.compacted;
     default:
       return undefined;
   }
@@ -259,19 +372,24 @@ export function describeActivity(
   // state we would be guessing at.
   const silent = silentFor(activity, now);
   if (silent !== undefined && silent >= stallSeconds) {
-    parts.push(`no output for ${formatDuration(silent)}`);
+    parts.push(labels.noOutputFor(formatDuration(silent)));
   }
   if (activity.totalTokens) {
-    parts.push(`${formatTokens(activity.totalTokens)} tokens`);
+    parts.push(labels.tokens(formatTokens(activity.totalTokens)));
   }
   const used = contextUsed(activity);
   if (used !== undefined) {
-    parts.push(`${Math.round(used * 100)}% context`);
+    parts.push(labels.contextPercent(Math.round(used * 100)));
   }
   // On a subscription this, not the cost estimate, is what actually stops the next turn.
   const window = tightestWindow(activity);
   if (window) {
-    parts.push(`${Math.round(window.usedPercent)}% ${describeWindowLength(window.windowMinutes)}`);
+    parts.push(
+      labels.windowPercent(
+        Math.round(window.usedPercent),
+        describeWindowLength(window.windowMinutes),
+      ),
+    );
   }
   // Only when the operator has priced the model. An unpriced session says so in the tooltip,
   // where there is room to name the model, rather than putting a hole in the row.
@@ -304,12 +422,10 @@ export function announceActivity(
   const silent = silentFor(activity, now);
   // The threshold crossing is the event; the duration is the thing that would repeat.
   if (silent !== undefined && silent >= stallSeconds) {
-    parts.push('no recent output');
+    parts.push(labels.noRecentOutput);
   }
   if (activity.completedTurns > 0) {
-    parts.push(
-      activity.completedTurns === 1 ? '1 turn completed' : `${activity.completedTurns} turns completed`,
-    );
+    parts.push(labels.turnsCompleted(activity.completedTurns));
   }
   return parts.join(', ');
 }

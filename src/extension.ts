@@ -36,7 +36,7 @@ import {
 } from './launch';
 import { migrateSettings, type MigrationTarget } from './migrate';
 import { SessionMonitor } from './monitor';
-import { DEFAULT_STALL_SECONDS } from './present';
+import { DEFAULT_STALL_SECONDS, configurePresentation } from './present';
 import {
   adoptSurvivingTerminals,
   dismissRecovery,
@@ -55,7 +55,7 @@ import {
 import { applyWorkbenchPreferences, revertWorkbenchPreferences } from './settingsSync';
 import { codexHomeDirectory, codexSessionsDirectory } from './sessions';
 import { createStatusBarItem } from './statusBar';
-import { strings } from './strings';
+import { presentationLabels, strings } from './strings';
 import { TerminalRegistry } from './terminals';
 import { TRANSCRIPT_SCHEME, TranscriptContentProvider } from './transcriptDocument';
 import { AGENT_CLI_TITLE_SETTING, CONFIRM_ON_KILL_SETTING } from './workbench';
@@ -351,6 +351,10 @@ export async function activate(context: vscode.ExtensionContext): Promise<CodexT
 
   // Worth logging: with `workbench.statusBar.visible: false` the status bar item is created
   // successfully and is simply never rendered, with no error anywhere to explain it.
+  // Before anything renders: these are the words every session row, tooltip and
+  // screen-reader announcement is built from.
+  configurePresentation(presentationLabels());
+
   const statusBarVisible = vscode.workspace
     .getConfiguration('workbench')
     .get<boolean>('statusBar.visible', true);
