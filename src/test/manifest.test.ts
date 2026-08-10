@@ -167,3 +167,19 @@ test('categories describe the extension for the marketplace', () => {
     assert.ok(valid.has(category), `${category} is not a valid marketplace category`);
   }
 });
+
+test('every %placeholder% in the manifest has a translation', () => {
+  // `npm run check` compiles, lints and tests a manifest with a missing key perfectly happily.
+  // Only `vsce package` refuses it, which is far too late — and a shipped placeholder renders
+  // as the literal `%command.x.title%` in the operator's Command Palette.
+  const root = path.resolve(__dirname, '../..');
+  const manifest = readFileSync(path.join(root, 'package.json'), 'utf8');
+  const translations = JSON.parse(
+    readFileSync(path.join(root, 'package.nls.json'), 'utf8'),
+  ) as Record<string, string>;
+
+  const used = [...manifest.matchAll(/"%([^%"]+)%"/g)].map((match) => match[1]);
+  assert.ok(used.length > 0, 'the manifest must use translation placeholders');
+  const missing = [...new Set(used)].filter((key) => !(key in translations));
+  assert.deepEqual(missing, [], `used in package.json but absent from package.nls.json: ${missing.join(', ')}`);
+});
