@@ -507,29 +507,48 @@ async function runDoctor(): Promise<void> {
   }
 }
 
-function sendFileReference(): void {
+/** The `@path#L10-L20` for what is selected right now, with the terminal to send it to. */
+function resolveReferenceTarget():
+  | { reference: string; terminal: vscode.Terminal }
+  | undefined {
   const editor = vscode.window.activeTextEditor;
   if (!editor) {
     void vscode.window.showWarningMessage(strings.warnings.noEditor());
-    return;
+    return undefined;
   }
   const terminal = liveOwnedTerminal() ?? vscode.window.activeTerminal;
   if (!terminal) {
     void vscode.window.showWarningMessage(strings.warnings.noTerminal());
-    return;
+    return undefined;
   }
 
   const uri = editor.document.uri;
   const folder = vscode.workspace.getWorkspaceFolder(uri);
   const relativePath = folder ? path.relative(folder.uri.fsPath, uri.fsPath) : uri.fsPath;
   const selection = editor.selection;
-  const reference = buildFileReference({
-    relativePath,
-    selection: selection.isEmpty
-      ? undefined
-      : { startLine: selection.start.line, endLine: selection.end.line },
-  });
+  return {
+    terminal,
+    reference: buildFileReference({
+      relativePath,
+      selection: selection.isEmpty
+        ? undefined
+        : { startLine: selection.start.line, endLine: selection.end.line },
+    }),
+  };
+}
 
+/**
+ * Put the reference on the prompt and stop, so the question can be typed after it.
+ *
+ * Kept exactly as it was. It is the right command when the question is easier to type in the
+ * terminal — with Codex's own completion and history — than in a modal input box.
+ */
+function sendFileReference(): void {
+  const target = resolveReferenceTarget();
+  if (!target) {
+    return;
+  }
+  const { reference, terminal } = target;
   terminal.show(false);
   // `false` leaves the reference on the prompt so a question can be typed after it.
   terminal.sendText(`${reference} `, false);
@@ -571,6 +590,35 @@ async function focusCodex(): Promise<void> {
     },
   );
   picked?.session.terminal.show(false);
+}
+
+/**
+ * Reference plus question, submitted in one step.
+ *
+ * The reference-only command deliberately stops at the prompt, which means finding the right
+ * terminal and typing there. This is the path for when the question is already in your head
+ * while you are looking at the code: ask it here, and the whole line is submitted.
+ */
+async function askAboutSelection(): Promise<void> {
+  const target = resolveReferenceTarget();
+  if (!target) {
+    return;
+  }
+  const question = await vscode.window.showInputBox({
+    prompt: strings.reference.askPrompt(target.reference),
+    placeHolder: strings.reference.askPlaceholder(),
+    ignoreFocusOut: true,
+  });
+  // Cancelled, or nothing typed: submitting a bare reference would start a turn asking
+  // Codex nothing at all.
+  if (!question?.trim()) {
+    return;
+  }
+
+  const line = `${target.reference} ${question.trim()}`;
+  target.terminal.show(false);
+  target.terminal.sendText(line, true);
+  log.info(strings.logs.sentReference(line));
 }
 
 function focusSession(terminal: vscode.Terminal | undefined): void {
@@ -1082,6 +1130,12 @@ export async function activate(context: vscode.ExtensionContext): Promise<CodexT
       },
     ],
     ['codexTerminal.sendFileReference', sendFileReference],
+    [
+      'codexTerminal.askAboutSelection',
+      () => {
+        void askAboutSelection();
+      },
+    ],
     [
       'codexTerminal.doctor',
       () => {

@@ -111,6 +111,11 @@
         "category": "%category.codexTerminal%"
       },
       {
+        "command": "codexTerminal.askAboutSelection",
+        "title": "%command.askAboutSelection.title%",
+        "category": "%category.codexTerminal%"
+      },
+      {
         "command": "codexTerminal.doctor",
         "title": "%command.doctor.title%",
         "category": "%category.codexTerminal%"
@@ -238,6 +243,11 @@
         {
           "command": "codexTerminal.sendFileReference",
           "group": "codexTerminal@1",
+          "when": "resourceScheme == file"
+        },
+        {
+          "command": "codexTerminal.askAboutSelection",
+          "group": "codexTerminal@2",
           "when": "resourceScheme == file"
         }
       ],

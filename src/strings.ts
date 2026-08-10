@@ -182,6 +182,11 @@ export const strings = {
       vscode.l10n.t('Could not update {0}: {1}', key, message),
     unset: (): string => vscode.l10n.t('unset'),
   },
+  reference: {
+    askPrompt: (reference: string): string =>
+      vscode.l10n.t('Ask Codex about {0}', reference),
+    askPlaceholder: (): string => vscode.l10n.t('What should Codex do with this?'),
+  },
   warnings: {
     noEditor: (): string => vscode.l10n.t('Codex Terminal: no active editor to reference.'),
     noTerminal: (): string =>

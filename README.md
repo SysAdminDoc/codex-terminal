@@ -83,9 +83,12 @@ The real Codex TUI, started in the workspace folder:
   reached a rollout are not offered, because there is nothing to return to.
 - **Command Palette** — `Codex Terminal: New Session`, `Resume Last Session`,
   `Resume Session (picker)`, `Fork Last Session`, `Focus Codex Terminal`,
-  `New Session with Profile…`, `Send File Reference to Codex`, `Doctor`, `Show Log`.
+  `New Session with Profile…`, `Send File Reference to Codex`, `Ask Codex About Selection…`,
+  `Revert Workbench Settings`, `Doctor`, `Show Log`.
 - **Right-click in the editor** — *Send File Reference to Codex* puts `@src/file.ts#L10-L20`
   on the Codex prompt without submitting it, so you can type the question after it.
+  *Ask Codex About Selection…* takes the question in an input box and submits reference and
+  question together, for when you already know what you want to ask.
 - **New Session with Profile…** — lists `~/.codex/<name>.config.toml` profiles, plus a free-text
   entry for profiles that are not stored locally. The selected profile is passed as
   `--profile <name>` and appended to the terminal tab name.
