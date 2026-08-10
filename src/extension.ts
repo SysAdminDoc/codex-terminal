@@ -68,13 +68,19 @@ export interface CodexTerminalExtensionApi {
 }
 
 /**
- * `titleTemplate` is not in the stable `TerminalOptions` typings, but the extension host
- * forwards it verbatim to the terminal service, which is what lets a single tab use a
- * live title without changing `terminal.integrated.tabs.title` for every other terminal
- * in the window. An older host simply ignores the field, which is why the `${sequence}`
- * tab description is still applied as the fallback.
+ * `TerminalOptions.titleTemplate` is deliberately NOT used.
+ *
+ * It is not in the stable typings, and the host discards it unless the extension has the
+ * `terminalTitle` **proposed** API — which cannot ship to a marketplace. Passing it anyway
+ * bought nothing and logged
+ * "`titleTemplate` was provided to window.createTerminal but is ignored because the
+ * `terminalTitle` proposed API is not enabled" on every single launch (observed in the
+ * integration host, 2026-08-10).
+ *
+ * What actually makes the tab live is leaving `name` unset — that is the branch on which
+ * VS Code subscribes to the process title at all — combined with `${sequence}` in
+ * `terminal.integrated.tabs.description`, which `applyWorkbenchPreferences` ensures.
  */
-type TerminalOptionsWithTitle = vscode.TerminalOptions & { titleTemplate?: string };
 
 function config(): vscode.WorkspaceConfiguration {
   return vscode.workspace.getConfiguration('codexTerminal');
@@ -197,7 +203,7 @@ async function terminalOptions(
   request: LaunchOptions,
   withLocation: boolean,
 ): Promise<{
-  options: TerminalOptionsWithTitle;
+  options: vscode.TerminalOptions;
   plan: ReturnType<typeof buildLaunchPlan>;
   cwd?: string;
   project: string;
@@ -214,7 +220,7 @@ async function terminalOptions(
   const nameContext = { name: baseName, cwd, workspaceFolder, mode, profile, sessionId };
   const label = renderTerminalName(DEFAULT_TERMINAL_NAME_TEMPLATE, nameContext);
 
-  const options: TerminalOptionsWithTitle = {
+  const options: vscode.TerminalOptions = {
     cwd,
     env: { ...cfg.get<Record<string, string>>('env', {}), [OWNERSHIP_ENV_VAR]: '1' },
     iconPath: new vscode.ThemeIcon('sparkle'),
@@ -222,13 +228,10 @@ async function terminalOptions(
     isTransient: false,
   };
 
+  // Only `static` names the terminal. Naming it is what stops the workbench subscribing to
+  // the process title, so `live` says nothing at all and lets Codex own the tab text.
   if (tabTitleMode() === 'static') {
     options.name = label;
-  } else {
-    // Naming a terminal stops the workbench from ever subscribing to the process title,
-    // which is exactly what Codex uses to animate. The template keeps the live title
-    // scoped to this tab instead of every terminal in the window.
-    options.titleTemplate = '${sequence}';
   }
 
   if (withLocation) {
