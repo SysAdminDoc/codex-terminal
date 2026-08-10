@@ -246,6 +246,46 @@ export async function discoverSessions(
     .slice(0, limit);
 }
 
+export interface StoreUsage {
+  fileCount: number;
+  totalBytes: number;
+}
+
+/**
+ * Size of the rollout store.
+ *
+ * Worth surfacing because it grows without bound and nothing in the editor says so: this
+ * machine reached 2.01 GB across 121 files in two days, and Codex's own doctor warns about
+ * it. `stat` only — no file is opened.
+ */
+export async function measureStore(homeDirectory?: string): Promise<StoreUsage> {
+  const files = await sessionFiles(codexSessionsDirectory(homeDirectory));
+  const sizes = await mapWithConcurrency(files, READ_CONCURRENCY, async (file) => {
+    try {
+      return (await stat(file.filePath)).size;
+    } catch {
+      return 0;
+    }
+  });
+  return {
+    fileCount: files.length,
+    totalBytes: sizes.reduce((total, size) => total + size, 0),
+  };
+}
+
+export function formatBytes(bytes: number): string {
+  if (bytes < 1024) {
+    return `${bytes} B`;
+  }
+  if (bytes < 1024 * 1024) {
+    return `${Math.round(bytes / 1024)} KB`;
+  }
+  if (bytes < 1024 * 1024 * 1024) {
+    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  }
+  return `${(bytes / (1024 * 1024 * 1024)).toFixed(2)} GB`;
+}
+
 export interface SessionGroup {
   project: string;
   cwd: string;

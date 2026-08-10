@@ -181,6 +181,18 @@
         "title": "%command.dismissRecovery.title%",
         "category": "%category.codexTerminal%",
         "icon": "$(close)"
+      },
+      {
+        "command": "codexTerminal.archiveSession",
+        "title": "%command.archiveSession.title%",
+        "category": "%category.codexTerminal%",
+        "icon": "$(archive)"
+      },
+      {
+        "command": "codexTerminal.deleteSession",
+        "title": "%command.deleteSession.title%",
+        "category": "%category.codexTerminal%",
+        "icon": "$(trash)"
       }
     ],
     "menus": {
@@ -260,6 +272,16 @@
           "command": "codexTerminal.dismissRecovery",
           "when": "view == codexTerminal.history && viewItem == codexTerminal.recoveryGroup",
           "group": "inline@2"
+        },
+        {
+          "command": "codexTerminal.archiveSession",
+          "when": "view == codexTerminal.history && viewItem == codexTerminal.historySession",
+          "group": "codexTerminal@3"
+        },
+        {
+          "command": "codexTerminal.deleteSession",
+          "when": "view == codexTerminal.history && viewItem == codexTerminal.historySession",
+          "group": "codexTerminal@4"
         }
       ]
     },

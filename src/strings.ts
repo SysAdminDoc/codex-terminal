@@ -126,6 +126,21 @@ export const strings = {
       vscode.l10n.t('Transcript was truncated; open the rollout file for the remainder.'),
     exportFailed: (message: string): string =>
       vscode.l10n.t('Could not export the transcript: {0}', message),
+    storeUsage: (files: number, size: string): string =>
+      vscode.l10n.t('{0} sessions · {1} on disk', files, size),
+    storeTooltip: (size: string): string =>
+      vscode.l10n.t(
+        'Codex keeps every conversation on disk. This store is {0}. Archive or delete a session from its context menu to reclaim space.',
+        size,
+      ),
+    confirmArchive: (id: string): string =>
+      vscode.l10n.t('Archive Codex session {0}? It stops appearing in the picker and in this view.', id),
+    confirmDelete: (id: string): string =>
+      vscode.l10n.t('Permanently delete Codex session {0} and its transcript? This cannot be undone.', id),
+    archiveAction: (): string => vscode.l10n.t('Archive'),
+    deleteAction: (): string => vscode.l10n.t('Delete'),
+    lifecycleRan: (action: string, id: string, output: string): string =>
+      vscode.l10n.t('codex {0} {1}: {2}', action, id, output),
   },
   workbench: {
     applied: (key: string, from: string, to: string): string =>

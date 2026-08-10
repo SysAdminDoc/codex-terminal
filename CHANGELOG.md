@@ -7,6 +7,10 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- The History view shows how much disk Codex's session store is using, and sessions can be
+  archived or deleted from their context menu. Both delegate to `codex archive` / `codex
+  delete` rather than unlinking files, because Codex keeps a state database beside the
+  rollouts and removing a file behind its back leaves the two disagreeing.
 - The animated indicators honour `workbench.reduceMotion`. With reduced motion the spinner
   becomes a still icon and the wording is unchanged, so no information is lost — only the
   continuous motion a reduced-motion preference exists to suppress.

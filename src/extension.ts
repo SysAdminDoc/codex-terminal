@@ -14,7 +14,7 @@ import {
 import { buildFileReference } from './reference';
 import { ActionsViewProvider } from './actionsView';
 import { TerminalRegistry } from './terminals';
-import { collectDoctorReport } from './doctor';
+import { collectDoctorReport, runCommand } from './doctor';
 import { codexProfilesDirectory, profileNamesFromFiles } from './profiles';
 import { NotifyBridge } from './notify';
 import { SessionMonitor } from './monitor';
@@ -637,6 +637,39 @@ async function openRawHistorySession(node: unknown): Promise<void> {
   await vscode.window.showTextDocument(document, { preview: false });
 }
 
+/**
+ * Hand session lifecycle to Codex rather than unlinking rollout files.
+ *
+ * Codex keeps a state database alongside the rollouts, so deleting a file behind its back
+ * leaves the two disagreeing — `codex doctor` reports exactly that as a parity check.
+ * `codex archive` and `codex delete` take a session id and keep both in step.
+ */
+async function runSessionLifecycle(node: unknown, action: 'archive' | 'delete'): Promise<void> {
+  if (!isSessionNode(node)) {
+    return;
+  }
+  const { id } = node.session;
+  const confirm =
+    action === 'delete' ? strings.history.confirmDelete(id) : strings.history.confirmArchive(id);
+  const proceed = await vscode.window.showWarningMessage(
+    confirm,
+    { modal: true },
+    action === 'delete' ? strings.history.deleteAction() : strings.history.archiveAction(),
+  );
+  if (!proceed) {
+    return;
+  }
+
+  const command = config().get<string>('command', 'codex');
+  const resolved = preflightCodexCommand(command);
+  if (!resolved) {
+    return;
+  }
+  const output = await runCommand(resolved, [action, id], process.platform);
+  log.info(strings.history.lifecycleRan(action, id, output));
+  historyViewProvider?.refresh(true);
+}
+
 async function searchHistory(): Promise<void> {
   if (!historyViewProvider) {
     return;
@@ -897,6 +930,12 @@ export async function activate(context: vscode.ExtensionContext): Promise<CodexT
     vscode.commands.registerCommand('codexTerminal.copyHistorySessionId', copyHistorySessionId),
     vscode.commands.registerCommand('codexTerminal.openRawHistorySession', openRawHistorySession),
     vscode.commands.registerCommand('codexTerminal.restoreSession', restoreSession),
+    vscode.commands.registerCommand('codexTerminal.archiveSession', (node: unknown) => {
+      void runSessionLifecycle(node, 'archive');
+    }),
+    vscode.commands.registerCommand('codexTerminal.deleteSession', (node: unknown) => {
+      void runSessionLifecycle(node, 'delete');
+    }),
   );
 
   const provideTerminalProfile = async (): Promise<vscode.TerminalProfile | undefined> => {

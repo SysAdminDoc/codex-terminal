@@ -7,7 +7,9 @@ import { test } from 'node:test';
 import {
   codexHomeDirectory,
   discoverSessions,
+  formatBytes,
   groupSessionsByProject,
+  measureStore,
   selectNewestRollouts,
 } from '../sessions';
 
@@ -173,4 +175,35 @@ test('a rollout with an unrecognised filename is kept but sorted last', () => {
   // It must still be reachable when the cap allows it, or a differently-named rollout
   // would become permanently invisible.
   assert.equal(selectNewestRollouts(files, 1).length, 1);
+});
+
+test('store usage counts every rollout without opening any of them', async () => {
+  const home = await mkdtemp(path.join(os.tmpdir(), 'codex-terminal-usage-'));
+  try {
+    const directory = path.join(home, 'sessions', '2026', '08', '09');
+    await mkdir(directory, { recursive: true });
+    await writeFile(path.join(directory, 'a.jsonl'), 'x'.repeat(2048));
+    await writeFile(path.join(directory, 'b.jsonl'), 'y'.repeat(1024));
+    // Not a rollout, so it must not be counted against Codex's store.
+    await writeFile(path.join(directory, 'notes.txt'), 'z'.repeat(9999));
+
+    const usage = await measureStore(home);
+    assert.equal(usage.fileCount, 2);
+    assert.equal(usage.totalBytes, 3072);
+  } finally {
+    await rm(home, { recursive: true, force: true });
+  }
+});
+
+test('an absent store reports zero rather than failing', async () => {
+  const usage = await measureStore(path.join(os.tmpdir(), 'codex-terminal-missing-store'));
+  assert.deepEqual(usage, { fileCount: 0, totalBytes: 0 });
+});
+
+test('sizes stay readable from bytes to gigabytes', () => {
+  assert.equal(formatBytes(512), '512 B');
+  assert.equal(formatBytes(2048), '2 KB');
+  assert.equal(formatBytes(5 * 1024 * 1024), '5.0 MB');
+  // The measured local store was 2.01 GB; a store this size must not render as "2058 MB".
+  assert.equal(formatBytes(2.01 * 1024 * 1024 * 1024), '2.01 GB');
 });

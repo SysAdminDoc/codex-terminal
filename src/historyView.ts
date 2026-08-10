@@ -3,6 +3,8 @@ import * as vscode from 'vscode';
 import {
   codexHomeDirectory,
   discoverSessions,
+  formatBytes,
+  measureStore,
   groupSessionsByProject,
   sessionProject,
   clearSessionCache,
@@ -59,11 +61,19 @@ interface MessageNode {
   text: string;
 }
 
+/** Disk usage of Codex's session store, which grows without bound and is otherwise unseen. */
+interface UsageNode {
+  kind: 'usage';
+  fileCount: number;
+  totalBytes: number;
+}
+
 export type HistoryNode =
   | RecoveryGroupNode
   | RecoveryNode
   | ProjectNode
   | SessionNode
+  | UsageNode
   | MessageNode;
 
 export function isSessionNode(node: unknown): node is SessionNode {
@@ -194,6 +204,17 @@ class SessionItem extends vscode.TreeItem {
   }
 }
 
+class UsageItem extends vscode.TreeItem {
+  constructor(node: UsageNode) {
+    super(strings.history.storeUsage(node.fileCount, formatBytes(node.totalBytes)));
+    this.iconPath = new vscode.ThemeIcon('database');
+    this.tooltip = new vscode.MarkdownString(
+      strings.history.storeTooltip(formatBytes(node.totalBytes)),
+    );
+    this.contextValue = 'codexTerminal.storeUsage';
+  }
+}
+
 class MessageItem extends vscode.TreeItem {
   constructor(node: MessageNode) {
     super(node.text, vscode.TreeItemCollapsibleState.None);
@@ -209,6 +230,7 @@ export class HistoryViewProvider
   private loaded = false;
   private filter = '';
   private recoverable: JournalSession[] = [];
+  private usage: { fileCount: number; totalBytes: number } | undefined;
   private pending: NodeJS.Timeout | undefined;
   private pendingHard = false;
 
@@ -289,6 +311,8 @@ export class HistoryViewProvider
         return new ProjectItem(node.group);
       case 'session':
         return new SessionItem(node);
+      case 'usage':
+        return new UsageItem(node);
       default:
         return new MessageItem(node);
     }
@@ -314,6 +338,9 @@ export class HistoryViewProvider
         maxResults: this.limit(),
       });
       this.groups = groupSessionsByProject(sessions);
+      // stat-only, and only on a real reload, so it never rides the debounced refresh path
+      // more often than the listing itself.
+      this.usage = await measureStore(this.homeDirectory());
       this.loaded = true;
     }
 
@@ -321,18 +348,26 @@ export class HistoryViewProvider
       this.recoverable.length > 0
         ? [{ kind: 'recovery-group', sessions: this.recoverable }]
         : [];
+    const usage: HistoryNode[] = this.usage
+      ? [{ kind: 'usage', ...this.usage }]
+      : [];
 
     const groups = this.filter ? this.applyFilter(this.groups) : this.groups;
     if (groups.length === 0) {
       return [
         ...recovery,
+        ...usage,
         {
           kind: 'message',
           text: this.filter ? strings.history.noMatches(this.filter) : strings.history.empty(),
         },
       ];
     }
-    return [...recovery, ...groups.map((group) => ({ kind: 'project' as const, group }))];
+    return [
+      ...recovery,
+      ...usage,
+      ...groups.map((group) => ({ kind: 'project' as const, group })),
+    ];
   }
 
   private applyFilter(groups: readonly SessionGroup[]): SessionGroup[] {
