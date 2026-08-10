@@ -6,8 +6,10 @@ import {
   discoverSessions,
   indexCheckouts,
   formatBytes,
+  codexSessionsDirectory,
   measureStore,
   type CheckoutIndex,
+  type StoreProblem,
   groupSessionsByProject,
   sessionProject,
   clearSessionCache,
@@ -18,6 +20,7 @@ import {
 import type { JournalSession } from './journal';
 import type { FileChange } from './transcript';
 import { displayName, type SessionNames } from './names';
+import { peekServices } from './services';
 import { strings } from './strings';
 
 /**
@@ -329,6 +332,10 @@ export class HistoryViewProvider
   private usageMeasuredAt = 0;
   /** Resolved repository roots, reused across refreshes and dropped on an explicit one. */
   private checkoutIndex: CheckoutIndex | undefined;
+  /** Why the last scan found nothing, so an empty list can say which kind of empty it is. */
+  private storeProblem: StoreProblem | undefined;
+  /** True while the first scan of a refresh is in flight, so the view is not silently blank. */
+  private loading = false;
   /** Keyed by rollout path, cleared on a real reload; see `changedFiles`. */
   private readonly changedFileCache = new Map<string, HistoryNode[]>();
   private pending: NodeJS.Timeout | undefined;
@@ -500,10 +507,29 @@ export class HistoryViewProvider
     }
 
     if (!this.loaded) {
-      const sessions = await discoverSessions({
-        homeDirectory: this.homeDirectory(),
-        maxResults: this.limit(),
-      });
+      // The first scan can open up to `history.maxSessions` files. Saying so beats a view
+      // that is simply blank for as long as it takes.
+      if (this.loading) {
+        return [{ kind: 'message', text: strings.history.loading() }];
+      }
+      this.loading = true;
+      let sessions;
+      try {
+        sessions = await discoverSessions({
+          homeDirectory: this.homeDirectory(),
+          maxResults: this.limit(),
+          onScan: (scan) => {
+            this.storeProblem = scan.problem;
+            if (scan.problem === 'unreadable') {
+              peekServices()?.log.warn(
+                strings.store.unreadable(this.homeDirectory(), scan.detail ?? 'unknown error'),
+              );
+            }
+          },
+        });
+      } finally {
+        this.loading = false;
+      }
       // One `.git` walk per distinct directory, not per session: a project with forty
       // sessions has one working directory — and the previous index is reused, so a
       // directory already resolved is not walked again on the next append.
@@ -534,7 +560,15 @@ export class HistoryViewProvider
         ...usage,
         {
           kind: 'message',
-          text: this.filter ? strings.history.noMatches(this.filter) : strings.history.empty(),
+          // A missing store, an unreadable one and a genuinely empty one used to render the
+          // same row and log nothing at all.
+          text: this.filter
+            ? strings.history.noMatches(this.filter)
+            : this.storeProblem === 'missing'
+              ? strings.history.storeMissing(codexSessionsDirectory(this.homeDirectory()))
+              : this.storeProblem === 'unreadable'
+                ? strings.history.storeUnreadable(codexSessionsDirectory(this.homeDirectory()))
+                : strings.history.empty(),
         },
       ];
     }

@@ -24,6 +24,16 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- **"No Codex sessions recorded yet" was the answer to three different questions.** A store
+  that does not exist, one the process may not read, and one that is genuinely empty all
+  produced the same row and logged nothing, so the most common "it does nothing" report could
+  not be diagnosed from either the view or the log. Each now says which it is, a permission
+  error puts what the filesystem reported into the log, and the first scan shows that it is
+  reading rather than leaving the view blank. Activation also logs the sessions directory it
+  resolved, and warns when `codexTerminal.env` points `CODEX_HOME` somewhere other than the
+  store this window watches — which used to make history, live status and recovery all go
+  quietly empty at once.
+
 - **The History view re-walked the whole session store twice a second.** Codex appends to its
   rollout several times a second, and every append reached a debounced refresh that dropped the
   loaded flag — which re-ran the directory scan, a `.git` walk per distinct working directory,

@@ -359,6 +359,17 @@ export async function activate(context: vscode.ExtensionContext): Promise<CodexT
     .getConfiguration('workbench')
     .get<boolean>('statusBar.visible', true);
   log.info(strings.logs.activation(statusBarVisible));
+
+  // Which store this window watches, and whether the terminals it launches will write to a
+  // different one. `codexTerminal.env.CODEX_HOME` is the documented way to point Codex
+  // somewhere else, and doing so used to make history, live status and recovery all go
+  // quietly empty with nothing anywhere to explain it.
+  const sessionsRoot = codexSessionsDirectory();
+  log.info(strings.store.resolved(sessionsRoot));
+  const terminalHome = config().get<Record<string, string>>('env', {})?.CODEX_HOME;
+  if (terminalHome && path.resolve(terminalHome) !== path.resolve(codexHomeDirectory())) {
+    log.warn(strings.store.diverged(codexHomeDirectory(), path.resolve(terminalHome)));
+  }
   context.subscriptions.push(
     vscode.workspace.onDidChangeConfiguration((event) => {
       if (event.affectsConfiguration('codexTerminal.notifyOnCompletion')) {

@@ -310,3 +310,59 @@ test('a directory absent from the previous index is still resolved', async () =>
     await rm(directory, { recursive: true, force: true });
   }
 });
+
+
+/**
+ * A missing store, an unreadable one and a genuinely empty one all produced an identical empty
+ * list, an identical "No Codex sessions recorded yet" row, and nothing in the log — so the
+ * most common "it does nothing" report could not be diagnosed from either.
+ */
+test('a store that does not exist is reported as missing, not as empty', async () => {
+  const home = await mkdtemp(path.join(os.tmpdir(), 'codex-store-'));
+  try {
+    const scans: Array<{ problem?: string }> = [];
+    const sessions = await discoverSessions({ homeDirectory: home, onScan: (scan) => scans.push(scan) });
+    assert.deepEqual(sessions, []);
+    assert.equal(scans.length, 1);
+    assert.equal(scans[0].problem, 'missing');
+  } finally {
+    await rm(home, { recursive: true, force: true });
+  }
+});
+
+test('a store that exists and holds nothing reports no problem at all', async () => {
+  const home = await mkdtemp(path.join(os.tmpdir(), 'codex-store-'));
+  try {
+    await mkdir(path.join(home, 'sessions', '2026', '08', '10'), { recursive: true });
+    const scans: Array<{ problem?: string }> = [];
+    const sessions = await discoverSessions({ homeDirectory: home, onScan: (scan) => scans.push(scan) });
+    assert.deepEqual(sessions, []);
+    // Empty is not a fault, and saying it is would send the operator looking for one.
+    assert.equal(scans[0].problem, undefined);
+  } finally {
+    await rm(home, { recursive: true, force: true });
+  }
+});
+
+test('a directory that vanishes mid-walk does not condemn the whole store', async () => {
+  const home = await mkdtemp(path.join(os.tmpdir(), 'codex-store-'));
+  try {
+    const day = path.join(home, 'sessions', '2026', '08', '10');
+    await mkdir(day, { recursive: true });
+    await writeFile(
+      path.join(day, 'rollout-2026-08-10T10-00-00-019fe759-5303-7681-b98a-16ffcb95a268.jsonl'),
+      `${JSON.stringify({
+        type: 'session_meta',
+        payload: { id: 'x', timestamp: '2026-08-10T10:00:00.000Z', cwd: home },
+      })}\n`,
+      'utf8',
+    );
+    const scans: Array<{ problem?: string }> = [];
+    const sessions = await discoverSessions({ homeDirectory: home, onScan: (scan) => scans.push(scan) });
+    assert.equal(sessions.length, 1);
+    // Only the root of the scan decides the verdict.
+    assert.equal(scans[0].problem, undefined);
+  } finally {
+    await rm(home, { recursive: true, force: true });
+  }
+});

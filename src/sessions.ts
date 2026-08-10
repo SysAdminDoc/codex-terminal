@@ -34,6 +34,8 @@ export interface SessionRecord {
 export interface SessionDiscoveryOptions {
   homeDirectory?: string;
   maxResults?: number;
+  /** Told why a scan found nothing, so the caller can say something better than "none". */
+  onScan?: (scan: StoreScan) => void;
 }
 
 /**
@@ -91,18 +93,41 @@ interface RolloutFile {
   startedAt: number;
 }
 
-async function sessionFiles(directory: string): Promise<RolloutFile[]> {
+/**
+ * Why a scan of the session store came back with nothing.
+ *
+ * A missing store, an empty one and one the process may not read all produced an identical
+ * empty list and an identical "No Codex sessions recorded yet" row, with nothing logged — so
+ * the most common "it does nothing" report was undiagnosable from either the UI or the log.
+ */
+export type StoreProblem = 'missing' | 'unreadable';
+
+export interface StoreScan {
+  files: RolloutFile[];
+  problem?: StoreProblem;
+  /** The error the filesystem actually gave, for the log. */
+  detail?: string;
+}
+
+async function sessionFiles(directory: string, scan: StoreScan): Promise<RolloutFile[]> {
   const files: RolloutFile[] = [];
   let entries;
   try {
     entries = await readdir(directory, { withFileTypes: true });
-  } catch {
+  } catch (error) {
+    const code = (error as NodeJS.ErrnoException).code;
+    // Only the root of the scan decides the verdict; a directory that vanished mid-walk is
+    // ordinary and must not be reported as a store the operator cannot read.
+    if (scan.problem === undefined) {
+      scan.problem = code === 'ENOENT' ? 'missing' : 'unreadable';
+      scan.detail = error instanceof Error ? error.message : String(error);
+    }
     return files;
   }
   for (const entry of entries) {
     const entryPath = path.join(directory, entry.name);
     if (entry.isDirectory()) {
-      files.push(...(await sessionFiles(entryPath)));
+      files.push(...(await sessionFiles(entryPath, scan)));
     } else if (entry.isFile() && entry.name.endsWith('.jsonl')) {
       const parsed = parseRolloutFileName(entry.name);
       files.push({
@@ -247,8 +272,10 @@ export async function discoverSessions(
 ): Promise<SessionRecord[]> {
   const directory = codexSessionsDirectory(options.homeDirectory);
   const limit = options.maxResults ?? 30;
+  const scan: StoreScan = { files: [] };
   // Choose from filenames first; only the survivors are ever opened.
-  const files = selectNewestRollouts(await sessionFiles(directory), limit);
+  const files = selectNewestRollouts(await sessionFiles(directory, scan), limit);
+  options.onScan?.({ ...scan, files });
   const sessions = (
     await mapWithConcurrency(files, READ_CONCURRENCY, (file) => readSession(file.filePath))
   ).filter((session): session is SessionRecord => session !== undefined);
@@ -277,7 +304,7 @@ export interface StoreUsage {
  * it. `stat` only — no file is opened.
  */
 export async function measureStore(homeDirectory?: string): Promise<StoreUsage> {
-  const files = await sessionFiles(codexSessionsDirectory(homeDirectory));
+  const files = await sessionFiles(codexSessionsDirectory(homeDirectory), { files: [] });
   const sizes = await mapWithConcurrency(files, READ_CONCURRENCY, async (file) => {
     try {
       return (await stat(file.filePath)).size;

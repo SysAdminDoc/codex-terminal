@@ -127,6 +127,18 @@ export const strings = {
     enableFailed: (message: string): string =>
       vscode.l10n.t('Could not enable turn-completion notifications: {0}', message),
   },
+  store: {
+    resolved: (directory: string): string =>
+      vscode.l10n.t('reading Codex sessions from {0}', directory),
+    unreadable: (directory: string, detail: string): string =>
+      vscode.l10n.t('cannot read the session store at {0}: {1}', directory, detail),
+    diverged: (ours: string, theirs: string): string =>
+      vscode.l10n.t(
+        'codexTerminal.env sets CODEX_HOME to {1}, but this window reads {0}. History, live status and recovery all watch {0}, so they will stay empty.',
+        ours,
+        theirs,
+      ),
+  },
   folders: {
     prompt: (): string => vscode.l10n.t('Choose the workspace folder for Codex'),
   },
@@ -148,6 +160,11 @@ export const strings = {
   },
   history: {
     empty: (): string => vscode.l10n.t('No Codex sessions recorded yet'),
+    storeMissing: (directory: string): string =>
+      vscode.l10n.t('No session store at {0} — Codex writes one on its first run', directory),
+    storeUnreadable: (directory: string): string =>
+      vscode.l10n.t('Cannot read {0}. See the log for what the filesystem reported.', directory),
+    loading: (): string => vscode.l10n.t('Reading Codex sessions…'),
     noMatches: (filter: string): string => vscode.l10n.t('No sessions match “{0}”', filter),
     noPrompt: (): string => vscode.l10n.t('(no prompt recorded)'),
     mainCheckout: (): string => vscode.l10n.t('main checkout'),
