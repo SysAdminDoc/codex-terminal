@@ -7,6 +7,9 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- The animated indicators honour `workbench.reduceMotion`. With reduced motion the spinner
+  becomes a still icon and the wording is unchanged, so no information is lost — only the
+  continuous motion a reduced-motion preference exists to suppress.
 - A working session that has produced no output for a while now says so, rather than showing
   an unqualified "Working" forever. Codex writes nothing while waiting for an approval and
   nothing while stuck, and the two cannot be distinguished from its session file, so the

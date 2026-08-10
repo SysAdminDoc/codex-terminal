@@ -19,7 +19,12 @@ import { codexProfilesDirectory, profileNamesFromFiles } from './profiles';
 import { NotifyBridge } from './notify';
 import { SessionMonitor } from './monitor';
 import { JournalStore, interruptedSessions, type JournalSession } from './journal';
-import { DEFAULT_STALL_SECONDS, peakContextUsed, statusBarText } from './present';
+import {
+  DEFAULT_STALL_SECONDS,
+  motionAllowed,
+  peakContextUsed,
+  statusBarText,
+} from './present';
 import {
   codexHomeDirectory,
   codexSessionsDirectory,
@@ -86,6 +91,13 @@ export interface CodexTerminalExtensionApi {
 
 function config(): vscode.WorkspaceConfiguration {
   return vscode.workspace.getConfiguration('codexTerminal');
+}
+
+/** Honour the editor's reduced-motion preference for the animated indicators. */
+function animationAllowed(): boolean {
+  return motionAllowed(
+    vscode.workspace.getConfiguration('workbench').get<string>('reduceMotion', 'auto'),
+  );
 }
 
 function tabTitleMode(): TabTitleMode {
@@ -659,7 +671,7 @@ function createStatusBarItem(context: vscode.ExtensionContext, monitor: SessionM
     const peak = config().get<boolean>('showContextInStatusBar', true)
       ? peakContextUsed(sessions.map((session) => session.activity))
       : undefined;
-    item.text = statusBarText(working, live, peak);
+    item.text = statusBarText(working, live, peak, animationAllowed());
     item.tooltip =
       working > 0
         ? strings.status.workingTooltip(working, live)
@@ -684,7 +696,11 @@ function createStatusBarItem(context: vscode.ExtensionContext, monitor: SessionM
   context.subscriptions.push(
     monitor.onDidChange(render),
     vscode.workspace.onDidChangeConfiguration((event) => {
-      if (event.affectsConfiguration('codexTerminal.showStatusBarButton')) {
+      if (
+        event.affectsConfiguration('codexTerminal.showStatusBarButton') ||
+        event.affectsConfiguration('codexTerminal.showContextInStatusBar') ||
+        event.affectsConfiguration('workbench.reduceMotion')
+      ) {
         render();
       }
     }),
@@ -904,8 +920,10 @@ export async function activate(context: vscode.ExtensionContext): Promise<CodexT
     }),
   );
 
-  const actionsProvider = new ActionsViewProvider(monitor, () =>
-    config().get<number>('stallSeconds', DEFAULT_STALL_SECONDS),
+  const actionsProvider = new ActionsViewProvider(
+    monitor,
+    () => config().get<number>('stallSeconds', DEFAULT_STALL_SECONDS),
+    animationAllowed,
   );
   historyViewProvider = new HistoryViewProvider(() =>
     config().get<number>('history.maxSessions', 200),

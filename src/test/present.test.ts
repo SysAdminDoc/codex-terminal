@@ -5,6 +5,7 @@ import { INITIAL_ACTIVITY, type SessionActivity } from '../activity';
 import {
   SPINNER_ICON,
   describeActivity,
+  motionAllowed,
   peakContextUsed,
   formatDuration,
   formatTokens,
@@ -100,4 +101,22 @@ test('a long-silent working session says so instead of just claiming to work', (
   // 'Working' alone for two minutes of silence is a claim the rollout cannot support.
   assert.match(describeActivity(state, now, 45), /no output for 2m 0s/);
   assert.doesNotMatch(describeActivity(state, now, 600), /no output/);
+});
+
+test('reduced motion replaces the spinner with a still icon, keeping the meaning', () => {
+  const working = activity({ status: 'working' });
+  assert.equal(presentStatus(working, true).icon, SPINNER_ICON);
+  assert.equal(presentStatus(working, false).icon, 'sync');
+  // The label must not change: only the motion is suppressed, not the information.
+  assert.equal(presentStatus(working, false).label, 'Working');
+  assert.equal(statusBarText(1, 1, undefined, false), '$(sync) Codex 1/1');
+});
+
+test('the reduced-motion preference is read the way VS Code defines it', () => {
+  assert.equal(motionAllowed('on'), false);
+  assert.equal(motionAllowed('off'), true);
+  // `auto` defers to the operating system.
+  assert.equal(motionAllowed('auto', true), false);
+  assert.equal(motionAllowed('auto', false), true);
+  assert.equal(motionAllowed(undefined), true);
 });

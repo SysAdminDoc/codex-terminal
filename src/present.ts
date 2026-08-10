@@ -25,10 +25,31 @@ export interface StatusPresentation {
   label: string;
 }
 
-export function presentStatus(activity: SessionActivity): StatusPresentation {
+/**
+ * Whether continuous motion is acceptable.
+ *
+ * `loading~spin` animates forever, which is exactly what a reduced-motion preference exists
+ * to suppress. VS Code exposes `workbench.reduceMotion` (`on` / `off` / `auto`, where `auto`
+ * follows the OS), so the spinner is a preference to honour rather than a constant.
+ */
+export function motionAllowed(reduceMotion: string | undefined, systemPrefersReduced = false): boolean {
+  if (reduceMotion === 'on') {
+    return false;
+  }
+  if (reduceMotion === 'off') {
+    return true;
+  }
+  return !systemPrefersReduced;
+}
+
+export function presentStatus(
+  activity: SessionActivity,
+  animate = true,
+): StatusPresentation {
   switch (activity.status) {
     case 'working':
-      return { icon: SPINNER_ICON, color: 'charts.blue', label: 'Working' };
+      // `sync` reads as in-progress without moving; the label still says Working.
+      return { icon: animate ? SPINNER_ICON : 'sync', color: 'charts.blue', label: 'Working' };
     case 'aborted':
       return {
         icon: 'circle-slash',
@@ -117,10 +138,11 @@ export function statusBarText(
   workingCount: number,
   liveCount: number,
   peakContext?: number,
+  animate = true,
 ): string {
   const context = peakContext === undefined ? '' : ` · ${Math.round(peakContext * 100)}%`;
   if (workingCount > 0) {
-    return `$(${SPINNER_ICON}) Codex ${workingCount}/${liveCount}${context}`;
+    return `$(${animate ? SPINNER_ICON : 'sync'}) Codex ${workingCount}/${liveCount}${context}`;
   }
   if (liveCount > 0) {
     return `$(sparkle) Codex ${liveCount}${context}`;

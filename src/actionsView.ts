@@ -92,18 +92,18 @@ class ActionItem extends vscode.TreeItem {
 }
 
 class RunningGroupItem extends vscode.TreeItem {
-  constructor(count: number, working: number) {
+  constructor(count: number, working: number, animate: boolean) {
     super(strings.running.group(), vscode.TreeItemCollapsibleState.Expanded);
     this.description =
       working > 0
         ? strings.running.workingCount(working, count)
         : strings.running.sessionCount(count);
     this.tooltip = strings.running.tooltip();
-    this.iconPath = new vscode.ThemeIcon(working > 0 ? presentStatus({
-      status: 'working',
-      ordinal: 0,
-      completedTurns: 0,
-    }).icon : 'pulse');
+    this.iconPath = new vscode.ThemeIcon(
+      working > 0
+        ? presentStatus({ status: 'working', ordinal: 0, completedTurns: 0 }, animate).icon
+        : 'pulse',
+    );
     this.accessibilityInformation = {
       label: strings.running.accessibilityGroup(count),
       role: 'treeitem',
@@ -112,10 +112,10 @@ class RunningGroupItem extends vscode.TreeItem {
 }
 
 class RunningSessionItem extends vscode.TreeItem {
-  constructor(node: RunningSession, now: number, stallSeconds: number) {
+  constructor(node: RunningSession, now: number, stallSeconds: number, animate: boolean) {
     const { session } = node;
     super(session.project || session.label, vscode.TreeItemCollapsibleState.None);
-    const presentation = presentStatus(session.activity);
+    const presentation = presentStatus(session.activity, animate);
     this.description = describeActivity(session.activity, now, stallSeconds);
     this.iconPath = new vscode.ThemeIcon(
       presentation.icon,
@@ -192,16 +192,21 @@ export class ActionsViewProvider implements vscode.TreeDataProvider<ActionNode>,
   constructor(
     private readonly monitor: SessionMonitor,
     private readonly stallSeconds: () => number = () => DEFAULT_STALL_SECONDS,
+    private readonly animate: () => boolean = () => true,
   ) {
     this.monitorSubscription = monitor.onDidChange(() => this.changes.fire());
   }
 
   getTreeItem(node: ActionNode): vscode.TreeItem {
     if ('kind' in node && node.kind === 'running-group') {
-      return new RunningGroupItem(this.monitor.live().length, this.monitor.workingCount());
+      return new RunningGroupItem(
+        this.monitor.live().length,
+        this.monitor.workingCount(),
+        this.animate(),
+      );
     }
     if ('kind' in node && node.kind === 'running-session') {
-      return new RunningSessionItem(node, Date.now(), this.stallSeconds());
+      return new RunningSessionItem(node, Date.now(), this.stallSeconds(), this.animate());
     }
     return new ActionItem(node);
   }
