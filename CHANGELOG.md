@@ -14,6 +14,17 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- **A rollout was read into memory whole.** The tailer allocated the entire unread span as one
+  buffer, turned it into one string and split it into one array — and the crash-recovery path
+  deliberately starts at byte zero, as does any file that has been replaced rather than appended
+  to. The largest rollout on the development machine is 134.3 MB, so that was roughly 400 MB of
+  simultaneous allocation for one session, and past V8's maximum string length it does not slow
+  down, it throws. Reading is now a fold over 1 MiB chunks that never materialises the lines:
+  that same 134.3 MB file folds in 408 ms with 0.1 MB of heap and 1.1 MB of external memory
+  retained. A line longer than 64 MiB is dropped, counted and logged rather than held, and
+  reading resynchronises at the next newline — an invalid byte now costs one record instead of
+  the session.
+
 - **A reverted workbench setting could not be kept.** `terminal.integrated.confirmOnKill` was
   re-planned from its current value on every configuration change — and the operator's own edit
   is what fires that change — so setting it back to `editor` was overwritten within

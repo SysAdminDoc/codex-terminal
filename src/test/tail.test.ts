@@ -6,6 +6,16 @@ import { test } from 'node:test';
 
 import { RolloutTailer } from '../tail';
 
+/**
+ * Collect what a fold sees, which is only safe because these files are a few bytes each.
+ * Production never does this — the fold exists precisely so a 41 MB rollout is not
+ * materialised as an array of strings.
+ */
+async function collect(tailer: RolloutTailer): Promise<string[]> {
+  const { value } = await tailer.fold<string[]>([], (lines, line) => [...lines, line]);
+  return value;
+}
+
 async function withTempFile(
   body: (filePath: string) => Promise<void>,
 ): Promise<void> {
@@ -19,18 +29,18 @@ async function withTempFile(
 
 test('a missing file yields nothing rather than throwing', async () => {
   const tailer = new RolloutTailer(path.join(tmpdir(), 'codex-does-not-exist.jsonl'));
-  assert.deepEqual(await tailer.poll(), []);
+  assert.deepEqual(await collect(tailer), []);
 });
 
 test('only newly appended lines are returned', async () => {
   await withTempFile(async (filePath) => {
     await writeFile(filePath, 'one\ntwo\n', 'utf8');
     const tailer = new RolloutTailer(filePath);
-    assert.deepEqual(await tailer.poll(), ['one', 'two']);
-    assert.deepEqual(await tailer.poll(), []);
+    assert.deepEqual(await collect(tailer), ['one', 'two']);
+    assert.deepEqual(await collect(tailer), []);
 
     await appendFile(filePath, 'three\n', 'utf8');
-    assert.deepEqual(await tailer.poll(), ['three']);
+    assert.deepEqual(await collect(tailer), ['three']);
   });
 });
 
@@ -40,10 +50,10 @@ test('a half-written final line is held back until its newline arrives', async (
     // Emitting the fragment would hand `JSON.parse` a truncated object every time.
     await writeFile(filePath, 'complete\n{"partial":', 'utf8');
     const tailer = new RolloutTailer(filePath);
-    assert.deepEqual(await tailer.poll(), ['complete']);
+    assert.deepEqual(await collect(tailer), ['complete']);
 
     await appendFile(filePath, 'true}\n', 'utf8');
-    assert.deepEqual(await tailer.poll(), ['{"partial":true}']);
+    assert.deepEqual(await collect(tailer), ['{"partial":true}']);
   });
 });
 
@@ -51,12 +61,12 @@ test('a truncated or replaced file is re-read from the start', async () => {
   await withTempFile(async (filePath) => {
     await writeFile(filePath, 'first\nsecond\nthird\n', 'utf8');
     const tailer = new RolloutTailer(filePath);
-    await tailer.poll();
+    await collect(tailer);
 
     // Resuming from a stale offset into a shorter file would decode the middle of a line
     // as though it were the start of one.
     await writeFile(filePath, 'fresh\n', 'utf8');
-    assert.deepEqual(await tailer.poll(), ['fresh']);
+    assert.deepEqual(await collect(tailer), ['fresh']);
   });
 });
 
@@ -64,7 +74,7 @@ test('carriage returns are stripped so JSON parses on Windows checkouts', async 
   await withTempFile(async (filePath) => {
     await writeFile(filePath, '{"a":1}\r\n{"b":2}\r\n', 'utf8');
     const tailer = new RolloutTailer(filePath);
-    assert.deepEqual(await tailer.poll(), ['{"a":1}', '{"b":2}']);
+    assert.deepEqual(await collect(tailer), ['{"a":1}', '{"b":2}']);
   });
 });
 
@@ -73,10 +83,10 @@ test('seeking to the end skips history a caller has already accounted for', asyn
     await writeFile(filePath, 'old\n', 'utf8');
     const tailer = new RolloutTailer(filePath);
     await tailer.seekToEnd();
-    assert.deepEqual(await tailer.poll(), []);
+    assert.deepEqual(await collect(tailer), []);
 
     await appendFile(filePath, 'new\n', 'utf8');
-    assert.deepEqual(await tailer.poll(), ['new']);
+    assert.deepEqual(await collect(tailer), ['new']);
   });
 });
 
@@ -84,15 +94,94 @@ test('multi-byte characters survive being split across two polls', async () => {
   await withTempFile(async (filePath) => {
     await writeFile(filePath, '', 'utf8');
     const tailer = new RolloutTailer(filePath);
-    await tailer.poll();
+    await collect(tailer);
 
     // The spinner glyphs and em dashes in Codex messages are multi-byte; a naive reader
     // that decodes each chunk independently turns a split one into U+FFFD.
     const text = '{"m":"⠹ working — done"}\n';
     const bytes = Buffer.from(text, 'utf8');
     await appendFile(filePath, bytes.subarray(0, 12));
-    await tailer.poll();
+    await collect(tailer);
     await appendFile(filePath, bytes.subarray(12));
-    assert.deepEqual(await tailer.poll(), [text.trimEnd()]);
+    assert.deepEqual(await collect(tailer), [text.trimEnd()]);
+  });
+});
+
+test('a file many chunks long is folded once, in order, without materialising it', async () => {
+  await withTempFile(async (filePath) => {
+    // Comfortably past the 1 MiB chunk size, so the loop runs many times and the remainder
+    // is carried across chunk boundaries repeatedly.
+    const line = `{"pad":"${'x'.repeat(1000)}"}`;
+    const count = 32_000;
+    await writeFile(filePath, '', 'utf8');
+    for (let batch = 0; batch < 32; batch += 1) {
+      const chunk: string[] = [];
+      for (let index = 0; index < count / 32; index += 1) {
+        chunk.push(`${line.slice(0, -1)},"n":${batch * (count / 32) + index}}`);
+      }
+      await appendFile(filePath, `${chunk.join('\n')}\n`, 'utf8');
+    }
+
+    const tailer = new RolloutTailer(filePath);
+    const before = process.memoryUsage().heapUsed;
+    let seen = 0;
+    let first = '';
+    let last = '';
+    const { lines, dropped } = await tailer.fold(undefined, (_, text) => {
+      if (seen === 0) {
+        first = text;
+      }
+      last = text;
+      seen += 1;
+      return undefined;
+    });
+    const grew = process.memoryUsage().heapUsed - before;
+
+    assert.equal(lines, count);
+    assert.equal(seen, count);
+    assert.equal(dropped, 0);
+    assert.ok(first.endsWith(',"n":0}'), first.slice(-16));
+    assert.ok(last.endsWith(`,"n":${count - 1}}`), last.slice(-16));
+    // The regression: the whole unread span used to become one buffer, one string and one
+    // array at once. This file is ~32 MB, so the old shape put ~96 MB on the heap before a
+    // single line was folded; the chunked one never holds more than a chunk.
+    assert.ok(grew < 16 * 1024 * 1024, `heap grew ${Math.round(grew / 1024 / 1024)} MB`);
+  });
+});
+
+test('an invalid UTF-8 byte corrupts its own line and no others', async () => {
+  await withTempFile(async (filePath) => {
+    // Upstream reports one bad byte making an entire thread unreadable. A record is one
+    // line, so the blast radius has to be one line.
+    const bytes = Buffer.concat([
+      Buffer.from('{"a":1}\n', 'utf8'),
+      Buffer.from('{"b":"'),
+      Buffer.from([0xff, 0xfe]),
+      Buffer.from('"}\n{"c":3}\n', 'utf8'),
+    ]);
+    await writeFile(filePath, bytes);
+
+    const lines = await collect(new RolloutTailer(filePath));
+    assert.equal(lines.length, 3);
+    assert.equal(lines[0], '{"a":1}');
+    assert.equal(lines[2], '{"c":3}');
+    assert.ok(lines[1].includes('�'), lines[1]);
+  });
+});
+
+test('a line past the size limit is dropped and reading resynchronises', async () => {
+  await withTempFile(async (filePath) => {
+    const oversized = `{"blob":"${'y'.repeat(80_000)}"}`;
+    await writeFile(filePath, `{"first":1}\n${oversized}\n{"third":3}\n`, 'utf8');
+
+    const tailer = new RolloutTailer(filePath, 16_000);
+    const { value, lines, dropped } = await tailer.fold<string[]>([], (kept, line) => [
+      ...kept,
+      line,
+    ]);
+    assert.equal(dropped, 1);
+    assert.equal(lines, 2);
+    // The record after the oversized one is intact — the drop cost one line, not the rest.
+    assert.deepEqual(value, ['{"first":1}', '{"third":3}']);
   });
 });

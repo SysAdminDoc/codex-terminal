@@ -6,7 +6,7 @@ import {
   INITIAL_ACTIVITY,
   isStalled,
   isWorking,
-  reduceActivity,
+  reduceActivityLine,
   settleActivity,
   type SessionActivity,
 } from './activity';
@@ -347,12 +347,16 @@ export class SessionMonitor implements vscode.Disposable {
     if (!entry.tailer) {
       return entry.bindable ? this.tryBind(entry) : false;
     }
-    const lines = await entry.tailer.poll();
-    if (lines.length === 0) {
-      return false;
+    const { value: next, lines, dropped } = await entry.tailer.fold(
+      entry.activity,
+      reduceActivityLine,
+    );
+    if (dropped > 0) {
+      this.options.log.warn(
+        `dropped ${dropped} oversized record(s) from ${entry.rolloutPath ?? entry.label}`,
+      );
     }
-    const next = reduceActivity(entry.activity, lines);
-    if (next === entry.activity) {
+    if (lines === 0 || next === entry.activity) {
       return false;
     }
     entry.activity = next;
@@ -394,8 +398,9 @@ export class SessionMonitor implements vscode.Disposable {
     this.options.log.info(`bound ${entry.label} to session ${match.sessionId}`);
     // Fold the whole file, not just the tail: a rollout bound a few seconds late already
     // holds the opening turn, and skipping it would report an idle session that is busy.
-    const lines = (await entry.tailer?.poll()) ?? [];
-    entry.activity = reduceActivity(entry.activity, lines);
+    // Fold the whole file, not just the tail, a bounded chunk at a time.
+    entry.activity =
+      (await entry.tailer?.fold(entry.activity, reduceActivityLine))?.value ?? entry.activity;
     this.persist(entry);
     return true;
   }
