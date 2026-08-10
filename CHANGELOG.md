@@ -5,6 +5,17 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+
+- **Per-session cost estimates**, at prices you supply in `codexTerminal.modelRates` (USD per
+  million tokens, prefix-matched so one `gpt-5.6` entry covers every alias). No price list
+  ships: Codex records release aliases no public price page carries, and a bundled table would
+  go stale without ever looking wrong. An unpriced model shows no cost and names itself in the
+  tooltip rather than rendering as `$0.00`. Cache hits are priced as the discount they are —
+  the rollout counts them inside the input total, and charging them twice would have turned a
+  $41 session into $300. When the session reports a subscription plan the tooltip says the
+  tokens were not billed per token at all.
+
 ### Fixed
 
 - **Naming a session was unreachable from the UI.** Both context menu entries for

@@ -2,6 +2,7 @@ import * as path from 'node:path';
 import * as vscode from 'vscode';
 
 import { ActionsViewProvider } from './actionsView';
+import type { RateTable } from './cost';
 import {
   askAboutSelection,
   checkAppServer,
@@ -274,6 +275,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<CodexT
     () => config().get<number>('stallSeconds', DEFAULT_STALL_SECONDS),
     animationAllowed,
     sessionNames,
+    () => config().get<RateTable>('modelRates'),
   );
   const actionsView = vscode.window.createTreeView('codexTerminal.actions', {
     treeDataProvider: actionsProvider,

@@ -46,6 +46,41 @@ const TOKEN_COUNT = JSON.stringify({
   },
 });
 
+/** Verbatim from a 0.147 rollout: the model lives here and nowhere else. */
+const TURN_CONTEXT = JSON.stringify({
+  timestamp: '2026-08-09T16:27:35.000Z',
+  ordinal: 5,
+  type: 'turn_context',
+  payload: {
+    turn_id: '019fe870-ca21-74d2-bc32-487db19d3325',
+    cwd: 'C:\\Users\\me',
+    approval_policy: 'never',
+    model: 'gpt-5.6-luna',
+  },
+});
+
+/** The same record with the fields a cost estimate needs, cache split and plan included. */
+const TOKEN_COUNT_FULL = JSON.stringify({
+  timestamp: '2026-08-09T16:28:01.229Z',
+  ordinal: 22,
+  type: 'event_msg',
+  payload: {
+    type: 'token_count',
+    info: {
+      total_token_usage: {
+        input_tokens: 14434,
+        cached_input_tokens: 9984,
+        cache_write_input_tokens: 0,
+        output_tokens: 689,
+        reasoning_output_tokens: 445,
+        total_tokens: 15123,
+      },
+      model_context_window: 258400,
+    },
+    rate_limits: { limit_id: 'codex', plan_type: 'pro' },
+  },
+});
+
 const TURN_ABORTED = JSON.stringify({
   timestamp: '2026-08-09T16:28:14.550Z',
   ordinal: 31,
@@ -355,4 +390,40 @@ test('a completed turn after silence still lands as idle, not working', () => {
   const settled = settleActivity(working, startedAt + 3_600_000, 45);
   const done = reduceActivity(settled, [TASK_COMPLETE]);
   assert.equal(done.status, 'idle');
+});
+
+test('the model comes off turn_context, which is not an event_msg at all', () => {
+  // Every other record the reducer folds is `type: event_msg`; `turn_context` is a top-level
+  // type, and `session_meta` names the provider but never the model. Skipping it means the
+  // rate table can never match anything.
+  const state = reduceActivity(INITIAL_ACTIVITY, [TASK_STARTED, TURN_CONTEXT]);
+  assert.equal(state.model, 'gpt-5.6-luna');
+  // Ordinals are one sequence across every record type, so folding it advances the counter.
+  assert.equal(state.ordinal, 5);
+  assert.equal(state.status, 'working');
+});
+
+test('a response_item is still ignored, and does not advance the ordinal', () => {
+  const state = reduceActivity(INITIAL_ACTIVITY, [
+    TASK_STARTED,
+    JSON.stringify({ ordinal: 99, type: 'response_item', payload: { type: 'message' } }),
+  ]);
+  assert.equal(state.ordinal, 1);
+});
+
+test('token usage keeps the cache split and the plan it was billed to', () => {
+  const state = reduceActivity(INITIAL_ACTIVITY, [TOKEN_COUNT_FULL]);
+  assert.equal(state.totalTokens, 15123);
+  assert.equal(state.inputTokens, 14434);
+  assert.equal(state.cachedInputTokens, 9984);
+  assert.equal(state.outputTokens, 689);
+  // Without this a subscription session would be presented as a per-token charge.
+  assert.equal(state.plan, 'pro');
+});
+
+test('an older token_count without the cache fields still yields a total', () => {
+  const state = reduceActivity(INITIAL_ACTIVITY, [TOKEN_COUNT]);
+  assert.equal(state.totalTokens, 16805);
+  assert.equal(state.cachedInputTokens, undefined);
+  assert.equal(state.plan, undefined);
 });

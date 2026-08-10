@@ -40,6 +40,18 @@ export const strings = {
     context: (tokens: string, percent: number): string =>
       vscode.l10n.t('{0} tokens — {1}% of the context window', tokens, percent),
     sessionId: (id: string): string => vscode.l10n.t('Session `{0}`', id),
+    cost: (amount: string, model: string): string =>
+      vscode.l10n.t('{0} at your rates for {1}', amount, model),
+    costOnPlan: (plan: string): string =>
+      vscode.l10n.t(
+        'Billed to your {0} plan, not per token — this is what the same tokens would list at.',
+        plan,
+      ),
+    costUnpriced: (model: string): string =>
+      vscode.l10n.t(
+        'No cost shown: {0} is not in `codexTerminal.modelRates`. Add it there to price this session.',
+        model,
+      ),
     // Past tense: Codex records a step only once it has finished, so this is the last thing
     // it *did*, which is as close to "what it is doing" as the session file can get.
     lastStep: (step: string): string => vscode.l10n.t('Last step: {0}', step),

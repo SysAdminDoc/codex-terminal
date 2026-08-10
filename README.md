@@ -140,6 +140,7 @@ announces and can revert.
 | `codexTerminal.tabTitle` | `live` | `live` leaves the tab name unset so Codex's own title — including its activity indicator — drives the tab. `static` shows a fixed `project — Codex` label and **cannot animate**; see below. |
 | `codexTerminal.titleItems` | `["activity", "project-name", "app-name"]` | Codex title items. The default gives the live activity indicator, the project name, and the constant `Codex` marker used to recognise our tabs after a window reload. |
 | `codexTerminal.history.maxSessions` | `200` | Maximum recent sessions shown in the History view. |
+| `codexTerminal.modelRates` | `{}` | Your token prices per model, in USD per million tokens, used to estimate what a session cost. Empty by default; see below. |
 | `codexTerminal.appServer.enabled` | `false` | **Experimental.** Host a `codex app-server` for this window and attach launched terminals to it with `--remote ws://127.0.0.1:<port>`, so Codex reports activity over its own protocol instead of it being inferred from session files. Needs an editor built on Node 22 or newer; every failure falls back to a plain `codex` launch and logs why. |
 | `codexTerminal.monitor.enabled` | `true` | Read Codex's session files for live activity and crash recovery. Off stops all reading of your conversations — and with it both the live status and interrupted-session recovery, since each needs to know which conversation a tab belongs to. Launching, resuming and history are unaffected. |
 | `codexTerminal.journal.storeMessages` | `true` | Keep Codex's closing message per turn in the crash journal. Off keeps conversation text out of it; identifiers and timestamps, which is all recovery needs, are still recorded. |
@@ -176,6 +177,37 @@ and nothing while wedged, so "finished" would be a guess. The threshold is 10 mi
 `codexTerminal.stallSeconds` if you have raised it; the largest gap measured *inside* a genuinely
 working turn was 269 seconds across 80,779 samples. Any new output puts the session straight back
 to working.
+
+### Cost estimates, and why none ship with the extension
+
+A session row can show what it cost, but only at prices you supply:
+
+```jsonc
+"codexTerminal.modelRates": {
+  "gpt-5.6": { "input": 1.25, "cachedInput": 0.125, "output": 10 }
+}
+```
+
+Rates are USD per million tokens — the unit price lists are published in, so a number can be
+copied across without arithmetic. A key that is a prefix of the recorded model matches it, so
+one `gpt-5.6` entry prices `gpt-5.6-luna` and `gpt-5.6-sol` alike; a more specific key wins over
+a family one. Omitting `cachedInput` bills cache hits at the full input rate.
+
+Nothing is shipped, deliberately. Codex records release aliases rather than the names on any
+price page — `gpt-5.6-luna` and `gpt-5.6-sol` were the only two models across the 60 most recent
+sessions here — so a bundled table would price nothing today and would go stale without ever
+looking wrong. A model you have not priced shows **no cost at all** and names itself in the
+tooltip, which is the key to add; it never shows `$0.00`.
+
+Two details decide whether the number means anything:
+
+- **Cache hits are a discount, not an extra line.** The rollout reports `input_tokens` as the
+  whole prompt with `cached_input_tokens` inside it. Those sessions run 98% cached, so reading
+  the two as separate charges would inflate a real session from $41 to roughly $300.
+- **A subscription session is not billed per token.** Codex records the plan alongside its
+  usage, and every session measured here reported `pro`. When a plan is present the tooltip says
+  so and calls the figure what it is — what the same tokens would list at, not a charge anyone
+  is making.
 
 ### What a screen reader hears
 

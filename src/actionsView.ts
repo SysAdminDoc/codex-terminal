@@ -11,6 +11,7 @@ import {
   formatTokens,
   presentStatus,
 } from './present';
+import { estimateCost, formatCost, type RateTable } from './cost';
 import { displayName, type SessionNames } from './names';
 import { strings } from './strings';
 
@@ -130,6 +131,7 @@ class RunningSessionItem extends vscode.TreeItem {
     stallSeconds: number,
     animate: boolean,
     names: SessionNames,
+    rates: RateTable | undefined,
   ) {
     const { session } = node;
     super(
@@ -137,7 +139,7 @@ class RunningSessionItem extends vscode.TreeItem {
       vscode.TreeItemCollapsibleState.None,
     );
     const presentation = presentStatus(session.activity, animate);
-    this.description = describeActivity(session.activity, now, stallSeconds);
+    this.description = describeActivity(session.activity, now, stallSeconds, rates);
     this.iconPath = new vscode.ThemeIcon(
       presentation.icon,
       presentation.color ? new vscode.ThemeColor(presentation.color) : undefined,
@@ -145,7 +147,7 @@ class RunningSessionItem extends vscode.TreeItem {
     this.contextValue = session.sessionId
       ? 'codexTerminal.runningSession.bound'
       : 'codexTerminal.runningSession';
-    this.tooltip = buildTooltip(session, now, stallSeconds);
+    this.tooltip = buildTooltip(session, now, stallSeconds, rates);
     this.command = {
       command: 'codexTerminal.focusSession',
       title: strings.running.focusTitle(),
@@ -167,6 +169,7 @@ function buildTooltip(
   session: LiveSession,
   now: number,
   stallSeconds: number,
+  rates: RateTable | undefined,
 ): vscode.MarkdownString {
   const presentation = presentStatus(session.activity);
   const lines = [
@@ -189,6 +192,19 @@ function buildTooltip(
         Math.round(used * 100),
       )}`,
     );
+  }
+  const estimate = estimateCost(session.activity, rates);
+  if (estimate) {
+    if (estimate.usd === undefined) {
+      lines.push(`- ${strings.running.costUnpriced(estimate.model)}`);
+    } else {
+      lines.push(`- ${strings.running.cost(formatCost(estimate.usd), estimate.model)}`);
+      if (estimate.plan) {
+        // A subscription session is not billed per token at all, so presenting the figure as
+        // spend would be inventing a charge that nobody is making.
+        lines.push(`- ${strings.running.costOnPlan(estimate.plan)}`);
+      }
+    }
   }
   // Shown whatever the status, unlike the row: on an idle session the last step is the
   // answer to "what did it just do", which is the question a finished session raises.
@@ -223,6 +239,7 @@ export class ActionsViewProvider implements vscode.TreeDataProvider<ActionNode>,
     private readonly stallSeconds: () => number = () => DEFAULT_STALL_SECONDS,
     private readonly animate: () => boolean = () => true,
     private readonly names: () => SessionNames = () => ({}),
+    private readonly rates: () => RateTable | undefined = () => undefined,
   ) {
     this.monitorSubscription = monitor.onDidChange(() => this.changes.fire());
   }
@@ -242,6 +259,7 @@ export class ActionsViewProvider implements vscode.TreeDataProvider<ActionNode>,
         this.stallSeconds(),
         this.animate(),
         this.names(),
+        this.rates(),
       );
     }
     return new ActionItem(node);

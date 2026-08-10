@@ -14,6 +14,7 @@ import {
   type ActivityItem,
   type SessionActivity,
 } from './activity';
+import { estimateCost, formatCost, type RateTable } from './cost';
 
 /**
  * `~spin` is a codicon *modifier*: the workbench turns `loading~spin` into
@@ -136,6 +137,7 @@ export function describeActivity(
   activity: SessionActivity,
   now: number,
   stallSeconds = DEFAULT_STALL_SECONDS,
+  rates?: RateTable,
 ): string {
   const parts: string[] = [presentStatus(activity).label];
   // Only while working or silent. On an idle session the last step is history, and repeating
@@ -165,6 +167,12 @@ export function describeActivity(
   const used = contextUsed(activity);
   if (used !== undefined) {
     parts.push(`${Math.round(used * 100)}% context`);
+  }
+  // Only when the operator has priced the model. An unpriced session says so in the tooltip,
+  // where there is room to name the model, rather than putting a hole in the row.
+  const estimate = estimateCost(activity, rates);
+  if (estimate?.usd !== undefined) {
+    parts.push(formatCost(estimate.usd));
   }
   return parts.join(' · ');
 }

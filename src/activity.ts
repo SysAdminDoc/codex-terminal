@@ -57,6 +57,18 @@ export interface SessionActivity {
   abortReason?: string;
   totalTokens?: number;
   contextWindow?: number;
+  /** Billable input, cached input included — the rollout reports the total, not the remainder. */
+  inputTokens?: number;
+  cachedInputTokens?: number;
+  /** Output including reasoning tokens, which are billed as output. */
+  outputTokens?: number;
+  /** Model named by the most recent `turn_context`; a session can change model mid-flight. */
+  model?: string;
+  /**
+   * Subscription the turn was billed to, e.g. `pro`. Present means the tokens were not billed
+   * per token at all, which is the difference between an estimate and a fiction.
+   */
+  plan?: string;
   /** Highest `ordinal` folded in; rollout records are strictly ordered by it. */
   ordinal: number;
   /** Turns completed in this rollout. */
@@ -81,25 +93,50 @@ function epochMs(value: unknown): number | undefined {
   return typeof value === 'number' && Number.isFinite(value) ? value * 1000 : undefined;
 }
 
+function numberAt(record: Record<string, unknown> | undefined, key: string): number | undefined {
+  const value = record?.[key];
+  return typeof value === 'number' && Number.isFinite(value) ? value : undefined;
+}
+
+function objectAt(
+  record: Record<string, unknown> | undefined,
+  key: string,
+): Record<string, unknown> | undefined {
+  const value = record?.[key];
+  return typeof value === 'object' && value !== null
+    ? (value as Record<string, unknown>)
+    : undefined;
+}
+
 function tokensOf(payload: Record<string, unknown>): Pick<
   SessionActivity,
-  'totalTokens' | 'contextWindow'
+  | 'totalTokens'
+  | 'contextWindow'
+  | 'inputTokens'
+  | 'cachedInputTokens'
+  | 'outputTokens'
+  | 'plan'
 > {
-  const info = payload.info;
-  if (typeof info !== 'object' || info === null) {
+  const info = objectAt(payload, 'info');
+  if (!info) {
     return {};
   }
-  const record = info as Record<string, unknown>;
-  const usage = record.total_token_usage;
-  const total =
-    typeof usage === 'object' && usage !== null
-      ? (usage as Record<string, unknown>).total_tokens
-      : undefined;
+  const usage = objectAt(info, 'total_token_usage');
+  const total = numberAt(usage, 'total_tokens');
+  const input = numberAt(usage, 'input_tokens');
+  const cached = numberAt(usage, 'cached_input_tokens');
+  const output = numberAt(usage, 'output_tokens');
+  // `plan_type` rides on the rate-limit block beside the usage, not inside it.
+  const plan = objectAt(payload, 'rate_limits')?.plan_type;
   return {
-    ...(typeof total === 'number' ? { totalTokens: total } : {}),
-    ...(typeof record.model_context_window === 'number'
-      ? { contextWindow: record.model_context_window }
+    ...(total !== undefined ? { totalTokens: total } : {}),
+    ...(input !== undefined ? { inputTokens: input } : {}),
+    ...(cached !== undefined ? { cachedInputTokens: cached } : {}),
+    ...(output !== undefined ? { outputTokens: output } : {}),
+    ...(numberAt(info, 'model_context_window') !== undefined
+      ? { contextWindow: numberAt(info, 'model_context_window') }
       : {}),
+    ...(typeof plan === 'string' && plan ? { plan } : {}),
   };
 }
 
@@ -228,12 +265,25 @@ export function reduceActivityLine(state: SessionActivity, line: string): Sessio
   } catch {
     return state;
   }
-  if (record.type !== 'event_msg' || !record.payload) {
+  if (!record.payload) {
     return state;
   }
 
   const ordinal = typeof record.ordinal === 'number' ? record.ordinal : state.ordinal + 1;
   if (ordinal <= state.ordinal) {
+    return state;
+  }
+
+  // `turn_context` is a top-level record type rather than an `event_msg`, and it is the only
+  // place the model appears — `session_meta` names the provider but never the model. Ordinals
+  // are a single sequence across every record type, so folding it advances the same counter.
+  if (record.type === 'turn_context') {
+    const model = record.payload.model;
+    return typeof model === 'string' && model
+      ? { ...state, ordinal, model }
+      : { ...state, ordinal };
+  }
+  if (record.type !== 'event_msg') {
     return state;
   }
 

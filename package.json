@@ -481,6 +481,35 @@
           "default": true,
           "description": "%setting.showContextInStatusBar.description%"
         },
+        "codexTerminal.modelRates": {
+          "type": "object",
+          "default": {},
+          "markdownDescription": "%setting.modelRates.description%",
+          "additionalProperties": {
+            "type": "object",
+            "required": [
+              "input",
+              "output"
+            ],
+            "properties": {
+              "input": {
+                "type": "number",
+                "minimum": 0,
+                "description": "%setting.modelRates.input.description%"
+              },
+              "cachedInput": {
+                "type": "number",
+                "minimum": 0,
+                "description": "%setting.modelRates.cachedInput.description%"
+              },
+              "output": {
+                "type": "number",
+                "minimum": 0,
+                "description": "%setting.modelRates.output.description%"
+              }
+            }
+          }
+        },
         "codexTerminal.stallSeconds": {
           "type": "integer",
           "minimum": 5,
