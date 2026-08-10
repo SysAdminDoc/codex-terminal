@@ -137,6 +137,7 @@ export const strings = {
         preview,
       ),
     copied: (id: string): string => vscode.l10n.t('Copied session id {0}', id),
+    opened: (id: string): string => vscode.l10n.t('opened the transcript for session {0}', id),
     exported: (entries: number): string =>
       vscode.l10n.t('Exported {0} transcript entries.', entries),
     exportTruncated: (): string =>

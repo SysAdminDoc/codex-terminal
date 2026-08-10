@@ -1,5 +1,6 @@
 import * as assert from 'node:assert/strict';
-import { readFile } from 'node:fs/promises';
+import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
 import * as path from 'node:path';
 import * as vscode from 'vscode';
 import { suite, test } from 'mocha';
@@ -152,6 +153,46 @@ suite('Codex Terminal hostile settings integration', () => {
     } finally {
       first.dispose();
       second.dispose();
+    }
+  });
+
+  test('a transcript opens read-only, never dirty, and reuses its document', async () => {
+    // The point of the content provider is behaviour no type check can see: an untitled
+    // buffer is dirty from birth and prompts to save on close, and opening the same session
+    // twice used to produce two unrelated documents.
+    const directory = await mkdtemp(path.join(tmpdir(), 'codex-transcript-'));
+    const rollout = path.join(directory, 'rollout-test.jsonl');
+    await writeFile(
+      rollout,
+      [
+        JSON.stringify({
+          type: 'session_meta',
+          payload: { id: 'abc123', timestamp: '2026-08-10T00:00:00.000Z', cwd: directory },
+        }),
+        JSON.stringify({
+          type: 'response_item',
+          payload: { type: 'message', role: 'user', content: [{ text: 'hello from the fixture' }] },
+        }),
+      ].join('\n'),
+      'utf8',
+    );
+
+    const uri = vscode.Uri.from({
+      scheme: 'codex-transcript',
+      path: '/abc123.md',
+      query: new URLSearchParams({ path: rollout, project: 'fixture' }).toString(),
+    });
+    try {
+      const document = await vscode.workspace.openTextDocument(uri);
+      assert.equal(document.languageId, 'markdown', 'the .md path is what sets the language');
+      assert.equal(document.isDirty, false, 'a transcript must never ask to be saved');
+      assert.equal(document.isUntitled, false);
+      assert.match(document.getText(), /hello from the fixture/);
+
+      const again = await vscode.workspace.openTextDocument(uri);
+      assert.equal(again, document, 'the same session must resolve to the same document');
+    } finally {
+      await rm(directory, { recursive: true, force: true });
     }
   });
 

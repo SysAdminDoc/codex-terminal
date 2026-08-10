@@ -29,7 +29,6 @@ import {
   codexHomeDirectory,
   codexSessionsDirectory,
   discoverSessions,
-  exportTranscript,
   sessionProject,
   type SessionRecord,
 } from './sessions';
@@ -55,6 +54,11 @@ import {
   titleItemsArgs,
 } from './workbench';
 import { HistoryViewProvider, isRecoveryNode, isSessionNode } from './historyView';
+import {
+  TRANSCRIPT_SCHEME,
+  TranscriptContentProvider,
+  transcriptUri,
+} from './transcriptDocument';
 
 const PWSH_PROBE = [
   'C:\\Program Files\\PowerShell\\7\\pwsh.exe',
@@ -69,6 +73,7 @@ let extensionContext: vscode.ExtensionContext | undefined;
 let notifyBridge: NotifyBridge | undefined;
 let historyViewProvider: HistoryViewProvider | undefined;
 let sessionMonitor: SessionMonitor | undefined;
+let transcriptProvider: TranscriptContentProvider | undefined;
 
 export interface CodexTerminalExtensionApi {
   getActionCount: () => number;
@@ -581,17 +586,13 @@ async function openTranscript(node: unknown): Promise<void> {
     return;
   }
   try {
-    const result = await exportTranscript(node.session.filePath, node.project);
-    const document = await vscode.workspace.openTextDocument({
-      language: 'markdown',
-      content: result.markdown,
-    });
+    const uri = transcriptUri(node.session.id, node.session.filePath, node.project);
+    // Re-read before showing: a session being read is very often still being written, and
+    // the alternative is a stale document that looks current.
+    transcriptProvider?.refresh(uri);
+    const document = await vscode.workspace.openTextDocument(uri);
     await vscode.window.showTextDocument(document, { preview: true });
-    if (result.truncated) {
-      void vscode.window.showWarningMessage(strings.history.exportTruncated());
-    } else {
-      log.info(strings.history.exported(result.entryCount));
-    }
+    log.info(strings.history.opened(node.session.id));
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     log.error(strings.history.exportFailed(message));
@@ -1070,6 +1071,12 @@ export async function activate(context: vscode.ExtensionContext): Promise<CodexT
     historyWatcher.onDidDelete(() => historyViewProvider?.scheduleRefresh(true)),
   );
 
+  transcriptProvider = new TranscriptContentProvider();
+  context.subscriptions.push(
+    transcriptProvider,
+    vscode.workspace.registerTextDocumentContentProvider(TRANSCRIPT_SCHEME, transcriptProvider),
+  );
+
   createStatusBarItem(context, monitor);
 
   // Worth logging: with `workbench.statusBar.visible: false` the status bar item is created
@@ -1098,6 +1105,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<CodexT
         notifyBridge?.dispose();
         notifyBridge = undefined;
         historyViewProvider = undefined;
+        transcriptProvider = undefined;
         extensionContext = undefined;
       },
     },

@@ -39,6 +39,13 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
+- Transcripts open as read-only virtual documents instead of untitled buffers. Every open used
+  to create a dirty buffer that asked to be saved on close — a file you never wrote — and the
+  same session opened twice produced two unrelated documents. They now open on a
+  `codex-transcript:` URI keyed by session id: read-only, re-opening lands on the tab already
+  there, and re-reading in place is possible for a session still being written. A truncated
+  export says so in a footer at the end of the text rather than in a notification that has
+  since disappeared.
 - Crash recovery is now offered without being asked for. The extension previously did not run
   until you opened its view or invoked a command, so after the crash this feature exists for,
   the editor reopened and said nothing. It now activates on `onStartupFinished` — the slot
