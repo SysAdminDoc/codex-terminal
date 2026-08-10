@@ -1,92 +1,56 @@
-import { existsSync, readdirSync } from 'node:fs';
 import * as path from 'node:path';
 import * as vscode from 'vscode';
 
-import {
-  buildLaunchPlan,
-  modeArgs,
-  profileArgs,
-  resolveCommandPath,
-  type LaunchMode,
-  type LaunchRequest,
-  type ShellKind,
-} from './launcher';
-import { buildFileReference } from './reference';
 import { ActionsViewProvider } from './actionsView';
-import { TerminalRegistry, terminalLaunchKey } from './terminals';
-import { collectDoctorReport, runCommand } from './doctor';
-import { codexProfilesDirectory, profileNamesFromFiles } from './profiles';
-import { NotifyBridge } from './notify';
-import { SessionMonitor } from './monitor';
-import { JournalStore, findLaunch, interruptedSessions, type JournalSession } from './journal';
+import { askAboutSelection, runDoctor, sendFileReference } from './editorCommands';
+import { HistoryViewProvider } from './historyView';
 import {
-  DEFAULT_STALL_SECONDS,
-  describeActivity,
-  motionAllowed,
-  peakContextUsed,
-  pickerOrder,
-  presentStatus,
-  statusBarText,
-} from './present';
+  copyHistorySessionId,
+  forkHistorySession,
+  nameSession,
+  openRawHistorySession,
+  openTranscript,
+  resumeHistorySession,
+  runSessionLifecycle,
+  searchHistory,
+  sessionNames,
+} from './historyCommands';
+import { JournalStore } from './journal';
 import {
-  codexHomeDirectory,
-  codexSessionsDirectory,
-  discoverSessions,
-  sessionProject,
-  type SessionRecord,
-} from './sessions';
-import { idForName, setSessionName, type SessionNames } from './names';
-import { strings } from './strings';
+  focusCodex,
+  launch,
+  launchWithProfile,
+  preflightCodexCommand,
+  readLaunchRequest,
+  resumeFromSessionPicker,
+  syncNotifyBridge,
+  terminalOptions,
+} from './launch';
 import { migrateSettings, type MigrationTarget } from './migrate';
+import { SessionMonitor } from './monitor';
+import { DEFAULT_STALL_SECONDS } from './present';
 import {
-  DEFAULT_TERMINAL_NAME_TEMPLATE,
-  DEFAULT_TITLE_ITEMS,
-  LAUNCH_KEY_ENV_VAR,
-  OWNERSHIP_ENV_VAR,
-  projectName,
-  renderTerminalName,
-  type TabTitleMode,
-} from './naming';
+  adoptSurvivingTerminals,
+  dismissRecovery,
+  offerRecovery,
+  restoreAllSessions,
+  restoreSession,
+} from './recovery';
 import {
-  AGENT_CLI_TITLE_SETTING,
-  CONFIRM_ON_KILL_SETTING,
-  KNOWN_TITLE_ITEMS,
-  partitionTitleItems,
-  planAgentCliTitle,
-  planConfirmOnKill,
-  planRestore,
-  planTabDescription,
-  recordOverrides,
-  titleItemsArgs,
-  type OverrideLedger,
-  type SettingChange,
-} from './workbench';
-import { HistoryViewProvider, isRecoveryNode, isSessionNode } from './historyView';
-import { isRunningSessionNode } from './actionsView';
-import {
-  TRANSCRIPT_SCHEME,
-  TranscriptContentProvider,
-  transcriptUri,
-} from './transcriptDocument';
-
-const PWSH_PROBE = [
-  'C:\\Program Files\\PowerShell\\7\\pwsh.exe',
-  'C:\\Program Files (x86)\\PowerShell\\7\\pwsh.exe',
-  'C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe',
-];
-const CODEX_INSTALL_URL = 'https://github.com/openai/codex#installation';
-/** `globalState` key holding what the workbench settings looked like before we touched them. */
-const OVERRIDE_LEDGER_KEY = 'codexTerminal.workbenchOverrides';
-/** `globalState` key for the operator's own names, keyed by Codex session id. */
-const SESSION_NAMES_KEY = 'codexTerminal.sessionNames';
-
-let log: vscode.LogOutputChannel;
-let terminalRegistry: TerminalRegistry | undefined;
-let extensionContext: vscode.ExtensionContext | undefined;
-let notifyBridge: NotifyBridge | undefined;
-let historyViewProvider: HistoryViewProvider | undefined;
-let sessionMonitor: SessionMonitor | undefined;
-let transcriptProvider: TranscriptContentProvider | undefined;
+  animationAllowed,
+  clearServices,
+  config,
+  peekServices,
+  setServices,
+  type ExtensionServices,
+} from './services';
+import { applyWorkbenchPreferences, revertWorkbenchPreferences } from './settingsSync';
+import { codexHomeDirectory, codexSessionsDirectory } from './sessions';
+import { createStatusBarItem } from './statusBar';
+import { strings } from './strings';
+import { TerminalRegistry } from './terminals';
+import { TRANSCRIPT_SCHEME, TranscriptContentProvider } from './transcriptDocument';
+import { AGENT_CLI_TITLE_SETTING, CONFIRM_ON_KILL_SETTING } from './workbench';
 
 export interface CodexTerminalExtensionApi {
   getActionCount: () => number;
@@ -110,567 +74,6 @@ export interface CodexTerminalExtensionApi {
  * `terminal.integrated.tabs.description`, which `applyWorkbenchPreferences` ensures.
  */
 
-function config(): vscode.WorkspaceConfiguration {
-  return vscode.workspace.getConfiguration('codexTerminal');
-}
-
-/** Honour the editor's reduced-motion preference for the animated indicators. */
-function animationAllowed(): boolean {
-  return motionAllowed(
-    vscode.workspace.getConfiguration('workbench').get<string>('reduceMotion', 'auto'),
-  );
-}
-
-function tabTitleMode(): TabTitleMode {
-  return config().get<TabTitleMode>('tabTitle', 'live') === 'static' ? 'static' : 'live';
-}
-
-async function syncNotifyBridge(): Promise<void> {
-  const enabled = config().get<boolean>('notifyOnCompletion', false);
-  if (!enabled) {
-    notifyBridge?.dispose();
-    notifyBridge = undefined;
-    return;
-  }
-  if (notifyBridge || !extensionContext) {
-    return;
-  }
-
-  const workspaceName =
-    vscode.workspace.name ?? vscode.workspace.workspaceFolders?.[0]?.name ?? 'workspace';
-  const bridge = new NotifyBridge({
-    directory: path.join(extensionContext.globalStorageUri.fsPath, 'notify'),
-    executable: process.execPath,
-    workspaceName,
-    onTurnEnded: (event) => {
-      historyViewProvider?.refresh();
-      void vscode.window.showInformationMessage(strings.notifications.turnCompleted(event.workspace));
-    },
-  });
-  try {
-    await bridge.start();
-    notifyBridge = bridge;
-    log.info(strings.notifications.notificationsEnabled(workspaceName));
-  } catch (error) {
-    bridge.dispose();
-    const message = error instanceof Error ? error.message : String(error);
-    log.error(strings.notifications.enableFailed(message));
-  }
-}
-
-function readLaunchRequest(mode: LaunchMode, profile?: string, sessionId?: string): LaunchRequest {
-  const cfg = config();
-  const titleItems = cfg.get<string[]>('titleItems', [...DEFAULT_TITLE_ITEMS]);
-  // Codex drops identifiers it does not recognise without complaining, so an unknown item
-  // silently costs the user part of their tab title. Say so once, at launch.
-  const { unknown } = partitionTitleItems(titleItems);
-  if (unknown.length > 0) {
-    log.warn(strings.logs.unknownTitleItems(unknown.join(', '), KNOWN_TITLE_ITEMS.join(', ')));
-  }
-  return {
-    shell: cfg.get<ShellKind>('shell', 'auto'),
-    customShellPath: cfg.get<string>('customShellPath', ''),
-    command: cfg.get<string>('command', 'codex'),
-    args: [
-      ...modeArgs(mode),
-      ...(sessionId ? [sessionId] : []),
-      ...(profile ? profileArgs(profile) : []),
-      ...cfg.get<string[]>('args', []),
-      // Codex writes this title through OSC sequences. The activity item is a live
-      // spinner while it is working and the project item is derived from the repo root.
-      ...titleItemsArgs(titleItems),
-      ...(notifyBridge?.launchArgs() ?? []),
-    ],
-    keepShellOpen: cfg.get<boolean>('keepShellOpen', true),
-    platform: process.platform,
-    availableShells: PWSH_PROBE.filter((p) => existsSync(p)),
-  };
-}
-
-async function resolveCwd(): Promise<string | undefined> {
-  const mode = config().get<string>('cwd', 'activeFileWorkspaceFolder');
-  const folders = vscode.workspace.workspaceFolders;
-  const activeUri = vscode.window.activeTextEditor?.document.uri;
-
-  if (mode === 'activeFileFolder' && activeUri?.scheme === 'file') {
-    return path.dirname(activeUri.fsPath);
-  }
-  if (mode === 'activeFileWorkspaceFolder' && activeUri) {
-    const folder = vscode.workspace.getWorkspaceFolder(activeUri);
-    if (folder) {
-      return folder.uri.fsPath;
-    }
-  }
-  if (mode === 'prompt' && folders && folders.length > 1) {
-    const selected = await vscode.window.showQuickPick(
-      folders.map((folder) => ({ label: folder.name, description: folder.uri.fsPath, folder })),
-      {
-        placeHolder: strings.folders.prompt(),
-        ignoreFocusOut: true,
-      },
-    );
-    return selected?.folder.uri.fsPath;
-  }
-  return folders?.[0]?.uri.fsPath;
-}
-
-function resolveLocation(): vscode.TerminalOptions['location'] {
-  switch (config().get<string>('location', 'editor')) {
-    case 'panel':
-      return vscode.TerminalLocation.Panel;
-    case 'editorBeside':
-      return { viewColumn: vscode.ViewColumn.Beside };
-    case 'editor':
-    default:
-      return { viewColumn: vscode.ViewColumn.Active };
-  }
-}
-
-function iconColor(): vscode.ThemeColor | undefined {
-  const id = config().get<string>('iconColor', 'terminal.ansiMagenta').trim();
-  return id ? new vscode.ThemeColor(id) : undefined;
-}
-
-interface LaunchOptions {
-  mode: LaunchMode;
-  profile?: string;
-  sessionId?: string;
-  /** Overrides the resolved workspace cwd, so a saved chat resumes where it was written. */
-  cwd?: string;
-  /**
-   * Journal key for this launch, stamped into the terminal environment so a window reload
-   * can find the conversation again. Absent for the contributed terminal profile, whose
-   * terminal the terminal service owns and which this extension never tracks.
-   */
-  launchKey?: string;
-}
-
-/** Shared between the commands and the contributed terminal profile. */
-async function terminalOptions(
-  request: LaunchOptions,
-  withLocation: boolean,
-): Promise<{
-  options: vscode.TerminalOptions;
-  plan: ReturnType<typeof buildLaunchPlan>;
-  cwd?: string;
-  project: string;
-  label: string;
-}> {
-  const { mode, profile, sessionId } = request;
-  const plan = buildLaunchPlan(readLaunchRequest(mode, profile, sessionId));
-  const cfg = config();
-  const baseName = cfg.get<string>('terminalName', 'Codex');
-  const cwd = request.cwd ?? (await resolveCwd());
-  const workspaceFolder = cwd
-    ? vscode.workspace.getWorkspaceFolder(vscode.Uri.file(cwd))?.name
-    : undefined;
-  const nameContext = { name: baseName, cwd, workspaceFolder, mode, profile, sessionId };
-  const label = renderTerminalName(DEFAULT_TERMINAL_NAME_TEMPLATE, nameContext);
-
-  const options: vscode.TerminalOptions = {
-    cwd,
-    env: {
-      ...cfg.get<Record<string, string>>('env', {}),
-      [OWNERSHIP_ENV_VAR]: '1',
-      ...(request.launchKey ? { [LAUNCH_KEY_ENV_VAR]: request.launchKey } : {}),
-    },
-    iconPath: new vscode.ThemeIcon('sparkle'),
-    color: iconColor(),
-    isTransient: false,
-  };
-
-  // Only `static` names the terminal. Naming it is what stops the workbench subscribing to
-  // the process title, so `live` says nothing at all and lets Codex own the tab text.
-  if (tabTitleMode() === 'static') {
-    options.name = label;
-  }
-
-  if (withLocation) {
-    options.location = resolveLocation();
-  }
-  if (plan.shellPath) {
-    options.shellPath = plan.shellPath;
-    options.shellArgs = plan.shellArgs;
-  }
-  log.info(
-    strings.logs.launch(
-      mode,
-      plan.shellPath ?? '<editor default>',
-      JSON.stringify(plan.shellArgs),
-      String(options.cwd ?? '<none>'),
-      plan.sendTextFallback ? JSON.stringify(plan.sendTextFallback) : '',
-    ),
-  );
-  if (plan.shellResolutionReason) {
-    log.info(strings.logs.shellResolution(plan.shellResolutionReason));
-  }
-  return { options, plan, cwd, project: projectName(nameContext), label };
-}
-
-function preflightCodexCommand(command: string): string | undefined {
-  const resolved = resolveCommandPath(command, {
-    platform: process.platform,
-    pathValue: process.env.PATH,
-    cwd: process.cwd(),
-  });
-  if (resolved) {
-    log.info(strings.logs.commandPreflightPassed(JSON.stringify(command), resolved));
-    return resolved;
-  }
-
-  const message = strings.errors.missingCommand(command);
-  log.error(message);
-  void vscode.window
-    .showErrorMessage(message, strings.errors.showLog(), strings.errors.install())
-    .then((choice) => {
-      if (choice === strings.errors.showLog()) {
-        log.show(true);
-      } else if (choice === strings.errors.install()) {
-        void vscode.env.openExternal(vscode.Uri.parse(CODEX_INSTALL_URL));
-      }
-    });
-  return undefined;
-}
-
-function liveOwnedTerminal(): vscode.Terminal | undefined {
-  const live = sessionMonitor?.live() ?? [];
-  return live.length > 0 ? live[live.length - 1].terminal : undefined;
-}
-
-async function launch(request: LaunchOptions): Promise<void> {
-  try {
-    await syncNotifyBridge();
-    if (
-      request.mode === 'new' &&
-      !request.profile &&
-      config().get<boolean>('reuseTerminal', false)
-    ) {
-      const existing = liveOwnedTerminal();
-      if (existing) {
-        existing.show(false);
-        return;
-      }
-    }
-
-    const launchRequest = readLaunchRequest(request.mode, request.profile, request.sessionId);
-    if (!preflightCodexCommand(launchRequest.command)) {
-      return;
-    }
-
-    // Reserved before the terminal exists: the key has to be in the environment at creation,
-    // and the journal has to record the same one, or a reload finds nothing to match.
-    const launchKey = sessionMonitor?.nextLaunchKey();
-    const { options, plan, cwd, project, label } = await terminalOptions(
-      { ...request, launchKey },
-      true,
-    );
-    const terminal = vscode.window.createTerminal(options);
-    if (cwd) {
-      sessionMonitor?.track(terminal, {
-        cwd,
-        project,
-        label,
-        mode: request.mode,
-        profile: request.profile,
-        sessionId: request.sessionId,
-        key: launchKey,
-      });
-    }
-    terminal.show(false);
-
-    if (plan.sendTextFallback) {
-      // editorDefault only: no shell of our own to hand arguments to.
-      terminal.sendText(plan.sendTextFallback, true);
-    }
-  } catch (error) {
-    reportError(error, strings.errors.couldNotStart());
-  }
-}
-
-function discoveredProfiles(): string[] {
-  try {
-    return profileNamesFromFiles(
-      readdirSync(codexProfilesDirectory(), { withFileTypes: true })
-        .filter((entry) => entry.isFile())
-        .map((entry) => entry.name),
-    );
-  } catch {
-    return [];
-  }
-}
-
-async function launchWithProfile(): Promise<void> {
-  const freeTextItem: vscode.QuickPickItem = {
-    label: strings.profiles.freeText(),
-    description: strings.profiles.freeTextDescription(),
-  };
-  const items: vscode.QuickPickItem[] = [
-    ...discoveredProfiles().map((name) => ({
-      label: name,
-      description: strings.profiles.argument(name),
-    })),
-    freeTextItem,
-  ];
-  const selected = await vscode.window.showQuickPick(items, {
-    placeHolder: strings.profiles.prompt(),
-    ignoreFocusOut: true,
-  });
-  if (!selected) {
-    return;
-  }
-  const profile =
-    selected === freeTextItem
-      ? await vscode.window.showInputBox({
-          prompt: strings.profiles.inputPrompt(),
-          placeHolder: strings.profiles.inputPlaceholder(),
-          ignoreFocusOut: true,
-        })
-      : selected.label;
-  if (!profile?.trim()) {
-    return;
-  }
-  void launch({ mode: 'new', profile: profile.trim() });
-}
-
-async function resumeFromSessionPicker(): Promise<void> {
-  const sessions = await discoverSessions({ homeDirectory: codexHomeDirectory() });
-  if (sessions.length === 0) {
-    void launch({ mode: 'resumePicker' });
-    return;
-  }
-
-  const items = sessions.map((session: SessionRecord) => ({
-    label: session.preview || strings.history.noPrompt(),
-    description: sessionProject(session),
-    detail: strings.sessions.resumeLabel(
-      new Date(session.timestamp).toLocaleString(),
-      session.id.slice(0, 8),
-    ),
-    session,
-  }));
-  const selected = await vscode.window.showQuickPick(items, {
-    placeHolder: strings.sessions.prompt(),
-    matchOnDescription: true,
-    matchOnDetail: true,
-    ignoreFocusOut: true,
-  });
-  if (selected) {
-    void launch({
-      mode: 'resumePicker',
-      sessionId: selected.session.id,
-      cwd: selected.session.cwd || undefined,
-    });
-  }
-}
-
-function reportError(error: unknown, headline: string): void {
-  const message = error instanceof Error ? error.message : String(error);
-  const report = strings.errors.withDetail(headline, message);
-  log.error(report);
-  void vscode.window
-    .showErrorMessage(report, strings.errors.showLog())
-    .then((choice) => {
-      if (choice === strings.errors.showLog()) {
-        log.show(true);
-      }
-    });
-}
-
-async function runDoctor(): Promise<void> {
-  try {
-    const request = readLaunchRequest('new');
-    const statusBarVisible = vscode.workspace
-      .getConfiguration('workbench')
-      .get<boolean>('statusBar.visible', true);
-    const editorTitleButtonCanRender =
-      config().get<boolean>('showEditorTitleButton', true) &&
-      vscode.window.activeTextEditor !== undefined;
-    const cwd = await resolveCwd();
-    const titleItems = config().get<string[]>('titleItems', [...DEFAULT_TITLE_ITEMS]);
-    // `codex doctor` walks the whole rollout store; 38s against 2 GB is normal and grows.
-    // Without progress this looks like a command that did nothing.
-    const report = await vscode.window.withProgress(
-      { location: vscode.ProgressLocation.Notification, title: strings.doctor.running() },
-      () =>
-        collectDoctorReport({
-          request,
-          cwd,
-          statusBarVisible,
-          editorTitleButtonCanRender,
-          titleItems,
-        }),
-    );
-    const text = strings.doctor.report(report);
-    log.info(text);
-    const choice = await vscode.window.showInformationMessage(text, strings.errors.showLog());
-    if (choice === strings.errors.showLog()) {
-      log.show(true);
-    }
-  } catch (error) {
-    reportError(error, strings.errors.couldNotRunDoctor());
-  }
-}
-
-/** The `@path#L10-L20` for what is selected right now, with the terminal to send it to. */
-function resolveReferenceTarget():
-  | { reference: string; terminal: vscode.Terminal }
-  | undefined {
-  const editor = vscode.window.activeTextEditor;
-  if (!editor) {
-    void vscode.window.showWarningMessage(strings.warnings.noEditor());
-    return undefined;
-  }
-  const terminal = liveOwnedTerminal() ?? vscode.window.activeTerminal;
-  if (!terminal) {
-    void vscode.window.showWarningMessage(strings.warnings.noTerminal());
-    return undefined;
-  }
-
-  const uri = editor.document.uri;
-  const folder = vscode.workspace.getWorkspaceFolder(uri);
-  const relativePath = folder ? path.relative(folder.uri.fsPath, uri.fsPath) : uri.fsPath;
-  const selection = editor.selection;
-  return {
-    terminal,
-    reference: buildFileReference({
-      relativePath,
-      selection: selection.isEmpty
-        ? undefined
-        : { startLine: selection.start.line, endLine: selection.end.line },
-    }),
-  };
-}
-
-/**
- * Put the reference on the prompt and stop, so the question can be typed after it.
- *
- * Kept exactly as it was. It is the right command when the question is easier to type in the
- * terminal — with Codex's own completion and history — than in a modal input box.
- */
-function sendFileReference(): void {
-  const target = resolveReferenceTarget();
-  if (!target) {
-    return;
-  }
-  const { reference, terminal } = target;
-  terminal.show(false);
-  // `false` leaves the reference on the prompt so a question can be typed after it.
-  terminal.sendText(`${reference} `, false);
-  log.info(strings.logs.sentReference(reference));
-}
-
-/**
- * The status bar's click target.
- *
- * With one live session this focuses it, as it always did. With several it asks which,
- * because the status bar advertises a count and then silently picked the most recent one —
- * a coin flip precisely when several agents are running, which is when the button matters.
- */
-async function focusCodex(): Promise<void> {
-  const sessions = sessionMonitor?.live() ?? [];
-  if (sessions.length === 0) {
-    void launch({ mode: 'new' });
-    return;
-  }
-  if (sessions.length === 1) {
-    sessions[0].terminal.show(false);
-    return;
-  }
-
-  const now = Date.now();
-  const stallSeconds = config().get<number>('stallSeconds', DEFAULT_STALL_SECONDS);
-  const animate = animationAllowed();
-  const picked = await vscode.window.showQuickPick(
-    pickerOrder(sessions).map((session) => ({
-      label: `$(${presentStatus(session.activity, animate).icon}) ${session.project || session.label}`,
-      description: describeActivity(session.activity, now, stallSeconds),
-      detail: session.cwd,
-      session,
-    })),
-    {
-      placeHolder: strings.sessions.focusPrompt(sessions.length),
-      matchOnDescription: true,
-      matchOnDetail: true,
-    },
-  );
-  picked?.session.terminal.show(false);
-}
-
-/**
- * Reference plus question, submitted in one step.
- *
- * The reference-only command deliberately stops at the prompt, which means finding the right
- * terminal and typing there. This is the path for when the question is already in your head
- * while you are looking at the code: ask it here, and the whole line is submitted.
- */
-async function askAboutSelection(): Promise<void> {
-  const target = resolveReferenceTarget();
-  if (!target) {
-    return;
-  }
-  const question = await vscode.window.showInputBox({
-    prompt: strings.reference.askPrompt(target.reference),
-    placeHolder: strings.reference.askPlaceholder(),
-    ignoreFocusOut: true,
-  });
-  // Cancelled, or nothing typed: submitting a bare reference would start a turn asking
-  // Codex nothing at all.
-  if (!question?.trim()) {
-    return;
-  }
-
-  const line = `${target.reference} ${question.trim()}`;
-  target.terminal.show(false);
-  target.terminal.sendText(line, true);
-  log.info(strings.logs.sentReference(line));
-}
-
-function sessionNames(): SessionNames {
-  return extensionContext?.globalState.get<SessionNames>(SESSION_NAMES_KEY) ?? {};
-}
-
-/**
- * Name a session, from either tree.
- *
- * The name is the extension's own: Codex accepts a session name wherever it accepts an id,
- * but its CLI has no way to *set* one (0.147 has no rename subcommand and no flag), so the
- * only writer is `app-server`'s `thread/name/set`, which is not yet spoken here. A local name
- * still does the job names are for — telling several running agents apart — and resume works
- * because the name resolves to an id before the command is built.
- */
-async function nameSession(node: unknown): Promise<void> {
-  const session = isSessionNode(node)
-    ? { id: node.session.id, fallback: node.session.preview ?? node.project }
-    : isRunningSessionNode(node) && node.session.sessionId
-      ? { id: node.session.sessionId, fallback: node.session.project || node.session.label }
-      : undefined;
-  if (!session) {
-    void vscode.window.showWarningMessage(strings.names.notBound());
-    return;
-  }
-
-  const names = sessionNames();
-  const typed = await vscode.window.showInputBox({
-    prompt: strings.names.prompt(session.fallback),
-    placeHolder: strings.names.placeholder(),
-    value: names[session.id] ?? '',
-    ignoreFocusOut: true,
-  });
-  if (typed === undefined) {
-    return;
-  }
-
-  const clash = idForName(names, typed);
-  if (clash && clash !== session.id) {
-    void vscode.window.showWarningMessage(strings.names.duplicate(typed.trim()));
-    return;
-  }
-
-  await extensionContext?.globalState.update(SESSION_NAMES_KEY, setSessionName(names, session.id, typed));
-  historyViewProvider?.refresh();
-  sessionMonitor?.refreshViews();
-}
-
 function focusSession(terminal: vscode.Terminal | undefined): void {
   if (terminal && terminal.exitStatus === undefined) {
     terminal.show(false);
@@ -681,372 +84,10 @@ function stopSession(terminal: vscode.Terminal | undefined): void {
   terminal?.dispose();
 }
 
-function settingText(value: unknown): string {
-  return value === undefined ? strings.workbench.unset() : JSON.stringify(value);
-}
-
-/**
- * The terminal API has no per-terminal close-confirmation switch. These settings are the
- * editor's supported controls for the requested behaviour and for Codex's live OSC title:
- * `${sequence}` in the tab description is what surfaces that title on hosts that ignore
- * the per-terminal template, and it is the reason a working tab shows Codex's spinner.
- */
-async function applyWorkbenchPreferences(): Promise<void> {
-  const root = vscode.workspace.getConfiguration();
-  // Kept as full `SettingChange`s rather than key/value pairs: `from` is what makes the
-  // change reversible, and discarding it here is what left these settings permanent.
-  const changes: SettingChange[] = [];
-  const confirmOnKill = planConfirmOnKill(root.get<string>(CONFIRM_ON_KILL_SETTING, 'editor'));
-  if (confirmOnKill) {
-    changes.push(confirmOnKill);
-  }
-  const agentCliTitle = planAgentCliTitle(
-    root.get<boolean>(AGENT_CLI_TITLE_SETTING, true),
-  );
-  if (agentCliTitle) {
-    changes.push(agentCliTitle);
-  }
-  if (tabTitleMode() === 'live') {
-    const description = planTabDescription(
-      root.get<string>('terminal.integrated.tabs.description'),
-    );
-    if (description) {
-      changes.push(description);
-    }
-  }
-
-  const applied: SettingChange[] = [];
-  for (const change of changes) {
-    // `agentCliTitle` is a boolean setting whose plan carries a string; write the real type.
-    const value = change.key === AGENT_CLI_TITLE_SETTING ? change.to === 'true' : change.to;
-    try {
-      await root.update(change.key, value, vscode.ConfigurationTarget.Global);
-      log.info(strings.workbench.applied(change.key, settingText(change.from), settingText(value)));
-      applied.push(change);
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      log.warn(strings.workbench.failed(change.key, message));
-    }
-  }
-  if (applied.length === 0) {
-    return;
-  }
-
-  // Recorded before the operator is told, so the offer to undo is one this can honour even
-  // if the notification is dismissed and the command is run days later.
-  await extensionContext?.globalState.update(
-    OVERRIDE_LEDGER_KEY,
-    recordOverrides(readOverrideLedger(), applied),
-  );
-  // A notification, not a dialog: these settings are required for the tab to work, so this
-  // announces a change rather than asking permission for one. It appears only when something
-  // actually changed, which after the first window is never.
-  const choice = await vscode.window.showInformationMessage(
-    strings.workbench.announced(applied.map((change) => change.key).join(', ')),
-    strings.workbench.revert(),
-    strings.errors.showLog(),
-  );
-  if (choice === strings.workbench.revert()) {
-    await revertWorkbenchPreferences();
-  } else if (choice === strings.errors.showLog()) {
-    log.show(true);
-  }
-}
-
-function readOverrideLedger(): OverrideLedger {
-  return extensionContext?.globalState.get<OverrideLedger>(OVERRIDE_LEDGER_KEY) ?? {};
-}
-
-/**
- * Give back every workbench setting this extension changed.
- *
- * Restores the recorded prior value where the setting still holds what was written, and
- * leaves a setting the operator has since edited alone — except the tab description, where
- * only the appended token is removed so the rest of their template survives.
- */
-async function revertWorkbenchPreferences(): Promise<void> {
-  const ledger = readOverrideLedger();
-  const records = Object.values(ledger);
-  if (records.length === 0) {
-    void vscode.window.showInformationMessage(strings.workbench.nothingToRevert());
-    return;
-  }
-
-  const root = vscode.workspace.getConfiguration();
-  const reverted: string[] = [];
-  for (const record of records) {
-    const current = root.get<unknown>(record.key);
-    const restore = planRestore(record, current === undefined ? undefined : String(current));
-    if (!restore) {
-      log.info(strings.workbench.skippedRevert(record.key));
-      continue;
-    }
-    try {
-      // `undefined` removes the global override rather than writing an empty value.
-      await root.update(restore.key, restore.to, vscode.ConfigurationTarget.Global);
-      log.info(strings.workbench.reverted(restore.key, settingText(restore.to)));
-      reverted.push(restore.key);
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      log.warn(strings.workbench.failed(restore.key, message));
-    }
-  }
-
-  await extensionContext?.globalState.update(OVERRIDE_LEDGER_KEY, undefined);
-  void vscode.window.showInformationMessage(
-    reverted.length > 0
-      ? strings.workbench.revertedAll(reverted.join(', '))
-      : strings.workbench.nothingToRevert(),
-  );
-}
-
-async function openTranscript(node: unknown): Promise<void> {
-  if (!isSessionNode(node)) {
-    return;
-  }
-  try {
-    const uri = transcriptUri(node.session.id, node.session.filePath, node.project);
-    // Re-read before showing: a session being read is very often still being written, and
-    // the alternative is a stale document that looks current.
-    transcriptProvider?.refresh(uri);
-    const document = await vscode.workspace.openTextDocument(uri);
-    await vscode.window.showTextDocument(document, { preview: true });
-    log.info(strings.history.opened(node.session.id));
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    log.error(strings.history.exportFailed(message));
-    void vscode.window.showErrorMessage(strings.history.exportFailed(message));
-  }
-}
-
-/** Resume in the directory the conversation was written in, not the current workspace. */
-function resumeHistorySession(node: unknown): void {
-  if (isSessionNode(node)) {
-    void launch({
-      mode: 'resumePicker',
-      sessionId: node.session.id,
-      cwd: node.session.cwd || undefined,
-    });
-  }
-}
-
-/** Fork the chosen conversation into a new session, in the directory it was written in. */
-function forkHistorySession(node: unknown): void {
-  if (isSessionNode(node)) {
-    void launch({
-      mode: 'forkPicker',
-      sessionId: node.session.id,
-      cwd: node.session.cwd || undefined,
-    });
-  }
-}
-
-function restoreJournalSession(session: JournalSession): void {
-  if (!session.sessionId) {
-    return;
-  }
-  void vscode.window.showInformationMessage(
-    strings.recovery.restored(session.project || session.label),
-  );
-  historyViewProvider?.clearRecoverable(session.sessionId);
-  void launch({
-    mode: 'resumePicker',
-    sessionId: session.sessionId,
-    cwd: session.cwd || undefined,
-  });
-}
-
-function restoreSession(node: unknown): void {
-  if (isRecoveryNode(node)) {
-    restoreJournalSession(node.session);
-  }
-}
-
-function restoreAllSessions(): void {
-  for (const session of [...(historyViewProvider?.getRecoverable() ?? [])]) {
-    restoreJournalSession(session);
-  }
-}
-
-function dismissRecovery(): void {
-  historyViewProvider?.clearRecoverable();
-}
-
-async function copyHistorySessionId(node: unknown): Promise<void> {
-  if (!isSessionNode(node)) {
-    return;
-  }
-  await vscode.env.clipboard.writeText(node.session.id);
-  void vscode.window.showInformationMessage(strings.history.copied(node.session.id));
-}
-
-async function openRawHistorySession(node: unknown): Promise<void> {
-  if (!isSessionNode(node)) {
-    return;
-  }
-  const document = await vscode.workspace.openTextDocument(vscode.Uri.file(node.session.filePath));
-  await vscode.window.showTextDocument(document, { preview: false });
-}
-
-/**
- * Hand session lifecycle to Codex rather than unlinking rollout files.
- *
- * Codex keeps a state database alongside the rollouts, so deleting a file behind its back
- * leaves the two disagreeing — `codex doctor` reports exactly that as a parity check.
- * `codex archive` and `codex delete` take a session id and keep both in step.
- */
-async function runSessionLifecycle(node: unknown, action: 'archive' | 'delete'): Promise<void> {
-  if (!isSessionNode(node)) {
-    return;
-  }
-  const { id } = node.session;
-  const confirm =
-    action === 'delete' ? strings.history.confirmDelete(id) : strings.history.confirmArchive(id);
-  const proceed = await vscode.window.showWarningMessage(
-    confirm,
-    { modal: true },
-    action === 'delete' ? strings.history.deleteAction() : strings.history.archiveAction(),
-  );
-  if (!proceed) {
-    return;
-  }
-
-  const command = config().get<string>('command', 'codex');
-  const resolved = preflightCodexCommand(command);
-  if (!resolved) {
-    return;
-  }
-  const output = await runCommand(resolved, [action, id], process.platform);
-  log.info(strings.history.lifecycleRan(action, id, output));
-  historyViewProvider?.refresh(true);
-}
-
-async function searchHistory(): Promise<void> {
-  if (!historyViewProvider) {
-    return;
-  }
-  const value = await vscode.window.showInputBox({
-    prompt: strings.history.searchPrompt(),
-    placeHolder: strings.history.searchPlaceholder(),
-    value: historyViewProvider.getFilter(),
-    ignoreFocusOut: true,
-  });
-  if (value !== undefined) {
-    historyViewProvider.setFilter(value);
-  }
-}
-
-/**
- * Status bar item, driven by live session state.
- *
- * `$(loading~spin)` is the workbench's animated-codicon syntax: the `~spin` modifier
- * becomes `codicon-modifier-spin` and the animation is CSS, so this costs one label
- * update per state change rather than a timer.
- */
-function createStatusBarItem(context: vscode.ExtensionContext, monitor: SessionMonitor): void {
-  const item = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 100);
-  item.command = 'codexTerminal.focus';
-  context.subscriptions.push(item);
-
-  const render = (): void => {
-    const sessions = monitor.live();
-    const live = sessions.length;
-    const working = monitor.workingCount();
-    const peak = config().get<boolean>('showContextInStatusBar', true)
-      ? peakContextUsed(sessions.map((session) => session.activity))
-      : undefined;
-    item.text = statusBarText(working, live, peak, animationAllowed());
-    const stalled = monitor.stalledCount(config().get<number>('stallSeconds', DEFAULT_STALL_SECONDS));
-    const base =
-      working > 0
-        ? strings.status.workingTooltip(working, live)
-        : live > 0
-          ? strings.status.liveTooltip(live)
-          : strings.status.tooltip();
-    item.tooltip = stalled > 0 ? `${base} ${strings.status.stalledTooltip(stalled)}` : base;
-    item.accessibilityInformation = {
-      label:
-        working > 0
-          ? strings.status.accessibilityWorking(working)
-          : strings.status.accessibility(),
-      role: 'button',
-    };
-    if (config().get<boolean>('showStatusBarButton', true)) {
-      item.show();
-    } else {
-      item.hide();
-    }
-  };
-
-  render();
-  context.subscriptions.push(
-    monitor.onDidChange(render),
-    vscode.workspace.onDidChangeConfiguration((event) => {
-      if (
-        event.affectsConfiguration('codexTerminal.showStatusBarButton') ||
-        event.affectsConfiguration('codexTerminal.showContextInStatusBar') ||
-        event.affectsConfiguration('workbench.reduceMotion')
-      ) {
-        render();
-      }
-    }),
-  );
-}
-
-/**
- * Offer back the sessions a window was holding when it died.
- *
- * Presented once: the crashed journals are stamped as handled straight after, so opening
- * a second window does not raise the same prompt again. The sidebar group stays until it
- * is used or dismissed.
- */
-async function offerRecovery(store: JournalStore, windowId: string): Promise<void> {
-  try {
-    const journals = await store.readAll();
-    const now = Date.now();
-    const active = sessionMonitor?.activeSessionIds() ?? new Set<string>();
-    const candidates = interruptedSessions(journals, now, windowId).filter(
-      (session) => session.sessionId && !active.has(session.sessionId),
-    );
-    if (candidates.length === 0) {
-      return;
-    }
-
-    const handled = journals
-      .filter((journal) =>
-        candidates.some((candidate) =>
-          journal.sessions.some((session) => session.key === candidate.key),
-        ),
-      )
-      .map((journal) => journal.windowId);
-
-    historyViewProvider?.setRecoverable(candidates);
-    log.info(`found ${candidates.length} interrupted Codex session(s) from a previous window`);
-    await store.markHandled(handled);
-
-    const choice = await vscode.window.showWarningMessage(
-      strings.recovery.prompt(candidates.length),
-      strings.recovery.restoreAll(),
-      strings.recovery.review(),
-      strings.recovery.dismiss(),
-    );
-    if (choice === strings.recovery.restoreAll()) {
-      restoreAllSessions();
-    } else if (choice === strings.recovery.review()) {
-      await vscode.commands.executeCommand('codexTerminal.history.focus');
-    } else if (choice === strings.recovery.dismiss()) {
-      dismissRecovery();
-    }
-  } catch (error) {
-    log.warn(
-      `could not check for interrupted sessions: ${
-        error instanceof Error ? error.message : String(error)
-      }`,
-    );
-  }
-}
-
-async function runSettingsMigrations(context: vscode.ExtensionContext): Promise<void> {
+async function runSettingsMigrations(
+  context: vscode.ExtensionContext,
+  log: vscode.LogOutputChannel,
+): Promise<void> {
   const configuration = vscode.workspace.getConfiguration('codexTerminal');
   const events = await migrateSettings(
     String(context.extension.packageJSON.version),
@@ -1084,24 +125,24 @@ async function runSettingsMigrations(context: vscode.ExtensionContext): Promise<
  * that activation stays cheap: no synchronous disk walk, and everything that can wait is
  * started with `void` rather than awaited. `getActivationMs` exists so the cost is a number
  * the test suite can hold us to rather than an assurance.
+ *
+ * This function is wiring and nothing else. Every command it registers lives in its own
+ * module and reaches the shared handles through `services`, which is set once — here, before
+ * anything that could invoke a command.
  */
 export async function activate(context: vscode.ExtensionContext): Promise<CodexTerminalExtensionApi> {
   const activationStartedAt = Date.now();
-  log = vscode.window.createOutputChannel('Codex Terminal', { log: true });
+  const log = vscode.window.createOutputChannel('Codex Terminal', { log: true });
   context.subscriptions.push(log);
-  extensionContext = context;
   try {
-    await runSettingsMigrations(context);
+    await runSettingsMigrations(context, log);
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     log.error(strings.migration.failed(message));
   }
 
   const windowId = vscode.env.sessionId;
-  const store = new JournalStore(
-    path.join(context.globalStorageUri.fsPath, 'sessions'),
-    windowId,
-  );
+  const store = new JournalStore(path.join(context.globalStorageUri.fsPath, 'sessions'), windowId);
   const monitor = new SessionMonitor({
     store,
     windowId,
@@ -1112,58 +153,24 @@ export async function activate(context: vscode.ExtensionContext): Promise<CodexT
     enabled: () => config().get<boolean>('monitor.enabled', true),
     storeMessages: () => config().get<boolean>('journal.storeMessages', true),
   });
-  sessionMonitor = monitor;
-  context.subscriptions.push(monitor);
-
-  terminalRegistry = new TerminalRegistry();
-  const adopted = terminalRegistry.adopt(
-    vscode.window.terminals,
-    config().get<string>('terminalName', 'Codex'),
+  const registry = new TerminalRegistry();
+  const history = new HistoryViewProvider(
+    () => config().get<number>('history.maxSessions', 200),
+    () => codexHomeDirectory(),
+    sessionNames,
   );
-  if (adopted > 0) {
-    log.info(strings.logs.adopted(adopted));
-    // Read before anything is tracked. A reload can reuse the previous window's id, in which
-    // case this window's first journal write lands on the very file being read here.
-    const journals = await store.readAll();
-    let rebound = 0;
-    for (const tracked of terminalRegistry.live()) {
-      const key = terminalLaunchKey(tracked.terminal);
-      const record = key ? findLaunch(journals, key) : undefined;
-      // The rollout has to still be on disk: it can have been archived or deleted between
-      // the two windows, and binding to a missing file would show a session that never moves.
-      if (record?.sessionId && record.rolloutPath && existsSync(record.rolloutPath)) {
-        monitor.track(tracked.terminal, {
-          cwd: record.cwd || tracked.cwd || '',
-          project: record.project,
-          label: record.label,
-          mode: record.mode,
-          profile: record.profile,
-          key: record.key,
-          sessionId: record.sessionId,
-          rolloutPath: record.rolloutPath,
-        });
-        rebound += 1;
-        continue;
-      }
+  const transcript = new TranscriptContentProvider(() => ({
+    includeToolCalls: config().get<boolean>('transcript.includeToolCalls', true),
+    includeToolOutput: config().get<boolean>('transcript.includeToolOutput', false),
+  }));
 
-      // No stamp, or a launch that never reached a rollout: the tab still works and can be
-      // focused, but nothing can say which conversation it holds.
-      log.info(
-        strings.logs.rebindUnavailable(
-          tracked.terminal.name,
-          !key ? 'no launch key' : !record ? 'no journal record' : 'rollout file is gone',
-        ),
-      );
-      monitor.track(tracked.terminal, {
-        cwd: tracked.cwd ?? '',
-        project: tracked.cwd ? path.basename(tracked.cwd) : tracked.terminal.name,
-        label: tracked.terminal.name,
-        mode: 'adopted',
-        bindable: false,
-      });
-    }
-    log.info(strings.logs.rebound(rebound, adopted));
-  }
+  // Set before anything that could reach a command: every extracted module reads its handles
+  // from here, so this is the line that has to come first.
+  const state: ExtensionServices = { log, context, monitor, registry, history, transcript };
+  setServices(state);
+  context.subscriptions.push(monitor, history, transcript);
+
+  await adoptSurvivingTerminals(store);
 
   const commands: Array<[string, () => void]> = [
     ['codexTerminal.new', () => void launch({ mode: 'new' })],
@@ -1201,7 +208,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<CodexT
         void revertWorkbenchPreferences();
       },
     ],
-    ['codexTerminal.refreshHistory', () => historyViewProvider?.refresh(true)],
+    ['codexTerminal.refreshHistory', () => history.refresh(true)],
     [
       'codexTerminal.searchHistory',
       () => {
@@ -1250,18 +257,6 @@ export async function activate(context: vscode.ExtensionContext): Promise<CodexT
     const { options } = await terminalOptions({ mode: 'new' }, false);
     return new vscode.TerminalProfile(options);
   };
-  context.subscriptions.push(
-    vscode.window.registerTerminalProfileProvider('codexTerminal.profile', {
-      provideTerminalProfile,
-    }),
-  );
-
-  context.subscriptions.push(
-    vscode.window.onDidCloseTerminal((closed) => {
-      terminalRegistry?.remove(closed);
-      monitor.close(closed);
-    }),
-  );
 
   const actionsProvider = new ActionsViewProvider(
     monitor,
@@ -1269,17 +264,14 @@ export async function activate(context: vscode.ExtensionContext): Promise<CodexT
     animationAllowed,
     sessionNames,
   );
-  historyViewProvider = new HistoryViewProvider(
-    () => config().get<number>('history.maxSessions', 200),
-    () => codexHomeDirectory(),
-    sessionNames,
-  );
   const actionsView = vscode.window.createTreeView('codexTerminal.actions', {
     treeDataProvider: actionsProvider,
   });
-  const historyDirectory = codexSessionsDirectory(codexHomeDirectory());
   const historyWatcher = vscode.workspace.createFileSystemWatcher(
-    new vscode.RelativePattern(vscode.Uri.file(historyDirectory), '**/*.jsonl'),
+    new vscode.RelativePattern(
+      vscode.Uri.file(codexSessionsDirectory(codexHomeDirectory())),
+      '**/*.jsonl',
+    ),
   );
 
   // The activity-bar badge is the one indicator visible while the sidebar is collapsed.
@@ -1293,25 +285,23 @@ export async function activate(context: vscode.ExtensionContext): Promise<CodexT
   renderBadge();
 
   context.subscriptions.push(
+    vscode.window.registerTerminalProfileProvider('codexTerminal.profile', {
+      provideTerminalProfile,
+    }),
+    vscode.window.onDidCloseTerminal((closed) => {
+      registry.remove(closed);
+      monitor.close(closed);
+    }),
+    vscode.workspace.registerTextDocumentContentProvider(TRANSCRIPT_SCHEME, transcript),
+    vscode.window.registerTreeDataProvider('codexTerminal.history', history),
     actionsView,
     actionsProvider,
     monitor.onDidChange(renderBadge),
-    vscode.window.registerTreeDataProvider('codexTerminal.history', historyViewProvider),
-    historyViewProvider,
     historyWatcher,
     // Debounced: an active turn appends to its rollout several times a second.
-    historyWatcher.onDidCreate(() => historyViewProvider?.scheduleRefresh()),
-    historyWatcher.onDidChange(() => historyViewProvider?.scheduleRefresh()),
-    historyWatcher.onDidDelete(() => historyViewProvider?.scheduleRefresh(true)),
-  );
-
-  transcriptProvider = new TranscriptContentProvider(() => ({
-    includeToolCalls: config().get<boolean>('transcript.includeToolCalls', true),
-    includeToolOutput: config().get<boolean>('transcript.includeToolOutput', false),
-  }));
-  context.subscriptions.push(
-    transcriptProvider,
-    vscode.workspace.registerTextDocumentContentProvider(TRANSCRIPT_SCHEME, transcriptProvider),
+    historyWatcher.onDidCreate(() => history.scheduleRefresh()),
+    historyWatcher.onDidChange(() => history.scheduleRefresh()),
+    historyWatcher.onDidDelete(() => history.scheduleRefresh(true)),
   );
 
   createStatusBarItem(context, monitor);
@@ -1321,9 +311,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<CodexT
   const statusBarVisible = vscode.workspace
     .getConfiguration('workbench')
     .get<boolean>('statusBar.visible', true);
-  log.info(
-    strings.logs.activation(statusBarVisible),
-  );
+  log.info(strings.logs.activation(statusBarVisible));
   context.subscriptions.push(
     vscode.workspace.onDidChangeConfiguration((event) => {
       if (event.affectsConfiguration('codexTerminal.notifyOnCompletion')) {
@@ -1339,11 +327,8 @@ export async function activate(context: vscode.ExtensionContext): Promise<CodexT
     }),
     {
       dispose: () => {
-        notifyBridge?.dispose();
-        notifyBridge = undefined;
-        historyViewProvider = undefined;
-        transcriptProvider = undefined;
-        extensionContext = undefined;
+        state.notify?.dispose();
+        state.notify = undefined;
       },
     },
   );
@@ -1364,13 +349,13 @@ export async function activate(context: vscode.ExtensionContext): Promise<CodexT
 }
 
 export function deactivate(): void {
-  notifyBridge?.dispose();
-  notifyBridge = undefined;
-  extensionContext = undefined;
+  // `peekServices` rather than `services()`: deactivate can run after a failed activation,
+  // and throwing here would replace a startup error with a shutdown one.
+  const state = peekServices();
+  state?.notify?.dispose();
   // Stamps the journal so the next window does not treat these sessions as crashed.
   // Synchronous on purpose: nothing waits for a promise returned from `deactivate`.
-  sessionMonitor?.shutdown();
-  sessionMonitor = undefined;
-  terminalRegistry?.dispose();
-  terminalRegistry = undefined;
+  state?.monitor.shutdown();
+  state?.registry.dispose();
+  clearServices();
 }

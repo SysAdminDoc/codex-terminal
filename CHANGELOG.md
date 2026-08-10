@@ -3,6 +3,18 @@
 All notable changes to Codex Terminal are documented here.
 This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Changed
+
+- `src/extension.ts` is 361 lines instead of 1,376, and now contains only activation wiring.
+  Launching, recovery, the status bar, workbench settings, history commands and editor
+  commands each moved to a module of their own. The thing that had kept them stuck together
+  was seven file-scoped `let`s that any moved function would have lost; those are now one
+  typed record, set once during activation. A new integration test asserts that every command
+  the manifest contributes is actually registered — a missed registration compiles fine, passes
+  every unit test, and fails only when someone clicks the menu entry.
+
 ## [0.6.0] - 2026-08-10
 
 ### Added

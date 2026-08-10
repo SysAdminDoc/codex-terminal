@@ -96,6 +96,25 @@ suite('Codex Terminal hostile settings integration', () => {
     assert.equal(api.getActionCount(), 5);
   });
 
+  test('every contributed command is actually registered', async () => {
+    // The command table moved out of `extension.ts` when it was split into modules. A missed
+    // registration does not fail to compile and does not fail any unit test — it fails when
+    // the operator clicks the menu entry and the editor says the command does not exist.
+    const extension = vscode.extensions.getExtension<TestApi>('sysadmindoc.codex-terminal');
+    assert.ok(extension);
+    await extension.activate();
+
+    const manifest = JSON.parse(
+      await readFile(path.join(extension.extensionPath, 'package.json'), 'utf8'),
+    ) as { contributes?: { commands?: Array<{ command: string }> } };
+    const contributed = (manifest.contributes?.commands ?? []).map((entry) => entry.command);
+    assert.ok(contributed.length > 0, 'the manifest must contribute commands');
+
+    const registered = new Set(await vscode.commands.getCommands(true));
+    const missing = contributed.filter((id) => !registered.has(id));
+    assert.deepEqual(missing, [], `contributed but never registered: ${missing.join(', ')}`);
+  });
+
   test('creates an owned Codex terminal from the command', async () => {
     const terminal = await openCodexTerminal('codexTerminal.new');
     try {
