@@ -5,6 +5,14 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+
+- Workspace-trust declarations. In an untrusted workspace the settings that name the program,
+  its arguments, or its environment are ignored, and the reason is shown; previously the
+  extension was silently limited with no explanation. Virtual workspaces are declared
+  unsupported, and `extensionKind` keeps the shell spawning where the code is under
+  Remote-SSH, WSL and containers.
+
 ### Changed
 
 - The History view now picks the newest sessions from rollout filenames before opening any

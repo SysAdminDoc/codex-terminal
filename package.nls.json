@@ -26,6 +26,8 @@
   "command.restoreSession.title": "Restore Interrupted Session",
   "command.restoreAllSessions.title": "Restore All Interrupted Sessions",
   "command.dismissRecovery.title": "Dismiss Interrupted Sessions",
+  "capabilities.untrustedWorkspaces.description": "Codex Terminal launches a shell, so the settings that name the program, its arguments, or its environment are ignored in an untrusted workspace. Trust the folder to use workspace-level values for them.",
+  "capabilities.virtualWorkspaces.description": "Codex Terminal launches a local shell and reads Codex's session files from disk, neither of which exists in a virtual workspace.",
   "configuration.title": "Codex Terminal",
   "setting.shell.auto": "PowerShell 7 (pwsh) on Windows, falling back to Windows PowerShell; the login shell elsewhere.",
   "setting.shell.pwsh": "PowerShell 7 (pwsh.exe).",

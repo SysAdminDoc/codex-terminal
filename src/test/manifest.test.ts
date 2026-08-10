@@ -5,6 +5,16 @@ import { test } from 'node:test';
 
 interface Manifest {
   activationEvents?: string[];
+  categories?: string[];
+  extensionKind?: string[];
+  capabilities?: {
+    untrustedWorkspaces?: {
+      supported?: boolean | string;
+      description?: string;
+      restrictedConfigurations?: string[];
+    };
+    virtualWorkspaces?: { supported?: boolean | string; description?: string };
+  };
   contributes?: {
     views?: Record<string, Array<{ id?: string }>>;
     commands?: Array<{ command?: string }>;
@@ -91,5 +101,58 @@ test('every recovery command reaches the manifest', () => {
     'codexTerminal.dismissRecovery',
   ]) {
     assert.ok(commands.has(id), `${id} must be contributed or the tree item cannot invoke it`);
+  }
+});
+
+test('the extension declares how it behaves in an untrusted workspace', () => {
+  const manifest = readManifest();
+  const untrusted = manifest.capabilities?.untrustedWorkspaces;
+  // Undeclared is not neutral: VS Code disables the extension in Restricted Mode with no
+  // explanation. `true` would be worse -- it would let an untrusted folder choose the
+  // program that runs.
+  assert.equal(untrusted?.supported, 'limited');
+  assert.ok(untrusted?.description, 'the restriction must explain itself to the user');
+});
+
+test('every command-bearing setting is restricted in an untrusted workspace', () => {
+  const manifest = readManifest();
+  const restricted = new Set(
+    manifest.capabilities?.untrustedWorkspaces?.restrictedConfigurations ?? [],
+  );
+  const properties = manifest.contributes?.configuration?.properties ?? {};
+
+  // Anything that names a program, its arguments, or its environment decides what executes
+  // when a folder is opened, so a workspace must not be able to set it untrusted.
+  for (const key of Object.keys(properties)) {
+    const leaf = key.split('.').pop() ?? '';
+    if (['command', 'customShellPath', 'shell', 'args', 'env', 'titleItems'].includes(leaf)) {
+      assert.ok(restricted.has(key), `${key} must be restricted in untrusted workspaces`);
+    }
+  }
+});
+
+test('a virtual workspace is declared unsupported rather than silently broken', () => {
+  const virtualWorkspaces = readManifest().capabilities?.virtualWorkspaces;
+  assert.equal(virtualWorkspaces?.supported, false);
+  assert.ok(virtualWorkspaces?.description);
+});
+
+test('the extension runs where the shell and the code are', () => {
+  // Without this a remote window can load the extension on the UI side, where it would
+  // spawn a shell on the wrong machine.
+  assert.deepEqual(readManifest().extensionKind, ['workspace', 'ui']);
+});
+
+test('categories describe the extension for the marketplace', () => {
+  const categories = readManifest().categories ?? [];
+  const valid = new Set([
+    'AI', 'Azure', 'Chat', 'Data Science', 'Debuggers', 'Extension Packs', 'Education',
+    'Formatters', 'Keymaps', 'Language Packs', 'Linters', 'Machine Learning', 'Notebooks',
+    'Programming Languages', 'SCM Providers', 'Snippets', 'Testing', 'Themes',
+    'Visualization', 'Other',
+  ]);
+  assert.ok(categories.length > 0);
+  for (const category of categories) {
+    assert.ok(valid.has(category), `${category} is not a valid marketplace category`);
   }
 });

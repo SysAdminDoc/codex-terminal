@@ -24,6 +24,8 @@
     "vscode": "^1.90.0"
   },
   "categories": [
+    "AI",
+    "Chat",
     "Other"
   ],
   "keywords": [
@@ -460,5 +462,27 @@
   "overrides": {
     "diff": "^8.0.4",
     "serialize-javascript": "^7.0.6"
-  }
+  },
+  "capabilities": {
+    "untrustedWorkspaces": {
+      "supported": "limited",
+      "description": "%capabilities.untrustedWorkspaces.description%",
+      "restrictedConfigurations": [
+        "codexTerminal.command",
+        "codexTerminal.customShellPath",
+        "codexTerminal.shell",
+        "codexTerminal.args",
+        "codexTerminal.env",
+        "codexTerminal.titleItems"
+      ]
+    },
+    "virtualWorkspaces": {
+      "supported": false,
+      "description": "%capabilities.virtualWorkspaces.description%"
+    }
+  },
+  "extensionKind": [
+    "workspace",
+    "ui"
+  ]
 }
