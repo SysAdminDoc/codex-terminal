@@ -140,16 +140,6 @@ function formatTimestamp(timestamp: string | number): string {
   return Number.isNaN(date.getTime()) ? String(timestamp) : date.toLocaleString();
 }
 
-function formatSize(bytes: number): string {
-  if (bytes < 1024) {
-    return `${bytes} B`;
-  }
-  if (bytes < 1024 * 1024) {
-    return `${Math.round(bytes / 1024)} KB`;
-  }
-  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
-}
-
 class RecoveryGroupItem extends vscode.TreeItem {
   constructor(node: RecoveryGroupNode) {
     super(strings.recovery.group(), vscode.TreeItemCollapsibleState.Expanded);
@@ -304,7 +294,7 @@ class SessionItem extends vscode.TreeItem {
         '',
         `- Session \`${session.id}\``,
         ...(statusText ? [`- ${statusText}`] : []),
-        `- ${formatSize(session.sizeBytes)} on disk`,
+        `- ${formatBytes(session.sizeBytes)} on disk`,
         `- \`${session.filePath}\``,
         '',
         `_${strings.history.clickToResume()}_`,

@@ -7,6 +7,9 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **History uses one size formatter.** Session tooltips now share the store formatter, so
+  gigabyte-sized rollouts render as gigabytes instead of overflowing into megabytes.
+
 - **Presentation labels are configured before view construction.** Localized labels are installed
   before the badge, status bar, and tree providers can render, preventing an early English render
   from leaking into a localized window.
