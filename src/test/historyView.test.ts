@@ -159,6 +159,36 @@ test('a refresh during the first scan re-renders after loading finishes', async 
   }
 });
 
+test('history distinguishes an empty store from missing and unreadable stores', async () => {
+  const cases: Array<{
+    problem: 'missing' | 'unreadable' | undefined;
+    expected: RegExp;
+  }> = [
+    { problem: undefined, expected: /No Codex sessions recorded yet/ },
+    { problem: 'missing', expected: /No session store at/ },
+    { problem: 'unreadable', expected: /Cannot read/ },
+  ];
+
+  try {
+    for (const { problem, expected } of cases) {
+      patchSessions({
+        discoverSessions: async (options) => {
+          options?.onScan?.({ files: [], ...(problem ? { problem } : {}) });
+          return [];
+        },
+        indexCheckouts: async () => new Map(),
+      });
+      const provider = new HistoryViewProvider(() => 20, () => 'C:\\codex');
+      const roots = await provider.getChildren();
+      const message = roots.find((node) => node.kind === 'message');
+      assert.ok(message && message.kind === 'message');
+      assert.match(message.text, expected);
+    }
+  } finally {
+    restoreSessions();
+  }
+});
+
 test('history filtering also filters sessions under repository checkouts', async () => {
   const alpha = session('a', 'alpha work', 'C:\\repo');
   const beta = session('b', 'beta work', 'C:\\repo-wt');

@@ -61,6 +61,16 @@ test('a plugin list is parsed, enabled state included', () => {
   assert.ok(describeMcpServer({ name: 'x', enabled: false }) !== undefined);
 });
 
+test('marketplace-only plugins are not presented as installed', () => {
+  const parsed = parsePluginList(
+    JSON.stringify({
+      installed: [{ pluginId: 'installed@vendor', name: 'installed', enabled: true }],
+      available: [{ pluginId: 'marketplace@vendor', name: 'marketplace', enabled: true }],
+    }),
+  );
+  assert.deepEqual(parsed?.map((entry) => entry.id), ['installed@vendor']);
+});
+
 /**
  * The failure path used to write the CLI's raw output to the log file, and the usual reason
  * that path runs is that the CLI *succeeded* and printed a payload of an unexpected shape —
