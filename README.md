@@ -299,9 +299,9 @@ a label that changes is a label that gets read out. Two things keep that from tu
   the status bar (*Focus Status Bar*), so the spinner is silent by construction.
 - **Nothing that merely ticks is part of an accessible name.** A tree row *is* re-read when its
   name changes while it has focus, so the accessible name of a running session carries only the
-  status, whether it has gone quiet, and how many turns have finished. Elapsed time, token totals
-  and context percentage stay in the visible row and the tooltip, where a number that moves every
-  second belongs. In practice a session announces itself when it starts working, when it goes
+  status, whether it has gone quiet, and how many turns have finished. Elapsed time, the lifetime
+  token total and the current-prompt context percentage stay in the visible row and the tooltip,
+  where a number that moves every second belongs. In practice a session announces itself when it starts working, when it goes
   quiet, and when a turn ends — not once per refresh.
 
 The status bar item announces the transition that matters most, too: finishing the last turn

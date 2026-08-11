@@ -58,7 +58,7 @@ export interface PresentationLabels {
   compacted: string;
 
   noOutputFor: (duration: string) => string;
-  tokens: (count: string) => string;
+  totalTokens: (count: string) => string;
   contextPercent: (percent: number) => string;
   windowPercent: (percent: number, window: string) => string;
 
@@ -101,7 +101,7 @@ const ENGLISH: PresentationLabels = {
   compacted: 'compacted the context',
 
   noOutputFor: (duration) => `no output for ${duration}`,
-  tokens: (count) => `${count} tokens`,
+  totalTokens: (count) => `${count} total tokens`,
   contextPercent: (percent) => `${percent}% context`,
   windowPercent: (percent, window) => `${percent}% ${window}`,
 
@@ -375,7 +375,7 @@ export function describeActivity(
     parts.push(labels.noOutputFor(formatDuration(silent)));
   }
   if (activity.totalTokens) {
-    parts.push(labels.tokens(formatTokens(activity.totalTokens)));
+    parts.push(labels.totalTokens(formatTokens(activity.totalTokens)));
   }
   const used = contextUsed(activity);
   if (used !== undefined) {

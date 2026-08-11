@@ -71,7 +71,24 @@ test('a working session describes what it is doing, for how long, and its contex
     contextTokens: 15_667,
     contextWindow: 258_400,
   });
-  assert.equal(describeActivity(state, 1_045_000), 'Working · 45s · 17k tokens · 6% context');
+  assert.equal(
+    describeActivity(state, 1_045_000),
+    'Working · 45s · 17k total tokens · 6% context',
+  );
+});
+
+test('the session row separates lifetime tokens from the current context', () => {
+  const state = activity({
+    status: 'working',
+    turnStartedAt: 1_000_000,
+    totalTokens: 180_572_005,
+    contextTokens: 145_672,
+    contextWindow: 258_400,
+  });
+  assert.equal(
+    describeActivity(state, 1_045_000),
+    'Working · 45s · 180.6M total tokens · 56% context',
+  );
 });
 
 test('the status bar reports the session closest to its context limit', () => {
@@ -268,7 +285,7 @@ test('the session row carries the plan window beside the context gauge', () => {
   });
   assert.equal(
     describeActivity(state, 1_045_000),
-    'Working · 45s · 17k tokens · 6% context · 73% weekly limit',
+    'Working · 45s · 17k total tokens · 6% context · 73% weekly limit',
   );
 });
 
@@ -313,7 +330,7 @@ test('every word on a session row comes from the configured labels', () => {
     thinking: 'ES:pensando',
     compacted: 'ES:compactó',
     noOutputFor: (duration) => `ES:sin salida ${duration}`,
-    tokens: (count) => `ES:${count} tokens`,
+    totalTokens: (count) => `ES:${count} total tokens`,
     contextPercent: (percent) => `ES:${percent}% contexto`,
     windowPercent: (percent, window) => `ES:${percent}% ${window}`,
     noRecentOutput: 'ES:sin salida reciente',

@@ -7,6 +7,10 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **Token readouts distinguish lifetime usage from context occupancy.** Live rows label the
+  session total separately, while tooltips show the current prompt's tokens against its context
+  window instead of implying that the two figures are related.
+
 - **Activity documentation matches rollout evidence.** The README and source notes now distinguish
   detected `turn_aborted` events from the 61 turns in the measured store that have no terminal
   record and may need the **Silent** fallback.

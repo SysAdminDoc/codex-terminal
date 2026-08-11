@@ -215,10 +215,14 @@ function buildTooltip(
     lines.push(`- ${strings.running.turns(session.activity.completedTurns)}`);
   }
   const used = contextUsed(session.activity);
-  if (used !== undefined && session.activity.totalTokens) {
+  if (session.activity.totalTokens) {
+    lines.push(`- ${strings.running.totalTokens(formatTokens(session.activity.totalTokens))}`);
+  }
+  if (used !== undefined && session.activity.contextTokens && session.activity.contextWindow) {
     lines.push(
       `- ${strings.running.context(
-        formatTokens(session.activity.totalTokens),
+        formatTokens(session.activity.contextTokens),
+        formatTokens(session.activity.contextWindow),
         Math.round(used * 100),
       )}`,
     );

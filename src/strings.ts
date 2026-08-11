@@ -38,8 +38,15 @@ export const strings = {
     runningFor: (duration: string): string => vscode.l10n.t('Working for {0}', duration),
     turns: (count: number): string =>
       count === 1 ? vscode.l10n.t('1 turn completed') : vscode.l10n.t('{0} turns completed', count),
-    context: (tokens: string, percent: number): string =>
-      vscode.l10n.t('{0} tokens — {1}% of the context window', tokens, percent),
+    totalTokens: (tokens: string): string =>
+      vscode.l10n.t('Lifetime total: {0} tokens', tokens),
+    context: (tokens: string, window: string, percent: number): string =>
+      vscode.l10n.t(
+        'Current prompt: {0} / {1} tokens — {2}% of the context window',
+        tokens,
+        window,
+        percent,
+      ),
     sessionId: (id: string): string => vscode.l10n.t('Session `{0}`', id),
     cost: (amount: string, model: string): string =>
       vscode.l10n.t('{0} at your rates for {1}', amount, model),
@@ -581,7 +588,7 @@ export const presentationLabels = (): PresentationLabels => ({
   compacted: vscode.l10n.t('compacted the context'),
 
   noOutputFor: (duration) => vscode.l10n.t('no output for {0}', duration),
-  tokens: (count) => vscode.l10n.t('{0} tokens', count),
+  totalTokens: (count) => vscode.l10n.t('{0} total tokens', count),
   contextPercent: (percent) => vscode.l10n.t('{0}% context', percent),
   windowPercent: (percent, window) => vscode.l10n.t('{0}% {1}', percent, window),
 
