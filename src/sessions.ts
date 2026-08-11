@@ -19,6 +19,12 @@ import {
   type TranscriptMeta,
   type TranscriptRenderOptions,
 } from './transcript';
+import {
+  readThreadStore,
+  threadForSession,
+  type ThreadStoreRecord,
+  type ThreadStoreSnapshot,
+} from './threadStore';
 
 export interface SessionRecord {
   id: string;
@@ -29,6 +35,8 @@ export interface SessionRecord {
   preview?: string;
   sizeBytes: number;
   modifiedAt: number;
+  /** Optional read-only enrichment from Codex's validated SQLite projections. */
+  thread?: ThreadStoreRecord;
 }
 
 export interface SessionDiscoveryOptions {
@@ -107,6 +115,8 @@ export interface StoreScan {
   problem?: StoreProblem;
   /** The error the filesystem actually gave, for the log. */
   detail?: string;
+  /** Set when the optional SQLite layer was present but could not be trusted. */
+  threadStoreWarning?: string;
 }
 
 async function sessionFiles(directory: string, scan: StoreScan): Promise<RolloutFile[]> {
@@ -186,7 +196,18 @@ export function clearSessionCache(): void {
   headCache.clear();
 }
 
-async function readSession(filePath: string): Promise<SessionRecord | undefined> {
+function enrichSession(
+  record: SessionRecord,
+  threadStore: ThreadStoreSnapshot,
+): SessionRecord {
+  const thread = threadForSession(threadStore, record.id, record.filePath);
+  return thread ? { ...record, thread } : record;
+}
+
+async function readSession(
+  filePath: string,
+  threadStore: ThreadStoreSnapshot,
+): Promise<SessionRecord | undefined> {
   let stats;
   try {
     stats = await stat(filePath);
@@ -195,7 +216,7 @@ async function readSession(filePath: string): Promise<SessionRecord | undefined>
   }
   const cached = headCache.get(filePath);
   if (cached && cached.modifiedAt === stats.mtimeMs && cached.sizeBytes === stats.size) {
-    return cached.record ?? undefined;
+    return cached.record ? enrichSession(cached.record, threadStore) : undefined;
   }
 
   let record: SessionRecord | undefined;
@@ -231,7 +252,7 @@ async function readSession(filePath: string): Promise<SessionRecord | undefined>
     sizeBytes: stats.size,
     record: record ?? null,
   });
-  return record;
+  return record ? enrichSession(record, threadStore) : undefined;
 }
 
 function firstPromptFromLines(lines: readonly string[]): string | undefined {
@@ -270,14 +291,18 @@ async function mapWithConcurrency<T, R>(
 export async function discoverSessions(
   options: SessionDiscoveryOptions = {},
 ): Promise<SessionRecord[]> {
-  const directory = codexSessionsDirectory(options.homeDirectory);
+  const home = codexHomeDirectory(options.homeDirectory);
+  const directory = codexSessionsDirectory(home);
+  const threadStore = readThreadStore(home);
   const limit = options.maxResults ?? 30;
   const scan: StoreScan = { files: [] };
   // Choose from filenames first; only the survivors are ever opened.
   const files = selectNewestRollouts(await sessionFiles(directory, scan), limit);
-  options.onScan?.({ ...scan, files });
+  options.onScan?.({ ...scan, files, threadStoreWarning: threadStore.warning });
   const sessions = (
-    await mapWithConcurrency(files, READ_CONCURRENCY, (file) => readSession(file.filePath))
+    await mapWithConcurrency(files, READ_CONCURRENCY, (file) =>
+      readSession(file.filePath, threadStore),
+    )
   ).filter((session): session is SessionRecord => session !== undefined);
   const unique = new Map<string, SessionRecord>();
   for (const session of sessions) {

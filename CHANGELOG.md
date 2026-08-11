@@ -11,6 +11,11 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   version that produced the committed schema bindings; a running app-server on another version
   now reports a warning instead of silently using stale protocol unions.
 
+- **History rows now show durable turn state.** When Codex's compatible SQLite projections are
+  present, interrupted and failed turns are shown from the read-only index, including the reset
+  time for a usage-limit failure. Unknown database generations and older editor runtimes fall
+  back to rollout scanning with one diagnostic.
+
 - **How much of your plan is left, on the tab you are looking at.** Codex writes `rate_limits`
   into its session file beside the token counts — 55,975 of the 55,977 usage records in the
   local store carry a populated window — and none of it was read. Each session row now ends

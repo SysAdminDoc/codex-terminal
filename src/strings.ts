@@ -167,6 +167,11 @@ export const strings = {
     loading: (): string => vscode.l10n.t('Reading Codex sessions…'),
     noMatches: (filter: string): string => vscode.l10n.t('No sessions match “{0}”', filter),
     noPrompt: (): string => vscode.l10n.t('(no prompt recorded)'),
+    turnInProgress: (): string => vscode.l10n.t('in progress'),
+    turnInterrupted: (): string => vscode.l10n.t('interrupted'),
+    turnFailed: (): string => vscode.l10n.t('failed'),
+    turnFailedWithReset: (when: string): string =>
+      vscode.l10n.t('failed — usage limit resets at {0}', when),
     mainCheckout: (): string => vscode.l10n.t('main checkout'),
     changeKind: (kind: 'add' | 'update' | 'delete'): string =>
       kind === 'add'

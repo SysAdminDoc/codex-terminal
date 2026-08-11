@@ -17,6 +17,26 @@
  */
 export type ActivityStatus = 'working' | 'idle' | 'aborted' | 'silent' | 'unknown';
 
+/** Status vocabulary used by Codex's SQLite `thread_turns` projection. */
+export type IndexedTurnStatus = 'completed' | 'inProgress' | 'interrupted' | 'failed';
+
+/** Translate the durable turn state into the live-state vocabulary used by the UI. */
+export function activityStatusFromIndexedTurn(
+  status: string | undefined,
+): ActivityStatus | undefined {
+  switch (status) {
+    case 'completed':
+      return 'idle';
+    case 'inProgress':
+      return 'working';
+    case 'interrupted':
+    case 'failed':
+      return 'aborted';
+    default:
+      return undefined;
+  }
+}
+
 /**
  * What Codex last finished doing.
  *

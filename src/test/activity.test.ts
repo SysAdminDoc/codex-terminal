@@ -4,6 +4,7 @@ import { test } from 'node:test';
 import {
   INITIAL_ACTIVITY,
   MAX_SUBJECT_LENGTH,
+  activityStatusFromIndexedTurn,
   contextUsed,
   elapsedSeconds,
   isStalled,
@@ -14,6 +15,14 @@ import {
   silentFor,
   SILENT_AFTER_SECONDS,
 } from '../activity';
+
+test('SQLite turn states map to the live activity vocabulary', () => {
+  assert.equal(activityStatusFromIndexedTurn('inProgress'), 'working');
+  assert.equal(activityStatusFromIndexedTurn('interrupted'), 'aborted');
+  assert.equal(activityStatusFromIndexedTurn('failed'), 'aborted');
+  assert.equal(activityStatusFromIndexedTurn('completed'), 'idle');
+  assert.equal(activityStatusFromIndexedTurn('future-status'), undefined);
+});
 
 /**
  * Fixtures copied from a real rollout (`~/.codex/sessions/2026/08/09/…`), including the

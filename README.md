@@ -80,7 +80,10 @@ The real Codex TUI, started in the workspace folder:
   without bound, and archive/delete hand the work to `codex archive` / `codex delete` so Codex's
   own state database stays in step. **Expand a session** to list the files it changed — added,
   edited or deleted — read back from the rollout; click one to open it. Deleted files are shown
-  without a link. The scan runs when you expand the row, not during the listing.
+  without a link. Where Codex's compatible SQLite projections are available, a row also shows
+  the last durable turn state; a failed usage-limit turn includes its reset time. Those databases
+  are opened read-only, and an unknown generation falls back to the rollout scan. The file-change
+  scan runs when you expand the row, not during the listing.
 - **Naming a session** — *Name Session…* on a row in either sidebar. The name replaces that
   row's label everywhere the extension draws it. It is stored by this extension, not by Codex:
   the name is stored here and also written to Codex through the app server's `thread/name/set`,
@@ -115,7 +118,10 @@ The real Codex TUI, started in the workspace folder:
 
 Everything stays on your machine; the extension makes no network requests and collects no
 telemetry. It **reads** Codex's own session files under `$CODEX_HOME/sessions` to show live
-activity, list history and export transcripts. It **writes** a small crash-recovery journal
+activity, list history and export transcripts, plus the compatible `state_5.sqlite` and
+`thread_history_1.sqlite` projections under `$CODEX_HOME` for durable turn state. Those databases
+are opened read-only and are optional; if their generation or schema is unfamiliar, the rollout
+scan remains the source of truth. It **writes** a small crash-recovery journal
 into its own extension storage — which sessions a window had open, their ids and timestamps,
 and by default Codex's closing message for each turn so an interrupted session is recognisable.
 Both are switchable: see `codexTerminal.monitor.enabled` and

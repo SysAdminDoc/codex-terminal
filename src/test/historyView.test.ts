@@ -195,3 +195,28 @@ test('history filtering also filters sessions under repository checkouts', async
     restoreSessions();
   }
 });
+
+test('history rows surface the durable failed-turn state and usage reset', () => {
+  const failed = session('failed', 'limit work');
+  failed.thread = {
+    id: failed.id,
+    rolloutPath: failed.filePath,
+    cwd: failed.cwd,
+    archived: false,
+    pinned: false,
+    tokensUsed: 10,
+    lastTurn: {
+      status: 'failed',
+      usageResetText: 'Aug 15th, 2026 4:29 PM',
+    },
+  };
+  const provider = new HistoryViewProvider(() => 20, () => 'C:\\codex');
+  const item = provider.getTreeItem({ kind: 'session', session: failed, project: 'repo' });
+
+  assert.match(String(item.description ?? ''), /failed — usage limit resets at Aug 15th, 2026 4:29 PM/);
+  assert.equal((item.iconPath as { id: string }).id, 'error');
+  assert.match(
+    (item.tooltip as { value: string }).value,
+    /failed — usage limit resets at Aug 15th, 2026 4:29 PM/,
+  );
+});

@@ -1,5 +1,6 @@
 import * as vscode from 'vscode';
 
+import { activityStatusFromIndexedTurn } from './activity';
 import {
   codexHomeDirectory,
   collectChangedFiles,
@@ -230,7 +231,20 @@ class SessionItem extends vscode.TreeItem {
       vscode.TreeItemCollapsibleState.Collapsed,
     );
     const { session } = node;
-    this.description = formatTimestamp(session.timestamp);
+    const turnStatus = session.thread?.lastTurn?.status;
+    const statusText =
+      turnStatus === 'inProgress'
+        ? strings.history.turnInProgress()
+        : turnStatus === 'interrupted'
+          ? strings.history.turnInterrupted()
+          : turnStatus === 'failed'
+            ? session.thread?.lastTurn?.usageResetText
+              ? strings.history.turnFailedWithReset(session.thread.lastTurn.usageResetText)
+              : strings.history.turnFailed()
+            : undefined;
+    this.description = [formatTimestamp(session.timestamp), statusText]
+      .filter((part): part is string => part !== undefined)
+      .join(' · ');
     this.tooltip = new vscode.MarkdownString(
       [
         `**${node.project}** — ${formatTimestamp(session.timestamp)}`,
@@ -238,13 +252,20 @@ class SessionItem extends vscode.TreeItem {
         session.preview ? `> ${session.preview}` : `_${strings.history.noPrompt()}_`,
         '',
         `- Session \`${session.id}\``,
+        ...(statusText ? [`- ${statusText}`] : []),
         `- ${formatSize(session.sizeBytes)} on disk`,
         `- \`${session.filePath}\``,
         '',
         `_${strings.history.clickToResume()}_`,
       ].join('\n'),
     );
-    this.iconPath = new vscode.ThemeIcon('comment-discussion');
+    const activityStatus = activityStatusFromIndexedTurn(turnStatus);
+    this.iconPath =
+      activityStatus === 'aborted'
+        ? new vscode.ThemeIcon('error', new vscode.ThemeColor('list.errorForeground'))
+        : activityStatus === 'working'
+          ? new vscode.ThemeIcon('sync~spin')
+          : new vscode.ThemeIcon('comment-discussion');
     this.contextValue = 'codexTerminal.historySession';
     this.command = {
       command: 'codexTerminal.resumeHistorySession',
@@ -334,6 +355,8 @@ export class HistoryViewProvider
   private checkoutIndex: CheckoutIndex | undefined;
   /** Why the last scan found nothing, so an empty list can say which kind of empty it is. */
   private storeProblem: StoreProblem | undefined;
+  /** A present-but-unsupported SQLite projection should produce one diagnostic, not a flood. */
+  private threadStoreWarning: string | undefined;
   /** True while the first scan of a refresh is in flight, so the view is not silently blank. */
   private loading = false;
   /** A tree refresh arrived while the scan was in flight and needs a second render afterward. */
@@ -526,6 +549,10 @@ export class HistoryViewProvider
           maxResults: this.limit(),
           onScan: (scan) => {
             this.storeProblem = scan.problem;
+            if (scan.threadStoreWarning && scan.threadStoreWarning !== this.threadStoreWarning) {
+              peekServices()?.log.warn(scan.threadStoreWarning);
+              this.threadStoreWarning = scan.threadStoreWarning;
+            }
             if (scan.problem === 'unreadable') {
               peekServices()?.log.warn(
                 strings.store.unreadable(this.homeDirectory(), scan.detail ?? 'unknown error'),
