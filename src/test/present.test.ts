@@ -192,9 +192,8 @@ test('reduced motion replaces the spinner with a still icon, keeping the meaning
 test('the reduced-motion preference is read the way VS Code defines it', () => {
   assert.equal(motionAllowed('on'), false);
   assert.equal(motionAllowed('off'), true);
-  // `auto` defers to the operating system.
-  assert.equal(motionAllowed('auto', true), false);
-  assert.equal(motionAllowed('auto', false), true);
+  // The extension host cannot resolve the OS preference behind `auto`.
+  assert.equal(motionAllowed('auto'), true);
   assert.equal(motionAllowed(undefined), true);
 });
 

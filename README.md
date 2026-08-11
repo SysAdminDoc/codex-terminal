@@ -196,8 +196,10 @@ title** under `tabTitle: live`.
 The one place it cannot appear is the tab's **icon**. No stable VS Code API changes a terminal
 icon after the terminal is created, and the command that changes it takes no icon argument, so
 it can only open a picker. Animation is therefore in the tab's *text* and in the sidebar, not
-on the icon. If you set `workbench.reduceMotion`, every spinner becomes a still icon and the
-wording carries the state instead.
+on the icon. The extension host cannot read the operating-system preference behind
+`workbench.reduceMotion: auto`, so `auto` does not suppress these spinners. Set
+`"workbench.reduceMotion": "on"` to use still icons; `off` and `auto` animate, while the
+wording always carries the state.
 
 Each running session also says what Codex last finished doing — `Working · ran npm run check`,
 `Working · edited monitor.ts`, `Working · searched vscode terminal api`. The wording is past

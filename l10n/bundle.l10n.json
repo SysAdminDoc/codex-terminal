@@ -228,6 +228,8 @@
   "Codex --version: {0}": "Codex --version: {0}",
   "cwd: {0}": "cwd: {0}",
   "workbench.statusBar.visible: {0}": "workbench.statusBar.visible: {0}",
+  "workbench.reduceMotion: {0}": "workbench.reduceMotion: {0}",
+  "Animated indicators: auto does not suppress this extension's spinner; set workbench.reduceMotion to \"on\" to suppress it.": "Animated indicators: auto does not suppress this extension's spinner; set workbench.reduceMotion to \"on\" to suppress it.",
   "editor-title button can render: {0}": "editor-title button can render: {0}",
   "Codex tab title: {0} (activity indicator: {1}, source: {2})": "Codex tab title: {0} (activity indicator: {1}, source: {2})",
   "unknown": "unknown",

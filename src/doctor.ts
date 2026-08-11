@@ -20,6 +20,8 @@ export interface DoctorInput {
   cwd?: string;
   statusBarVisible: boolean;
   editorTitleButtonCanRender: boolean;
+  /** The configured workbench motion setting; `auto` cannot be resolved by the extension host. */
+  reduceMotion?: string;
   /** Title items the extension will launch with, so Codex validates the real override. */
   titleItems?: readonly string[];
   pathValue?: string;
@@ -41,6 +43,7 @@ export interface DoctorReport {
   cwd: string | undefined;
   statusBarVisible: boolean;
   editorTitleButtonCanRender: boolean;
+  reduceMotion: string;
   /** Items rejected against the known vocabulary before Codex is even consulted. */
   unknownTitleItems: string[];
   /** What Codex reports it resolved, absent when its doctor could not be read. */
@@ -209,6 +212,7 @@ export async function collectDoctorReport(input: DoctorInput): Promise<DoctorRep
 
   const titleItems = input.titleItems ?? [];
   const { unknown } = partitionTitleItems(titleItems);
+  const reduceMotion = input.reduceMotion ?? 'auto';
 
   // Only worth asking Codex when there is a Codex to ask; a missing command already has a
   // dedicated error path and a failed probe would add noise, not information.
@@ -243,6 +247,7 @@ export async function collectDoctorReport(input: DoctorInput): Promise<DoctorRep
     cwd: input.cwd,
     statusBarVisible: input.statusBarVisible,
     editorTitleButtonCanRender: input.editorTitleButtonCanRender,
+    reduceMotion,
     unknownTitleItems: unknown,
     ...(title ? { title } : {}),
     ...(codexVersion ? { codexVersion } : {}),

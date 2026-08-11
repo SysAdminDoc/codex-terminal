@@ -38,6 +38,7 @@ test('doctor reports shell, command, version, cwd, and UI visibility', async () 
   assert.equal(report.cwd, 'C:\\workspace');
   assert.equal(report.statusBarVisible, false);
   assert.equal(report.editorTitleButtonCanRender, false);
+  assert.equal(report.reduceMotion, 'auto');
 });
 
 test('doctor does not run a missing command', async () => {

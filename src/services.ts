@@ -72,7 +72,7 @@ export function config(): vscode.WorkspaceConfiguration {
   return vscode.workspace.getConfiguration('codexTerminal');
 }
 
-/** Honour the editor's reduced-motion preference for the animated indicators. */
+/** Honour the explicit reduced-motion setting; the extension host cannot resolve `auto`. */
 export function animationAllowed(): boolean {
   return motionAllowed(
     vscode.workspace.getConfiguration('workbench').get<string>('reduceMotion', 'auto'),

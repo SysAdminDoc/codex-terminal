@@ -32,6 +32,9 @@ export async function runDoctor(): Promise<void> {
     const editorTitleButtonCanRender =
       config().get<boolean>('showEditorTitleButton', true) &&
       vscode.window.activeTextEditor !== undefined;
+    const reduceMotion = vscode.workspace
+      .getConfiguration('workbench')
+      .get<string>('reduceMotion', 'auto');
     const cwd = await resolveCwd();
     const titleItems = config().get<string[]>('titleItems', [...DEFAULT_TITLE_ITEMS]);
     // `codex doctor` walks the whole rollout store; 38s against 2 GB is normal and grows.
@@ -44,6 +47,7 @@ export async function runDoctor(): Promise<void> {
           cwd,
           statusBarVisible,
           editorTitleButtonCanRender,
+          reduceMotion,
           titleItems,
         }),
     );

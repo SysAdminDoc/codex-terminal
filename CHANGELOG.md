@@ -7,6 +7,10 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **Reduced-motion behavior is explicit.** The extension documents that the extension host cannot
+  resolve the operating-system preference behind `workbench.reduceMotion: auto`; the doctor report
+  names the setting and explains that only `"on"` suppresses its spinner.
+
 - **Recent prompt and command history.** The Command Palette can send a recent prompt from
   Codex's history to a live session, and each History session exposes deduplicated shell commands
   that can be copied.

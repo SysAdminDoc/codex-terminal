@@ -500,6 +500,10 @@ export const strings = {
         vscode.l10n.t('Codex --version: {0}', version),
         vscode.l10n.t('cwd: {0}', cwd),
         vscode.l10n.t('workbench.statusBar.visible: {0}', String(report.statusBarVisible)),
+        vscode.l10n.t('workbench.reduceMotion: {0}', report.reduceMotion),
+        vscode.l10n.t(
+          'Animated indicators: auto does not suppress this extension\'s spinner; set workbench.reduceMotion to "on" to suppress it.',
+        ),
         vscode.l10n.t(
           'editor-title button can render: {0}',
           String(report.editorTitleButtonCanRender),

@@ -148,17 +148,12 @@ export interface StatusPresentation {
  * Whether continuous motion is acceptable.
  *
  * `loading~spin` animates forever, which is exactly what a reduced-motion preference exists
- * to suppress. VS Code exposes `workbench.reduceMotion` (`on` / `off` / `auto`, where `auto`
- * follows the OS), so the spinner is a preference to honour rather than a constant.
+ * to suppress. VS Code exposes `workbench.reduceMotion` (`on` / `off` / `auto`), but the
+ * extension host cannot read the OS-resolved value behind `auto`. Treating `auto` as animated
+ * is therefore the only honest behavior; the explicit `on` value suppresses the spinner.
  */
-export function motionAllowed(reduceMotion: string | undefined, systemPrefersReduced = false): boolean {
-  if (reduceMotion === 'on') {
-    return false;
-  }
-  if (reduceMotion === 'off') {
-    return true;
-  }
-  return !systemPrefersReduced;
+export function motionAllowed(reduceMotion: string | undefined): boolean {
+  return reduceMotion !== 'on';
 }
 
 export function presentStatus(
