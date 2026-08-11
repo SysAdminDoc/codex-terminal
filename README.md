@@ -44,6 +44,11 @@ The real Codex TUI, started in the workspace folder:
 
 ## Usage
 
+On first install, VS Code opens a localized **Get started with Codex Terminal** walkthrough.
+It covers installing the CLI, launching a session, choosing the native terminal profile, and
+finding conversations in **History**; completed steps stay complete and the walkthrough remains
+available from VS Code's Getting Started page.
+
 - **Activity bar** — the `>_` icon opens a **Launch** panel with every action. This is the one
   surface that is always present, so it is the reliable button.
 - When Codex tabs are open, the Launch panel also shows a **Running** group with each tab's cwd;

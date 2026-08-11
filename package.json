@@ -63,6 +63,64 @@
         }
       ]
     },
+    "walkthroughs": [
+      {
+        "id": "codexTerminal.getStarted",
+        "title": "%walkthrough.getStarted.title%",
+        "description": "%walkthrough.getStarted.description%",
+        "isFeatured": true,
+        "steps": [
+          {
+            "id": "installCodex",
+            "title": "%walkthrough.install.title%",
+            "description": "%walkthrough.install.description%",
+            "media": {
+              "image": "resources/activity-icon.svg",
+              "altText": "%extension.displayName%"
+            },
+            "completionEvents": [
+              "onCommand:codexTerminal.doctor"
+            ]
+          },
+          {
+            "id": "launchCodex",
+            "title": "%walkthrough.launch.title%",
+            "description": "%walkthrough.launch.description%",
+            "media": {
+              "image": "resources/activity-icon.svg",
+              "altText": "%extension.displayName%"
+            },
+            "completionEvents": [
+              "onCommand:codexTerminal.new"
+            ]
+          },
+          {
+            "id": "chooseProfile",
+            "title": "%walkthrough.profile.title%",
+            "description": "%walkthrough.profile.description%",
+            "media": {
+              "image": "resources/activity-icon.svg",
+              "altText": "%extension.displayName%"
+            },
+            "completionEvents": [
+              "onCommand:codexTerminal.newWithProfile"
+            ]
+          },
+          {
+            "id": "openHistory",
+            "title": "%walkthrough.history.title%",
+            "description": "%walkthrough.history.description%",
+            "media": {
+              "image": "resources/activity-icon.svg",
+              "altText": "%extension.displayName%"
+            },
+            "completionEvents": [
+              "onView:codexTerminal.history"
+            ]
+          }
+        ]
+      }
+    ],
     "terminal": {
       "profiles": [
         {

@@ -17,6 +17,19 @@ interface Manifest {
   };
   contributes?: {
     views?: Record<string, Array<{ id?: string }>>;
+    walkthroughs?: Array<{
+      id?: string;
+      title?: string;
+      description?: string;
+      isFeatured?: boolean;
+      steps?: Array<{
+        id?: string;
+        title?: string;
+        description?: string;
+        media?: { image?: string; markdown?: string; altText?: string };
+        completionEvents?: string[];
+      }>;
+    }>;
     commands?: Array<{ command?: string }>;
     menus?: Record<string, Array<{ command?: string; when?: string }>>;
     terminal?: { profiles?: Array<{ id?: string; titleTemplate?: string }> };
@@ -125,6 +138,33 @@ test('every recovery command reaches the manifest', () => {
   ]) {
     assert.ok(commands.has(id), `${id} must be contributed or the tree item cannot invoke it`);
   }
+});
+
+test('the first-run walkthrough covers the real Codex workflow', () => {
+  const manifest = readManifest();
+  const walkthrough = manifest.contributes?.walkthroughs?.find(
+    (candidate) => candidate.id === 'codexTerminal.getStarted',
+  );
+  assert.ok(walkthrough);
+  assert.equal(walkthrough.isFeatured, true);
+
+  const steps = walkthrough.steps ?? [];
+  assert.deepEqual(
+    steps.map((step) => step.id),
+    ['installCodex', 'launchCodex', 'chooseProfile', 'openHistory'],
+  );
+  for (const step of steps) {
+    assert.match(step.title ?? '', /^%walkthrough\./);
+    assert.match(step.description ?? '', /^%walkthrough\./);
+    assert.equal(step.media?.image, 'resources/activity-icon.svg');
+    assert.equal(step.media?.altText, '%extension.displayName%');
+    assert.ok((step.completionEvents ?? []).length > 0, `${step.id} needs a completion event`);
+  }
+
+  assert.deepEqual(steps[0].completionEvents, ['onCommand:codexTerminal.doctor']);
+  assert.deepEqual(steps[1].completionEvents, ['onCommand:codexTerminal.new']);
+  assert.deepEqual(steps[2].completionEvents, ['onCommand:codexTerminal.newWithProfile']);
+  assert.deepEqual(steps[3].completionEvents, ['onView:codexTerminal.history']);
 });
 
 test('Git SCM menus expose the three Codex review targets', () => {
