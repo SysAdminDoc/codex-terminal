@@ -128,6 +128,45 @@ test('apply records the first values, avoids repeat writes, and reverts idempote
     await applyWorkbenchPreferences();
     assert.equal(writes.length, writesAfterRevert, 'revert must disarm the apply path');
     assert.ok(information.length >= 2, 'apply and revert should each announce their work');
+    assert.match(information.at(-1) ?? '', /codexTerminal\.applyWorkbenchSettings/);
+    assert.match(information.at(-1) ?? '', /Automatic application is now off/);
+  } finally {
+    clearServices();
+  }
+});
+
+test('a revert with only operator-edited settings leaves configuration armed', async () => {
+  writes.length = 0;
+  information.length = 0;
+  rootValues['terminal.integrated.confirmOnKill'] = 'always';
+  codexValues.applyWorkbenchSettings = true;
+  ledger = {
+    'terminal.integrated.confirmOnKill': {
+      key: 'terminal.integrated.confirmOnKill',
+      previous: 'editor',
+      applied: 'never',
+    },
+  };
+  const globalState = {
+    get: <T>(key: string): T | undefined =>
+      key === 'codexTerminal.workbenchOverrides' ? (ledger as T | undefined) : undefined,
+    update: async (key: string, value: unknown): Promise<void> => {
+      if (key === 'codexTerminal.workbenchOverrides') {
+        ledger = value;
+      }
+    },
+  };
+  setServices({
+    log: { info: () => undefined, warn: () => undefined, error: () => undefined } as never,
+    context: { globalState } as never,
+  } as never);
+
+  try {
+    await revertWorkbenchPreferences();
+    assert.equal(codexValues.applyWorkbenchSettings, true);
+    assert.equal(writes.length, 0);
+    assert.ok(ledger);
+    assert.match(information[0] ?? '', /automatic application remains unchanged/);
   } finally {
     clearServices();
   }

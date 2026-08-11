@@ -151,6 +151,11 @@ export async function revertWorkbenchPreferences(): Promise<void> {
     }
   }
 
+  if (reverted.length === 0) {
+    void vscode.window.showInformationMessage(strings.workbench.nothingRestored());
+    return;
+  }
+
   await services().context.globalState.update(OVERRIDE_LEDGER_KEY, undefined);
   // Turning the preference off is what makes the revert stick. Without it, clearing the
   // ledger re-arms the planner, and the write this function just made would be undone by the

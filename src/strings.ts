@@ -310,7 +310,10 @@ export const strings = {
       ),
     revert: (): string => vscode.l10n.t('Revert'),
     revertedAll: (keys: string): string =>
-      vscode.l10n.t('Reverted the workbench settings Codex Terminal had changed: {0}', keys),
+      vscode.l10n.t(
+        'Reverted the workbench settings Codex Terminal had changed: {0}. Automatic application is now off; set codexTerminal.applyWorkbenchSettings to true to apply them again.',
+        keys,
+      ),
     skippedRevert: (key: string): string =>
       vscode.l10n.t('left {0} alone: it no longer holds the value Codex Terminal wrote', key),
     keptOperatorValue: (key: string): string =>
@@ -322,7 +325,13 @@ export const strings = {
       vscode.l10n.t('Set {0} from {1} to {2}.', key, from, to),
     reverted: (key: string, to: string): string => vscode.l10n.t('Restored {0} to {1}.', key, to),
     nothingToRevert: (): string =>
-      vscode.l10n.t('Codex Terminal has not changed any workbench settings.'),
+      vscode.l10n.t(
+        'Codex Terminal has not changed any workbench settings; automatic application remains unchanged.',
+      ),
+    nothingRestored: (): string =>
+      vscode.l10n.t(
+        'No workbench settings were restored; automatic application remains unchanged.',
+      ),
     failed: (key: string, message: string): string =>
       vscode.l10n.t('Could not update {0}: {1}', key, message),
     unset: (): string => vscode.l10n.t('unset'),

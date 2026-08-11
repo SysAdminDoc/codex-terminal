@@ -7,6 +7,10 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **Workbench-setting reverts explain their state.** Successful restoration now says that
+  automatic application is off and how to re-enable it; a revert with nothing restorable leaves
+  the setting and ledger untouched.
+
 - **Status-bar context usage is labeled.** The compact percentage remains in the item text, while
   its tooltip now identifies it as the highest context usage across open sessions.
 
