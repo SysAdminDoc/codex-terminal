@@ -535,12 +535,12 @@ export const SILENT_AFTER_SECONDS = 600;
 /**
  * Stop believing a turn that has been silent far past anything a real turn does.
  *
- * Codex does not always record the end of a turn: across 25 recent sessions there were 52
- * `task_started` against 40 `task_complete`. `turn_aborted` is emitted but rare — 29 across
- * the 121 rollouts on this machine — and 61 turns have no terminal record of any kind, so an
- * interrupted
- * turn leaves the session pinned at `working` for the life of the window — spinner running,
- * badge counting it, status bar calling it busy, while the operator sits at an idle prompt.
+ * Codex does not always record a terminal event for every turn. Across the full store of 121
+ * rollouts there are 198 `task_started` events, 108 `task_complete` events, and 29
+ * `turn_aborted` events; 61 turns have no terminal record of any kind. A `turn_aborted` record
+ * is detected and reduced to `aborted`/shown as `Interrupted`; only a turn with no terminal
+ * record can remain pinned at `working` until the silent threshold — spinner running, badge
+ * counting it, status bar calling it busy, while the operator sits at an idle prompt.
  *
  * The demotion stops at `silent` rather than `idle` on purpose. Codex writes nothing while
  * waiting for an approval and nothing while wedged, and a rollout tail cannot tell those from

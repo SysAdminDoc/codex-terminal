@@ -7,6 +7,10 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **Activity documentation matches rollout evidence.** The README and source notes now distinguish
+  detected `turn_aborted` events from the 61 turns in the measured store that have no terminal
+  record and may need the **Silent** fallback.
+
 - **Notification payloads are no longer persisted.** Turn-completion hand-offs now retain only
   the workspace, timestamp and event type, sweep stale files on startup, and remove their hook
   and queue when notifications are disabled. Turning off `journal.storeMessages` clears pending
