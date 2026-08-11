@@ -110,6 +110,9 @@ test('apply records the first values, avoids repeat writes, and reverts idempote
     assert.equal(rootValues['terminal.integrated.tabs.allowAgentCliTitle'], true);
     assert.match(String(rootValues['terminal.integrated.tabs.description']), /\$\{sequence\}/);
     assert.ok(ledger);
+    assert.match(information[0], /live tab title/);
+    assert.match(information[0], /Close confirmation is now off for every terminal/);
+    assert.match(information[0], /not only Codex tabs/);
 
     const writesAfterFirstApply = writes.length;
     await applyWorkbenchPreferences();

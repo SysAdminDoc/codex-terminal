@@ -16,6 +16,10 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   switches are now machine-scoped and restricted in untrusted workspaces, so a folder cannot
   enable either process-hosting path through its own settings.
 
+- **Workbench-setting notices are precise.** The apply notification now separates the two title
+  settings from `confirmOnKill` and says that close confirmation is disabled for every terminal
+  in the editor; the README and setting help state the same global effect.
+
 - **Publishing preparation.** Open VSX publishing now has a pinned `ovsx` tool and a
   credential-safe `publish:openvsx` script; the release documentation covers the Eclipse
   Publisher Agreement and the Microsoft Entra ID workload-federation path before the

@@ -83,8 +83,18 @@ export async function applyWorkbenchPreferences(): Promise<void> {
   // A notification, not a dialog: these settings are required for the tab to work, so this
   // announces a change rather than asking permission for one. It appears only when something
   // actually changed, which after the first window is never.
+  const titleKeys = applied
+    .filter((change) => change.key !== CONFIRM_ON_KILL_SETTING)
+    .map((change) => change.key);
+  const announcements: string[] = [];
+  if (titleKeys.length > 0) {
+    announcements.push(strings.workbench.titleAnnounced(titleKeys.join(', ')));
+  }
+  if (applied.some((change) => change.key === CONFIRM_ON_KILL_SETTING)) {
+    announcements.push(strings.workbench.closeConfirmationAnnounced());
+  }
   const choice = await vscode.window.showInformationMessage(
-    strings.workbench.announced(applied.map((change) => change.key).join(', ')),
+    announcements.join(' '),
     strings.workbench.revert(),
     strings.errors.showLog(),
   );

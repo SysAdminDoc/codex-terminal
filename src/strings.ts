@@ -277,10 +277,14 @@ export const strings = {
       vscode.l10n.t('codex {0} {1}: {2}', action, id, output),
   },
   workbench: {
-    announced: (keys: string): string =>
+    titleAnnounced: (keys: string): string =>
       vscode.l10n.t(
-        'Codex Terminal changed workbench settings so the tab can show Codex’s live title: {0}',
+        'Codex Terminal changed the settings needed for Codex’s live tab title: {0}',
         keys,
+      ),
+    closeConfirmationAnnounced: (): string =>
+      vscode.l10n.t(
+        'Close confirmation is now off for every terminal in this editor, not only Codex tabs (`terminal.integrated.confirmOnKill`).',
       ),
     revert: (): string => vscode.l10n.t('Revert'),
     revertedAll: (keys: string): string =>

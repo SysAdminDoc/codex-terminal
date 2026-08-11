@@ -65,13 +65,15 @@ available from VS Code's Getting Started page.
   repository as a workspace, or configure `codexTerminal.cwd`, so the working directory is the
   project you want shown. A path pasted only into the chat prompt is not visible to VS Code's
   terminal API and cannot rename an already-created tab.
-- **Closing a tab** — the extension enforces `terminal.integrated.confirmOnKill: "never"`, so
-  closing a Codex tab immediately terminates its running processes.
-- **Workbench settings it changes** — three global settings are required for a Codex tab to show
-  its live title (`terminal.integrated.confirmOnKill`, `terminal.integrated.tabs.description`,
-  `terminal.integrated.tabs.allowAgentCliTitle`). Each is written **once**: the extension records
-  what it held beforehand, says what it changed, and never writes that key again. Change one
-  yourself and it stays changed, across configuration events and window reloads.
+- **Closing a tab** — the extension sets `terminal.integrated.confirmOnKill: "never"`, so closing
+  **any terminal in this editor**, not only a Codex tab, immediately terminates its running
+  processes.
+- **Workbench settings it changes** — two global settings make Codex's live tab title possible
+  (`terminal.integrated.tabs.description` and `terminal.integrated.tabs.allowAgentCliTitle`). A
+  third, `terminal.integrated.confirmOnKill`, turns close confirmation off for every terminal in
+  this editor. Each is written **once**: the extension records what it held beforehand, says what
+  it changed, and never writes that key again. Change one yourself and it stays changed, across
+  configuration events and window reloads.
   **Codex Terminal: Revert Workbench Settings** puts all three back and turns
   `codexTerminal.applyWorkbenchSettings` off, so the revert survives a reload; turning that
   setting back on re-applies from scratch.
@@ -173,7 +175,7 @@ Exported transcripts redact recognised bearer tokens and API-key shapes by defau
 | `codexTerminal.titleItems` | `["activity", "project-name", "app-name"]` | Codex title items. The default gives the live activity indicator, the project name, and the constant `Codex` marker used to recognise our tabs after a window reload. |
 | `codexTerminal.history.maxSessions` | `200` | Maximum recent sessions shown in the History view. |
 | `codexTerminal.modelRates` | `{}` | Your token prices per model, in USD per million tokens, used to estimate what a session cost. Empty by default; see below. |
-| `codexTerminal.applyWorkbenchSettings` | `true` | Whether the extension may set the three `terminal.integrated.*` settings a Codex tab needs. Each is written once and never rewritten; **Revert Workbench Settings** turns this off. Off means the tab cannot show Codex's live title. |
+| `codexTerminal.applyWorkbenchSettings` | `true` | Whether the extension may set two title settings and the global close-confirmation setting. Each is written once and never rewritten; **Revert Workbench Settings** turns this off. Off means the tab cannot show Codex's live title and close confirmation is not changed. |
 | `codexTerminal.appServer.enabled` | `false` | **Experimental, machine-scoped.** Host a `codex app-server` for this window and attach launched terminals to it with `--remote ws://127.0.0.1:<port>`, so Codex reports activity over its own protocol instead of it being inferred from session files. A workspace cannot enable it in Restricted Mode. Needs an editor built on Node 22 or newer; every failure falls back to a plain `codex` launch and logs why. |
 | `codexTerminal.monitor.enabled` | `true` | Read Codex's session files for live activity and crash recovery. Off stops all reading of your conversations — and with it both the live status and interrupted-session recovery, since each needs to know which conversation a tab belongs to. Launching, resuming and history are unaffected. |
 | `codexTerminal.journal.storeMessages` | `true` | Keep Codex's closing message per turn in the crash journal. Turning it off keeps conversation text out of it **and removes what is already recorded**, from every window's journal, not just this one's. Identifiers and timestamps, which is all recovery needs, are still kept. |
