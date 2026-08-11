@@ -1,6 +1,6 @@
 import * as vscode from 'vscode';
 
-import { nodeEntryFor, setThreadName } from './appServer';
+import { appServerCommandFor, setThreadName } from './appServer';
 import { runCommandResult } from './doctor';
 import { isRunningSessionNode } from './actionsView';
 import { isSessionNode } from './historyView';
@@ -81,15 +81,18 @@ async function pushNameToCodex(sessionId: string, name: string): Promise<void> {
   if (!resolved) {
     return;
   }
-  const entry = nodeEntryFor(resolved);
+  const commandShape = appServerCommandFor(resolved);
+  if (!commandShape) {
+    log().warn(strings.appServer.unavailable('node'));
+    return;
+  }
   try {
     await vscode.window.withProgress(
       { location: vscode.ProgressLocation.Notification, title: strings.names.syncing() },
       () =>
         setThreadName(
           {
-            command: entry ?? resolved,
-            ...(entry ? { nodeExecutable: process.execPath } : {}),
+            ...commandShape,
             log: log(),
           },
           String(services().context.extension.packageJSON.version),

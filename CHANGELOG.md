@@ -20,6 +20,10 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   settings from `confirmOnKill` and says that close confirmation is disabled for every terminal
   in the editor; the README and setting help state the same global effect.
 
+- **App-server commands use a real Node runtime.** Startup, the health check and session naming
+  now share one host-runtime probe and refuse a missing Node instead of handing Codex the
+  editor's Electron binary.
+
 - **Publishing preparation.** Open VSX publishing now has a pinned `ovsx` tool and a
   credential-safe `publish:openvsx` script; the release documentation covers the Eclipse
   Publisher Agreement and the Microsoft Entra ID workload-federation path before the

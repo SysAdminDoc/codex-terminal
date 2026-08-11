@@ -14,6 +14,7 @@ import type {
   RequestId,
 } from './generated/appServer';
 import { APP_SERVER_CLI_VERSION } from './generated/appServer/metadata';
+import { resolveHostNodeExecutable, type NodeProbe } from './notify';
 
 /**
  * A client for `codex app-server`, Codex's own control plane.
@@ -460,6 +461,19 @@ export function nodeEntryFor(resolved: string): string | undefined {
     'codex.js',
   );
   return existsSync(entry) ? entry : undefined;
+}
+
+/** Build one safe command shape for every app-server client and hosted-server caller. */
+export function appServerCommandFor(
+  resolved: string,
+  probe?: NodeProbe,
+): { command: string; nodeExecutable?: string } | undefined {
+  const entry = nodeEntryFor(resolved);
+  if (!entry) {
+    return { command: resolved };
+  }
+  const nodeExecutable = resolveHostNodeExecutable(probe);
+  return nodeExecutable ? { command: entry, nodeExecutable } : undefined;
 }
 
 /**

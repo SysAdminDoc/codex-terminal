@@ -4,7 +4,7 @@ import * as vscode from 'vscode';
 
 import {
   HostedAppServer,
-  nodeEntryFor,
+  appServerCommandFor,
   remoteArgs,
   webSocketAvailable,
 } from './appServer';
@@ -25,7 +25,7 @@ import {
   projectName,
   renderTerminalName,
 } from './naming';
-import { NotifyBridge, resolveNodeExecutable } from './notify';
+import { NotifyBridge, resolveHostNodeExecutable } from './notify';
 import {
   DEFAULT_STALL_SECONDS,
   describeActivity,
@@ -151,25 +151,16 @@ export async function ensureAppServer(): Promise<void> {
     log().warn(strings.appServer.unavailable(command));
     return;
   }
-  const entry = nodeEntryFor(resolved);
-  const nodeExecutable = entry
-    ? resolveNodeExecutable({
-        execPath: process.execPath,
-        pathValue: process.env.PATH,
-        isWindows: process.platform === 'win32',
-        exists: existsSync,
-      })
-    : undefined;
-  if (entry && !nodeExecutable) {
+  const commandShape = appServerCommandFor(resolved);
+  if (!commandShape) {
     log().warn(strings.appServer.unavailable('node'));
     return;
   }
   try {
     state.appServer = await HostedAppServer.start({
-      command: entry ?? resolved,
+      ...commandShape,
       // A resolved Node, not `process.execPath`: that is the editor's Electron binary, which
       // only runs a script while `ELECTRON_RUN_AS_NODE` happens to be inherited.
-      ...(entry && nodeExecutable ? { nodeExecutable } : {}),
       log: log(),
       onExit: () => {
         // Drop the handle so the next launch starts a fresh server instead of attaching to
@@ -521,12 +512,7 @@ export async function syncNotifyBridge(): Promise<void> {
   // the editor deletes `ELECTRON_RUN_AS_NODE` from the environment a terminal runs in — so
   // Codex would hand the hook script to an editor, which opens a window instead of writing
   // the event. Without a real Node there is nothing to register that would work.
-  const node = resolveNodeExecutable({
-    execPath: process.execPath,
-    pathValue: process.env.PATH,
-    isWindows: process.platform === 'win32',
-    exists: existsSync,
-  });
+  const node = resolveHostNodeExecutable();
   if (!node) {
     log().info(strings.notifications.needsNode());
     return;

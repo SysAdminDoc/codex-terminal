@@ -1,12 +1,13 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
-import { mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import * as path from 'node:path';
 
 import {
   HostedAppServer,
+  appServerCommandFor,
   appServerListenArgs,
   codexVersionFromUserAgent,
   decodeMessages,
@@ -96,6 +97,25 @@ test('the listen and remote endpoints agree on host and port', () => {
   assert.equal(listen, remote);
   // Localhost only, and Codex says the same in its own banner.
   assert.equal(listen, 'ws://127.0.0.1:8412');
+});
+
+test('the shared app-server command shape refuses an editor host without Node', async () => {
+  const directory = await mkdtemp(path.join(tmpdir(), 'codex-app-server-command-'));
+  const entry = path.join(directory, 'node_modules', '@openai', 'codex', 'bin');
+  const shim = path.join(directory, 'codex.cmd');
+  try {
+    await mkdir(entry, { recursive: true });
+    await writeFile(path.join(entry, 'codex.js'), '', 'utf8');
+    const command = appServerCommandFor(shim, {
+      execPath: 'C:\\Program Files\\VSCodium\\VSCodium.exe',
+      pathValue: 'C:\\nowhere',
+      isWindows: true,
+      exists: () => false,
+    });
+    assert.equal(command, undefined);
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
 });
 
 test('a free port is a real one the OS just handed back', async () => {

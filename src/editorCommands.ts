@@ -1,7 +1,11 @@
 import * as path from 'node:path';
 import * as vscode from 'vscode';
 
-import { AppServerClient, nodeEntryFor, type AppServerHandshake } from './appServer';
+import {
+  AppServerClient,
+  appServerCommandFor,
+  type AppServerHandshake,
+} from './appServer';
 import { collectDoctorReport, runCommandResult } from './doctor';
 import { reviewArgs } from './launcher';
 import {
@@ -306,10 +310,13 @@ export async function checkAppServer(): Promise<void> {
     return;
   }
 
-  const entry = nodeEntryFor(resolved);
+  const commandShape = appServerCommandFor(resolved);
+  if (!commandShape) {
+    log().warn(strings.appServer.unavailable('node'));
+    return;
+  }
   const client = new AppServerClient({
-    command: entry ?? resolved,
-    ...(entry ? { nodeExecutable: process.execPath } : {}),
+    ...commandShape,
     log: log(),
     onNotification: (method) => log().info(`app-server notification: ${method}`),
   });

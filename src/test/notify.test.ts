@@ -21,6 +21,7 @@ import {
   NotifyBridge,
   NOTIFY_EVENT_MAX_AGE_MS,
   notifyEventType,
+  resolveHostNodeExecutable,
   resolveNodeExecutable,
   type NotifyEvent,
 } from '../notify';
@@ -208,6 +209,18 @@ test('no Node anywhere resolves to nothing, so no hook is registered', () => {
       execPath: '/Applications/Visual Studio Code.app/Contents/MacOS/Electron',
       pathValue: '/usr/bin:/bin',
       isWindows: false,
+      exists: () => false,
+    }),
+    undefined,
+  );
+});
+
+test('the shared host probe refuses an editor binary when PATH has no Node', () => {
+  assert.equal(
+    resolveHostNodeExecutable({
+      execPath: 'C:\\Program Files\\Microsoft VS Code\\Code.exe',
+      pathValue: 'C:\\shims',
+      isWindows: true,
       exists: () => false,
     }),
     undefined,

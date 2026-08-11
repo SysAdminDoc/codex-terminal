@@ -1,5 +1,5 @@
 import { mkdir, readdir, readFile, stat, unlink, writeFile } from 'node:fs/promises';
-import { rmSync, unlinkSync, watch, type FSWatcher } from 'node:fs';
+import { existsSync, rmSync, unlinkSync, watch, type FSWatcher } from 'node:fs';
 import * as path from 'node:path';
 
 export interface NotifyEvent {
@@ -103,6 +103,16 @@ export function resolveNodeExecutable(probe: NodeProbe): string | undefined {
     }
   }
   return undefined;
+}
+
+/** Resolve the runtime available to every extension-host app-server call site. */
+export function resolveHostNodeExecutable(probe: NodeProbe = {
+  execPath: process.execPath,
+  pathValue: process.env.PATH,
+  isWindows: process.platform === 'win32',
+  exists: existsSync,
+}): string | undefined {
+  return resolveNodeExecutable(probe);
 }
 
 /** Build the invocation-scoped Codex config override without touching config.toml. */
