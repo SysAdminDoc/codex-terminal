@@ -24,6 +24,13 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- **History refreshes no longer get stuck on the loading row.** A refresh that arrived during
+  the first session scan could leave the view showing “Reading Codex sessions…” until another
+  unrelated event occurred. The completed scan now asks the tree to render its real contents.
+
+- **History search now respects repository worktree boundaries.** Filtering a project with
+  multiple checkouts no longer leaves unmatched sessions reachable beneath the project row.
+
 - **A settings migration that hit a scope the editor refuses lost its marker.** Writing at
   workspace-folder scope on a configuration with no resource throws, and the throw escaped
   before the "already migrated" marker was written — so every activation retried the whole

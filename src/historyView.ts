@@ -336,6 +336,8 @@ export class HistoryViewProvider
   private storeProblem: StoreProblem | undefined;
   /** True while the first scan of a refresh is in flight, so the view is not silently blank. */
   private loading = false;
+  /** A tree refresh arrived while the scan was in flight and needs a second render afterward. */
+  private refreshPendingWhileLoading = false;
   /** Keyed by rollout path, cleared on a real reload; see `changedFiles`. */
   private readonly changedFileCache = new Map<string, HistoryNode[]>();
   private pending: NodeJS.Timeout | undefined;
@@ -366,6 +368,9 @@ export class HistoryViewProvider
       this.changedFileCache.clear();
     }
     this.loaded = false;
+    if (this.loading) {
+      this.refreshPendingWhileLoading = true;
+    }
     this.changes.fire();
   }
 
@@ -510,6 +515,7 @@ export class HistoryViewProvider
       // The first scan can open up to `history.maxSessions` files. Saying so beats a view
       // that is simply blank for as long as it takes.
       if (this.loading) {
+        this.refreshPendingWhileLoading = true;
         return [{ kind: 'message', text: strings.history.loading() }];
       }
       this.loading = true;
@@ -543,6 +549,10 @@ export class HistoryViewProvider
         this.usageMeasuredAt = Date.now();
       }
       this.loaded = true;
+      if (this.refreshPendingWhileLoading) {
+        this.refreshPendingWhileLoading = false;
+        this.changes.fire();
+      }
     }
 
     const recovery: HistoryNode[] =
@@ -587,10 +597,27 @@ export class HistoryViewProvider
       session.id.toLowerCase().includes(this.filter);
 
     return groups
-      .map((group) => ({
-        ...group,
-        sessions: group.sessions.filter((session) => matches(session, group.project)),
-      }))
+      .map((group) => {
+        const sessions = group.sessions.filter((session) => matches(session, group.project));
+        const checkouts = group.checkouts
+          ?.map((checkout) => ({
+            ...checkout,
+            sessions: checkout.sessions.filter((session) => matches(session, group.project)),
+          }))
+          .filter((checkout) => checkout.sessions.length > 0);
+        const filteredGroup = {
+          ...group,
+          sessions,
+        };
+        // A single surviving checkout no longer needs an extra level. Keeping the filtered
+        // sessions on the project also ensures expansion cannot reveal non-matching rows.
+        if (checkouts && checkouts.length > 1) {
+          filteredGroup.checkouts = checkouts;
+        } else {
+          delete filteredGroup.checkouts;
+        }
+        return filteredGroup;
+      })
       .filter((group) => group.sessions.length > 0);
   }
 
