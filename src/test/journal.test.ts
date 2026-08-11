@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises';
+import { mkdtemp, readFile, readdir, rm, utimes, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import * as path from 'node:path';
 import { test } from 'node:test';
@@ -225,6 +225,32 @@ test('pruning removes finished journals and keeps a recent crash', async () => {
     await store.prune(Date.now(), 7 * 24 * 60 * 60 * 1000);
     const remaining = (await readdir(directory)).filter((entry) => entry.endsWith('.json'));
     assert.deepEqual(remaining, ['window-crashed.json']);
+  });
+});
+
+test('pruning removes stale invalid journals but keeps a recent invalid file', async () => {
+  await withStore(async (store, directory) => {
+    const now = Date.now();
+    const maxAgeMs = 7 * 24 * 60 * 60 * 1000;
+    const old = (now - maxAgeMs - 1_000) / 1_000;
+    const recent = (now - maxAgeMs + 1_000) / 1_000;
+    const corrupt = path.join(directory, 'window-corrupt.json');
+    const foreign = path.join(directory, 'window-foreign.json');
+    const recentCorrupt = path.join(directory, 'window-recent-corrupt.json');
+
+    await writeFile(corrupt, '{ not json', 'utf8');
+    await writeFile(
+      foreign,
+      JSON.stringify({ version: 99, windowId: 'foreign', heartbeatAt: now, sessions: [] }),
+      'utf8',
+    );
+    await writeFile(recentCorrupt, '{ not json', 'utf8');
+    await utimes(corrupt, old, old);
+    await utimes(foreign, old, old);
+    await utimes(recentCorrupt, recent, recent);
+
+    assert.equal(await store.prune(now, maxAgeMs), 2);
+    assert.deepEqual(await readdir(directory), ['window-recent-corrupt.json']);
   });
 });
 

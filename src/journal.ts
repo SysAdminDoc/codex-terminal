@@ -1,5 +1,5 @@
 import { mkdirSync, renameSync, writeFileSync } from 'node:fs';
-import { mkdir, readFile, readdir, rename, unlink, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, readdir, rename, stat, unlink, writeFile } from 'node:fs/promises';
 import * as path from 'node:path';
 
 import type { ActivityStatus } from './activity';
@@ -453,8 +453,19 @@ export class JournalStore {
       }
       const target = path.join(this.directory, entry);
       try {
+        // Never remove the active window's file solely because a transient read saw invalid
+        // contents. A valid active journal is not disposable either, but this guard also keeps
+        // an invalid file from being treated as abandoned while the window is still running.
+        if (path.resolve(target) === path.resolve(this.filePath)) {
+          continue;
+        }
         const state = parseJournal(await readFile(target, 'utf8'));
         if (state && isDisposable(state, now, this.windowId, maxAgeMs)) {
+          await unlink(target);
+          removed += 1;
+        } else if (!state && now - (await stat(target)).mtimeMs > maxAgeMs) {
+          // Invalid journals cannot be recovered or marked handled. Their mtime is the only
+          // retention signal left, and the monitor reports the aggregate removal once.
           await unlink(target);
           removed += 1;
         }

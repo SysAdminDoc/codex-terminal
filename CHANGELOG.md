@@ -10,6 +10,10 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - **Quoted file ranges stay intact.** Editor references now keep a line-range suffix inside the
   quotes around a path containing spaces, so Codex receives the complete location as one token.
 
+- **Stale invalid journals are pruned.** Corrupt and foreign-version window records now leave
+  global storage after the retention window while recent invalid files remain available for
+  concurrent recovery or repair.
+
 - **Closed-session state is bounded.** Finished sessions leave the live monitor after their
   `closedAt` record is written, while journals retain open sessions and only the 200 newest closed
   records needed for recovery history.
