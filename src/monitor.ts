@@ -111,6 +111,8 @@ export class SessionMonitor implements vscode.Disposable {
   private journal: JournalState;
   private writing = false;
   private writeAgain = false;
+  /** Closed entries stay until a successful journal write has recorded their `closedAt`. */
+  private readonly pendingClosed = new Set<Tracked>();
   /** Set by `shutdown`, so a queued async write cannot land after the sync stamp. */
   private stopped = false;
 
@@ -468,7 +470,25 @@ export class SessionMonitor implements vscode.Disposable {
         this.options.storeMessages?.() === false ? undefined : entry.activity.lastMessage,
       completedTurns: entry.activity.completedTurns,
     });
+    if (closedAt !== undefined) {
+      this.pendingClosed.add(entry);
+    }
     void this.writeJournal();
+  }
+
+  private releasePersistedClosed(): void {
+    if (this.pendingClosed.size === 0) {
+      return;
+    }
+    const pending = new Set(this.pendingClosed);
+    for (const entry of pending) {
+      this.pendingClosed.delete(entry);
+    }
+    for (let index = this.tracked.length - 1; index >= 0; index -= 1) {
+      if (pending.has(this.tracked[index]) && this.tracked[index].closed) {
+        this.tracked.splice(index, 1);
+      }
+    }
   }
 
   /** Serialise writers so a burst of activity cannot interleave two renames. */
@@ -478,6 +498,7 @@ export class SessionMonitor implements vscode.Disposable {
       return;
     }
     this.writing = true;
+    let wrote = false;
     try {
       do {
         this.writeAgain = false;
@@ -488,6 +509,7 @@ export class SessionMonitor implements vscode.Disposable {
         }
         this.journal = { ...this.journal, heartbeatAt: Date.now() };
         await this.options.store.write(this.journal);
+        wrote = true;
       } while (this.writeAgain);
     } catch (error) {
       this.options.log.warn(
@@ -496,6 +518,9 @@ export class SessionMonitor implements vscode.Disposable {
         }`,
       );
     } finally {
+      if (wrote) {
+        this.releasePersistedClosed();
+      }
       this.writing = false;
     }
   }

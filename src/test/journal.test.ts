@@ -6,6 +6,7 @@ import { test } from 'node:test';
 
 import {
   JournalStore,
+  MAX_CLOSED_JOURNAL_SESSIONS,
   STALE_HEARTBEAT_MS,
   emptyJournal,
   findLaunch,
@@ -50,6 +51,26 @@ test('a session is inserted once and then updated in place', () => {
   assert.equal(second.sessions.length, 1);
   assert.equal(second.sessions[0].status, 'working');
   assert.equal(second.sessions[0].completedTurns, 4);
+});
+
+test('journal history retains every open session but caps closed records', () => {
+  let state = emptyJournal('w');
+  state = upsertSession(state, session({ key: 'open', closedAt: undefined }));
+  for (let index = 0; index < MAX_CLOSED_JOURNAL_SESSIONS + 5; index += 1) {
+    state = upsertSession(
+      state,
+      session({
+        key: `closed-${index}`,
+        closedAt: NOW - index,
+        lastActiveAt: NOW - index,
+      }),
+    );
+  }
+
+  assert.equal(state.sessions.length, MAX_CLOSED_JOURNAL_SESSIONS + 1);
+  assert.ok(state.sessions.some((entry) => entry.key === 'open'));
+  assert.ok(state.sessions.some((entry) => entry.key === 'closed-0'));
+  assert.ok(!state.sessions.some((entry) => entry.key === 'closed-204'));
 });
 
 test('a window that heartbeat recently is not treated as crashed', () => {

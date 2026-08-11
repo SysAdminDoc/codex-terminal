@@ -223,6 +223,38 @@ test('closing a terminal stops it counting as working', async () => {
   });
 });
 
+test('closed sessions leave the monitor after their journal write', async () => {
+  await withMonitor(async ({ monitor, store }) => {
+    for (let index = 0; index < 250; index += 1) {
+      const terminal = fakeTerminal();
+      monitor.track(terminal, {
+        cwd: 'C:\\fixture',
+        project: 'fixture',
+        label: `fixture ${index}`,
+        mode: 'new',
+        key: `closed-${index}`,
+        bindable: false,
+      });
+      monitor.close(terminal);
+    }
+
+    const deadline = Date.now() + 5000;
+    while (Date.now() < deadline) {
+      const tracked = (monitor as unknown as { tracked: unknown[] }).tracked;
+      if (tracked.length === 0) {
+        break;
+      }
+      await new Promise((resolve) => setTimeout(resolve, 20));
+    }
+
+    assert.deepEqual(monitor.live(), []);
+    assert.equal((monitor as unknown as { tracked: unknown[] }).tracked.length, 0);
+    const [journal] = await store.readAll();
+    assert.ok(journal);
+    assert.equal(journal.sessions.length, 200);
+  });
+});
+
 test('the shutdown stamp survives a journal write queued behind it', async () => {
   await withMonitor(async ({ monitor, store, directory }) => {
     const rolloutPath = path.join(directory, 'rollout.jsonl');

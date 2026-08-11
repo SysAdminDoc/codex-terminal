@@ -25,6 +25,8 @@ export const JOURNAL_VERSION = 1;
 
 /** A window is presumed dead once its heartbeat is this old. */
 export const STALE_HEARTBEAT_MS = 90_000;
+/** Keep recovery identifiers bounded without dropping sessions still open in a window. */
+export const MAX_CLOSED_JOURNAL_SESSIONS = 200;
 
 export interface JournalSession {
   /** Stable per-launch key; survives before the Codex session id is known. */
@@ -66,6 +68,17 @@ export function emptyJournal(windowId: string, workspaceName?: string): JournalS
   };
 }
 
+function capSessions(sessions: readonly JournalSession[]): JournalSession[] {
+  const closed = sessions
+    .filter((session) => session.closedAt !== undefined)
+    .sort((left, right) => right.lastActiveAt - left.lastActiveAt)
+    .slice(0, MAX_CLOSED_JOURNAL_SESSIONS);
+  const retainedClosed = new Set(closed);
+  return sessions.filter(
+    (session) => session.closedAt === undefined || retainedClosed.has(session),
+  );
+}
+
 /** Insert or update one session by key, leaving the rest of the journal alone. */
 export function upsertSession(
   state: JournalState,
@@ -78,7 +91,7 @@ export function upsertSession(
   } else {
     sessions[index] = { ...sessions[index], ...session };
   }
-  return { ...state, sessions };
+  return { ...state, sessions: capSessions(sessions) };
 }
 
 /**
@@ -127,10 +140,12 @@ export function stampShutdown(state: JournalState, now: number): JournalState {
     ...state,
     heartbeatAt: now,
     cleanShutdownAt: now,
-    sessions: state.sessions.map((session) => ({
-      ...session,
-      closedAt: session.closedAt ?? now,
-    })),
+    sessions: capSessions(
+      state.sessions.map((session) => ({
+        ...session,
+        closedAt: session.closedAt ?? now,
+      })),
+    ),
   };
 }
 
@@ -241,12 +256,14 @@ export function parseJournal(text: string): JournalState | undefined {
     workspaceName: state.workspaceName,
     heartbeatAt: state.heartbeatAt,
     cleanShutdownAt: state.cleanShutdownAt,
-    sessions: state.sessions.filter(
-      (session): session is JournalSession =>
+    sessions: capSessions(
+      state.sessions.filter(
+        (session): session is JournalSession =>
         typeof session === 'object' &&
         session !== null &&
         typeof (session as JournalSession).key === 'string' &&
         typeof (session as JournalSession).cwd === 'string',
+      ),
     ),
   };
 }
