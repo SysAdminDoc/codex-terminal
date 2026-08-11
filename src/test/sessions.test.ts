@@ -7,6 +7,7 @@ import { test } from 'node:test';
 import {
   codexHomeDirectory,
   discoverSessions,
+  exportTranscript,
   formatBytes,
   groupSessionsByProject,
   indexCheckouts,
@@ -14,6 +15,21 @@ import {
   selectNewestRollouts,
   type SessionRecord,
 } from '../sessions';
+
+test('transcript export redacts secrets by default and warns when opted out', async () => {
+  const fixture = path.resolve(__dirname, '../../src/test/fixtures/transcript-secrets.jsonl');
+  const safe = await exportTranscript(fixture, 'fixture');
+  assert.equal(safe.redactionCount, 2);
+  assert.match(safe.markdown, /Secret redactions:\*\* 2/);
+  assert.doesNotMatch(safe.markdown, /eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9/);
+  assert.doesNotMatch(safe.markdown, /sk-proj-1234567890abcdef1234567890/);
+
+  const unsafe = await exportTranscript(fixture, 'fixture', { redactSecrets: false });
+  assert.equal(unsafe.redactionCount, 0);
+  assert.match(unsafe.markdown, /Secret redaction:\*\* disabled/);
+  assert.match(unsafe.markdown, /eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9/);
+  assert.match(unsafe.markdown, /sk-proj-1234567890abcdef1234567890/);
+});
 
 test('session discovery reads metadata headers, sorts newest first, and skips malformed files', async () => {
   const home = await mkdtemp(path.join(os.tmpdir(), 'codex-terminal-sessions-'));

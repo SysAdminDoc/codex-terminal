@@ -83,6 +83,7 @@
   "setting.journal.storeMessages.markdownDescription": "Keep Codex's closing message for each turn in the crash-recovery journal, so an interrupted session can be recognised by what it last said. Turning this off keeps conversation text out of the journal; the journal still records identifiers and timestamps, which is all recovery strictly needs.",
   "setting.transcript.includeToolCalls.description": "Include the commands Codex ran and the patches it applied in an exported transcript. Each block is capped, because an apply_patch call carries the entire new contents of every file it writes.",
   "setting.transcript.includeToolOutput.description": "Also include what those commands printed back. Off by default: tool output is the bulk of a session and is rarely what you came back to read.",
+  "setting.transcript.redactSecrets.description": "Replace recognised bearer tokens and API-key shapes in exported Markdown, and report the replacement count in its header. On by default; turning this off is a deliberate opt-out and may expose credentials.",
   "setting.history.maxSessions.description": "Maximum number of recent Codex sessions shown in the History sidebar.",
   "command.checkAppServer.title": "Check Codex App Server",
   "command.reviewUncommitted.title": "Review Uncommitted Changes with Codex",

@@ -200,6 +200,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<CodexT
   const transcript = new TranscriptContentProvider(() => ({
     includeToolCalls: config().get<boolean>('transcript.includeToolCalls', true),
     includeToolOutput: config().get<boolean>('transcript.includeToolOutput', false),
+    redactSecrets: config().get<boolean>('transcript.redactSecrets', true),
   }));
 
   // Set before anything that could reach a command: every extracted module reads its handles

@@ -133,7 +133,9 @@ into its own extension storage — which sessions a window had open, their ids a
 and by default Codex's closing message for each turn so an interrupted session is recognisable.
 Both are switchable: see `codexTerminal.monitor.enabled` and
 `codexTerminal.journal.storeMessages`. It also changes three workbench settings, which it
-announces and can revert.
+announces and can revert. Exported transcripts redact recognised bearer tokens and API-key
+shapes by default and put the replacement count in the Markdown header; the machine-scoped
+`codexTerminal.transcript.redactSecrets` setting can opt out with an explicit warning.
 
 ## Settings
 
@@ -165,6 +167,7 @@ announces and can revert.
 | `codexTerminal.journal.storeMessages` | `true` | Keep Codex's closing message per turn in the crash journal. Turning it off keeps conversation text out of it **and removes what is already recorded**, from every window's journal, not just this one's. Identifiers and timestamps, which is all recovery needs, are still kept. |
 | `codexTerminal.transcript.includeToolCalls` | `true` | Include the commands Codex ran and the patches it applied in an exported transcript. Each block is capped: an `apply_patch` call carries the entire new contents of every file it writes. |
 | `codexTerminal.transcript.includeToolOutput` | `false` | Also include what those commands printed back. Off by default — tool output is the bulk of a session and is rarely what you came back to read. |
+| `codexTerminal.transcript.redactSecrets` | `true` | Replace recognised bearer tokens and API-key shapes in exported Markdown and report the count in its header. Machine-scoped; turning it off may expose credentials. |
 
 ### Where the activity indicator actually appears
 

@@ -6,6 +6,7 @@ import {
   isInjectedContext,
   parseSessionMeta,
   parseTranscriptLine,
+  redactSecrets,
   renderTranscriptEntry,
   rolloutSchemaGeneration,
   summarise,
@@ -177,6 +178,17 @@ test('tool calls and tool output are gated separately', () => {
   assert.ok(renderTranscriptEntry(call, { includeToolCalls: true }));
   assert.equal(renderTranscriptEntry(output, { includeToolCalls: true, includeToolOutput: false }), undefined);
   assert.ok(renderTranscriptEntry(output, { includeToolOutput: true }));
+});
+
+test('secret-shaped values are replaced and counted', () => {
+  const result = redactSecrets(
+    'Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9 and sk-proj-1234567890abcdef1234567890',
+  );
+  assert.equal(result.count, 2);
+  assert.doesNotMatch(result.text, /eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9/);
+  assert.doesNotMatch(result.text, /sk-proj-1234567890abcdef1234567890/);
+  assert.match(result.text, /Bearer \[REDACTED\]/);
+  assert.equal((result.text.match(/\[REDACTED\]/g) ?? []).length, 2);
 });
 
 test('session metadata selects the supported legacy and modern schema generations', () => {

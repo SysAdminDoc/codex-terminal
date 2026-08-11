@@ -12,6 +12,7 @@ import {
   parseFileChanges,
   parseSessionMeta,
   parseTranscriptLine,
+  redactSecrets,
   renderTranscriptEntry,
   renderTranscriptHeader,
   summarise,
@@ -463,6 +464,7 @@ export interface TranscriptExportResult {
   markdown: string;
   entryCount: number;
   truncated: boolean;
+  redactionCount: number;
 }
 
 /**
@@ -480,9 +482,14 @@ export async function exportTranscript(
 
   const parts: string[] = [];
   let meta: TranscriptMeta | undefined;
-  let bytes = 0;
+  let bodyBytes = 0;
   let entryCount = 0;
   let truncated = false;
+  let redactionCount = 0;
+  const redactionEnabled = options.redactSecrets !== false;
+  // The exact count is not known until the body has streamed, so leave room for its digits
+  // while enforcing the same cap the old header-inclusive exporter promised.
+  let headerReserve = 0;
 
   try {
     for await (const line of reader) {
@@ -492,9 +499,10 @@ export async function exportTranscript(
       if (!meta) {
         meta = parseSessionMeta(line);
         if (meta) {
-          const header = renderTranscriptHeader(meta, project);
-          parts.push(header);
-          bytes += header.length;
+          headerReserve = renderTranscriptHeader(meta, project, {
+            redactionEnabled,
+            redactionCount: 0,
+          }).length + 10;
           continue;
         }
       }
@@ -506,12 +514,14 @@ export async function exportTranscript(
       if (!rendered) {
         continue;
       }
-      if (bytes + rendered.length > maxBytes) {
+      const safe = redactionEnabled ? redactSecrets(rendered) : { text: rendered, count: 0 };
+      if (bodyBytes + safe.text.length + headerReserve > maxBytes) {
         truncated = true;
         break;
       }
-      parts.push(rendered);
-      bytes += rendered.length;
+      parts.push(safe.text);
+      bodyBytes += safe.text.length;
+      redactionCount += safe.count;
       entryCount += 1;
     }
   } finally {
@@ -522,7 +532,24 @@ export async function exportTranscript(
   if (truncated) {
     parts.push('\n---\n\n> Transcript truncated. Open the rollout file for the remainder.\n');
   }
-  return { markdown: parts.join('\n'), entryCount, truncated };
+  let header = '';
+  if (meta) {
+    const rawHeader = renderTranscriptHeader(meta, project, {
+      redactionEnabled,
+      redactionCount,
+    });
+    // A project or working directory can itself contain a credential-shaped value. Count and
+    // redact the header too, then render once more so the number printed is the final total.
+    const safeHeader = redactionEnabled ? redactSecrets(rawHeader) : { text: rawHeader, count: 0 };
+    redactionCount += safeHeader.count;
+    const finalHeader = renderTranscriptHeader(meta, project, {
+      redactionEnabled,
+      redactionCount,
+    });
+    header = redactionEnabled ? redactSecrets(finalHeader).text : finalHeader;
+  }
+  const output = header ? [header, ...parts].join('\n') : parts.join('\n');
+  return { markdown: output, entryCount, truncated, redactionCount };
 }
 
 export interface ChangedFilesResult {

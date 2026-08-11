@@ -11,6 +11,10 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   known record vocabulary; unknown record types are retained and warned once per live session
   instead of disappearing silently.
 
+- **Secret-safe transcript exports.** Markdown exports redact bearer tokens and common API-key
+  shapes by default, report the replacement count in the header, and make the machine-scoped
+  opt-out visibly warn that credentials may be exposed.
+
 - **Archived sessions are recoverable.** The History view now keeps archived conversations in
   a separate group, with an `Unarchive` action that returns a session to the active list.
 

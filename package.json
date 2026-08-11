@@ -616,6 +616,12 @@
           "default": false,
           "description": "%setting.transcript.includeToolOutput.description%"
         },
+        "codexTerminal.transcript.redactSecrets": {
+          "type": "boolean",
+          "default": true,
+          "description": "%setting.transcript.redactSecrets.description%",
+          "scope": "machine"
+        },
         "codexTerminal.history.maxSessions": {
           "type": "integer",
           "minimum": 1,

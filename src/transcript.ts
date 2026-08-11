@@ -80,6 +80,40 @@ export interface TranscriptEntry {
   timestamp?: string;
 }
 
+export interface SecretRedactionResult {
+  text: string;
+  /** Number of secret-shaped values replaced, including repeated occurrences. */
+  count: number;
+}
+
+/** Token forms that Codex and the services it commonly calls expose in raw rollouts. */
+const SECRET_PATTERNS = [
+  /\bBearer\s+[A-Za-z0-9._~+/=-]{8,}(?=$|[^A-Za-z0-9._~+/=-])/gi,
+  /\bgithub_pat_[A-Za-z0-9_]{20,}(?=$|[^A-Za-z0-9_])/g,
+  /\bgh[pousr]_[A-Za-z0-9]{20,}(?=$|[^A-Za-z0-9])/g,
+  /\bxox[baprs]-[A-Za-z0-9-]{20,}(?=$|[^A-Za-z0-9-])/g,
+  /\b(?:sk|rk)-[A-Za-z0-9][A-Za-z0-9_-]{7,}(?=$|[^A-Za-z0-9_-])/g,
+  /\bAIza[0-9A-Za-z_-]{30,}(?=$|[^0-9A-Za-z_-])/g,
+  /\bAKIA[0-9A-Z]{16}\b/g,
+  /\bnpm_[A-Za-z0-9]{30,}\b/g,
+] as const;
+
+/** Replace recognised credential shapes before rollout text leaves the extension. */
+export function redactSecrets(text: string): SecretRedactionResult {
+  let count = 0;
+  let redacted = text;
+  for (const pattern of SECRET_PATTERNS) {
+    redacted = redacted.replace(pattern, (match) => {
+      count += 1;
+      if (/^Bearer\s/i.test(match)) {
+        return `${match.slice(0, match.search(/\s/))} [REDACTED]`;
+      }
+      return '[REDACTED]';
+    });
+  }
+  return { text: redacted, count };
+}
+
 export interface TranscriptMeta {
   id: string;
   timestamp: string;
@@ -340,6 +374,8 @@ export interface TranscriptRenderOptions {
   includeToolCalls?: boolean;
   /** Include what the tools printed back. Defaults to whatever `includeToolCalls` is. */
   includeToolOutput?: boolean;
+  /** Replace recognised credential shapes. Defaults to true; disabling it may expose secrets. */
+  redactSecrets?: boolean;
   /** Include the injected prompt scaffolding. */
   includeContext?: boolean;
   /** Truncate any single block to this many characters. */
@@ -374,7 +410,21 @@ function fence(text: string): string {
   return `${ticks}\n${text}\n${ticks}`;
 }
 
-export function renderTranscriptHeader(meta: TranscriptMeta, project: string): string {
+export interface TranscriptHeaderOptions {
+  /** Whether the export applied its default secret redaction pass. */
+  redactionEnabled?: boolean;
+  /** Number of credential-shaped values replaced in the export. */
+  redactionCount?: number;
+}
+
+export function renderTranscriptHeader(
+  meta: TranscriptMeta,
+  project: string,
+  options: TranscriptHeaderOptions = {},
+): string {
+  const redactionLine = options.redactionEnabled === false
+    ? '- **Secret redaction:** disabled — this export may contain credentials.'
+    : `- **Secret redactions:** ${options.redactionCount ?? 0}`;
   return [
     `# Codex session — ${project || meta.cwd || meta.id}`,
     '',
@@ -383,6 +433,7 @@ export function renderTranscriptHeader(meta: TranscriptMeta, project: string): s
     `- **Working directory:** \`${meta.cwd}\``,
     ...(meta.cliVersion ? [`- **Codex CLI:** ${meta.cliVersion}`] : []),
     `- **Rollout schema:** ${meta.schemaGeneration}`,
+    redactionLine,
     ...(meta.originator ? [`- **Originator:** ${meta.originator}`] : []),
     '',
     `Resume it with \`codex resume ${meta.id}\`.`,

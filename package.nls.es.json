@@ -83,6 +83,7 @@
   "setting.journal.storeMessages.markdownDescription": "Conservar en el diario de recuperación el mensaje final de Codex en cada turno, para poder reconocer una sesión interrumpida por lo último que dijo. Desactivarlo mantiene el texto de las conversaciones fuera del diario; el diario sigue registrando identificadores y marcas de tiempo, que es todo lo que la recuperación necesita estrictamente.",
   "setting.transcript.includeToolCalls.description": "Incluir en la transcripción exportada los comandos que ejecutó Codex y los parches que aplicó. Cada bloque tiene un límite, porque una llamada apply_patch lleva el contenido completo de cada archivo que escribe.",
   "setting.transcript.includeToolOutput.description": "Incluir también lo que imprimieron esos comandos. Desactivado de forma predeterminada: la salida de las herramientas es la mayor parte de una sesión y rara vez es lo que se vuelve a leer.",
+  "setting.transcript.redactSecrets.description": "Sustituir tokens bearer reconocidos y formas de claves API en el Markdown exportado, e indicar en su encabezado cuántas sustituciones se hicieron. Activado de forma predeterminada; desactivarlo es una exclusión deliberada y puede exponer credenciales.",
   "setting.history.maxSessions.description": "Número máximo de sesiones recientes de Codex mostradas en la barra lateral de historial.",
   "command.checkAppServer.title": "Comprobar el app server de Codex",
   "command.reviewUncommitted.title": "Revisar cambios sin confirmar con Codex",
