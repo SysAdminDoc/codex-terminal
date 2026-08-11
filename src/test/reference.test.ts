@@ -28,3 +28,16 @@ test('a single-line selection collapses to one L marker', () => {
 test('a path with spaces is quoted', () => {
   assert.equal(buildFileReference({ relativePath: 'my docs/a.ts' }), '@"my docs/a.ts"');
 });
+
+test('a quoted path keeps its line range inside the mention', () => {
+  // Checked against codex-cli 0.147.0 on 2026-08-11: its interactive composer quotes a
+  // whitespace-containing path as one prompt argument, so the location suffix must stay inside
+  // that quoted reference.
+  assert.equal(
+    buildFileReference({
+      relativePath: 'my docs/a.ts',
+      selection: { startLine: 9, endLine: 19 },
+    }),
+    '@"my docs/a.ts#L10-L20"',
+  );
+});

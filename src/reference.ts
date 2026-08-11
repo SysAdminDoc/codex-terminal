@@ -14,12 +14,15 @@ export interface ReferenceInput {
  */
 export function buildFileReference(input: ReferenceInput): string {
   const path = input.relativePath.replace(/\\/g, '/');
-  const quoted = /\s/.test(path) ? `"${path}"` : path;
-  if (!input.selection) {
-    return `@${quoted}`;
-  }
-  const start = input.selection.startLine + 1;
-  const end = input.selection.endLine + 1;
-  const range = start === end ? `#L${start}` : `#L${start}-L${end}`;
-  return `@${quoted}${range}`;
+  const referencePath = input.selection
+    ? `${path}${formatLineRange(input.selection)}`
+    : path;
+  const quoted = /\s/.test(referencePath) ? `"${referencePath}"` : referencePath;
+  return `@${quoted}`;
+}
+
+function formatLineRange(selection: NonNullable<ReferenceInput['selection']>): string {
+  const start = selection.startLine + 1;
+  const end = selection.endLine + 1;
+  return start === end ? `#L${start}` : `#L${start}-L${end}`;
 }
