@@ -15,6 +15,7 @@ import {
 import { HistoryViewProvider } from './historyView';
 import {
   copyHistorySessionId,
+  copyHistoryCommand,
   forkHistorySession,
   nameSession,
   openRawHistorySession,
@@ -22,6 +23,7 @@ import {
   resumeHistorySession,
   runSessionLifecycle,
   searchHistory,
+  sendRecentPrompt,
   sessionNames,
 } from './historyCommands';
 import { runCommand } from './doctor';
@@ -225,6 +227,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<CodexT
       },
     ],
     ['codexTerminal.forkLast', () => void launch({ mode: 'forkLast' })],
+    ['codexTerminal.sendRecentPrompt', () => void sendRecentPrompt()],
     [
       'codexTerminal.newWithProfile',
       () => {
@@ -285,6 +288,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<CodexT
     vscode.commands.registerCommand('codexTerminal.openTranscript', openTranscript),
     vscode.commands.registerCommand('codexTerminal.resumeHistorySession', resumeHistorySession),
     vscode.commands.registerCommand('codexTerminal.copyHistorySessionId', copyHistorySessionId),
+    vscode.commands.registerCommand('codexTerminal.copyHistoryCommand', copyHistoryCommand),
     vscode.commands.registerCommand('codexTerminal.openRawHistorySession', openRawHistorySession),
     vscode.commands.registerCommand('codexTerminal.restoreSession', restoreSession),
     vscode.commands.registerCommand('codexTerminal.forkHistorySession', forkHistorySession),

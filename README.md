@@ -91,7 +91,9 @@ available from VS Code's Getting Started page.
   row's context menu. Where Codex's compatible SQLite projections are available, a row also shows
   the last durable turn state; a failed usage-limit turn includes its reset time. Those databases
   are opened read-only, and an unknown generation falls back to the rollout scan. The file-change
-  scan runs when you expand the row, not during the listing.
+  scan runs when you expand the row, not during the listing. Each session also exposes a lazy
+  **Commands** node with deduplicated shell commands that can be copied, and the Command Palette
+  can send a recent prompt from Codex's history to a live session.
 - **Naming a session** — *Name Session…* on a row in either sidebar. The name replaces that
   row's label everywhere the extension draws it. It is stored by this extension, not by Codex:
   the name is stored here and also written to Codex through the app server's `thread/name/set`,
@@ -105,7 +107,8 @@ available from VS Code's Getting Started page.
   reached a rollout are not offered, because there is nothing to return to.
 - **Command Palette** — `Codex Terminal: New Session`, `Resume Last Session`,
   `Resume Session (picker)`, `Fork Last Session`, `Focus Codex Terminal`,
-  `New Session with Profile…`, `Send File Reference to Codex`, `Ask Codex About Selection…`,
+  `Send Recent Prompt to Codex`, `New Session with Profile…`, `Send File Reference to Codex`,
+  `Ask Codex About Selection…`,
   `Review Uncommitted Changes with Codex`, `Review Changes Against Base Branch…`,
   `Review This Commit with Codex`, `Revert Workbench Settings`, `Check Codex App Server`,
   `Doctor`, `Show Log`.

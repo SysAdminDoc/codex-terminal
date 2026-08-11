@@ -170,6 +170,11 @@
         "category": "%category.codexTerminal%"
       },
       {
+        "command": "codexTerminal.sendRecentPrompt",
+        "title": "%command.sendRecentPrompt.title%",
+        "category": "%category.codexTerminal%"
+      },
+      {
         "command": "codexTerminal.sendFileReference",
         "title": "%command.sendReference.title%",
         "category": "%category.codexTerminal%"
@@ -253,6 +258,12 @@
       {
         "command": "codexTerminal.copyHistorySessionId",
         "title": "%command.copyHistoryId.title%",
+        "category": "%category.codexTerminal%",
+        "icon": "$(copy)"
+      },
+      {
+        "command": "codexTerminal.copyHistoryCommand",
+        "title": "%command.copyHistoryCommand.title%",
         "category": "%category.codexTerminal%",
         "icon": "$(copy)"
       },

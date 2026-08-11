@@ -245,6 +245,8 @@ function rateLimitWindowOf(
 
 /** Longest subject kept. Long enough to identify a step, short enough for a tree row. */
 export const MAX_SUBJECT_LENGTH = 80;
+/** Commands can be copied from History, but a malformed rollout must not create an unbounded row. */
+export const MAX_COMMAND_LENGTH = 8 * 1024;
 
 const SHELLS = new Set(['pwsh', 'powershell', 'cmd', 'bash', 'sh', 'zsh', 'fish']);
 /** The flag after which a shell's real argument is the script, not another option. */
@@ -261,10 +263,10 @@ const KNOWN_EVENT_TYPES = new Set([
   'thread_settings_applied',
 ]);
 
-function tidySubject(value: string): string {
+function tidySubject(value: string, maxLength = MAX_SUBJECT_LENGTH): string {
   const collapsed = value.replace(/\s+/g, ' ').trim();
-  return collapsed.length > MAX_SUBJECT_LENGTH
-    ? `${collapsed.slice(0, MAX_SUBJECT_LENGTH - 1)}…`
+  return collapsed.length > maxLength
+    ? `${collapsed.slice(0, maxLength - 1)}…`
     : collapsed;
 }
 
@@ -280,7 +282,10 @@ function baseName(value: string): string {
  * to pwsh and the interesting text is the script two arguments later. Showing the raw join
  * would fill the row with the same prefix on every single command.
  */
-function describeCommand(command: readonly unknown[]): string {
+export function formatCommand(
+  command: readonly unknown[],
+  maxLength = MAX_SUBJECT_LENGTH,
+): string {
   const parts = command.filter((part): part is string => typeof part === 'string');
   if (parts.length === 0) {
     return '';
@@ -289,10 +294,14 @@ function describeCommand(command: readonly unknown[]): string {
   if (SHELLS.has(executable.toLowerCase())) {
     const flag = parts.findIndex((part) => SCRIPT_FLAGS.has(part.toLowerCase()));
     if (flag !== -1 && parts[flag + 1]) {
-      return tidySubject(parts[flag + 1]);
+      return tidySubject(parts[flag + 1], maxLength);
     }
   }
-  return tidySubject([executable, ...parts.slice(1)].join(' '));
+  return tidySubject([executable, ...parts.slice(1)].join(' '), maxLength);
+}
+
+function describeCommand(command: readonly unknown[]): string {
+  return formatCommand(command);
 }
 
 /** First text out of a `content` array, whose entries differ in case between item kinds. */
@@ -346,8 +355,10 @@ export function describeItem(item: unknown): ActivityItem | undefined {
   }
   const record = item as Record<string, unknown>;
   switch (record.type) {
-    case 'CommandExecution':
-      return { kind: 'command', subject: describeCommand(record.command as unknown[] ?? []) };
+    case 'CommandExecution': {
+      const command = Array.isArray(record.command) ? record.command : [];
+      return { kind: 'command', subject: describeCommand(command) };
+    }
     case 'FileChange':
       return { kind: 'fileChange', subject: describeFileChange(record.changes) };
     case 'AgentMessage':

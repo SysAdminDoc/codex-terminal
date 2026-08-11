@@ -5,6 +5,7 @@ import * as path from 'node:path';
 import { test } from 'node:test';
 
 import {
+  collectCommands,
   codexHomeDirectory,
   discoverSessions,
   exportTranscript,
@@ -12,6 +13,8 @@ import {
   groupSessionsByProject,
   indexCheckouts,
   measureStore,
+  parsePromptHistoryLine,
+  readPromptHistory,
   selectNewestRollouts,
   type SessionRecord,
 } from '../sessions';
@@ -133,6 +136,57 @@ test('session discovery extracts the first real prompt and groups by project', a
     assert.equal(codexHomeDirectory(undefined, undefined), path.join(os.homedir(), '.codex'));
   } finally {
     await rm(home, { recursive: true, force: true });
+  }
+});
+
+test('prompt history parses, bounds and sorts recent entries', async () => {
+  const home = await mkdtemp(path.join(os.tmpdir(), 'codex-terminal-prompts-'));
+  try {
+    await writeFile(
+      path.join(home, 'history.jsonl'),
+      [
+        JSON.stringify({ session_id: 'old', ts: 100, text: 'older prompt' }),
+        'not json',
+        JSON.stringify({ session_id: 'new', ts: 300, text: 'new prompt' }),
+        JSON.stringify({ session_id: 'middle', ts: 200, text: 'middle prompt' }),
+      ].join('\n'),
+    );
+    assert.deepEqual(parsePromptHistoryLine(JSON.stringify({ session_id: 'x', ts: 1, text: 'hello' })), {
+      sessionId: 'x',
+      timestamp: 1000,
+      text: 'hello',
+      preview: 'hello',
+    });
+    assert.equal(parsePromptHistoryLine(JSON.stringify({ session_id: 'x', ts: 1, text: ' ' })), undefined);
+    assert.deepEqual(
+      (await readPromptHistory({ homeDirectory: home, maxResults: 2 })).map((entry) => entry.sessionId),
+      ['new', 'middle'],
+    );
+  } finally {
+    await rm(home, { recursive: true, force: true });
+  }
+});
+
+test('session command history keeps distinct shell commands in first-seen order', async () => {
+  const file = path.join(await mkdtemp(path.join(os.tmpdir(), 'codex-terminal-commands-')), 'rollout.jsonl');
+  try {
+    const item = (command: unknown[]): string =>
+      JSON.stringify({
+        type: 'event_msg',
+        payload: { type: 'item_completed', item: { type: 'CommandExecution', command } },
+      });
+    await writeFile(
+      file,
+      [
+        item(['C:\\Program Files\\PowerShell\\7\\pwsh.exe', '-Command', 'npm run check']),
+        item(['git', 'status']),
+        item(['C:\\Program Files\\PowerShell\\7\\pwsh.exe', '-Command', 'npm run check']),
+        item(['git', 'status']),
+      ].join('\n'),
+    );
+    assert.deepEqual((await collectCommands(file)).commands, ['npm run check', 'git status']);
+  } finally {
+    await rm(path.dirname(file), { recursive: true, force: true });
   }
 });
 

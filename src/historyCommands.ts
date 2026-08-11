@@ -4,9 +4,14 @@ import { appServerCommandFor, setThreadName } from './appServer';
 import { runCommandResult } from './doctor';
 import { isRunningSessionNode } from './actionsView';
 import { isSessionNode } from './historyView';
-import { launch, preflightCodexCommand } from './launch';
+import { launch, pickLiveSession, preflightCodexCommand } from './launch';
 import { idForName, normaliseName, setSessionName, type SessionNames } from './names';
 import { SESSION_NAMES_KEY, config, log, reportError, services } from './services';
+import {
+  codexHomeDirectory,
+  readPromptHistory,
+  type PromptHistoryEntry,
+} from './sessions';
 import { strings } from './strings';
 import { transcriptUri } from './transcriptDocument';
 
@@ -149,12 +154,79 @@ export function forkHistorySession(node: unknown): void {
   }
 }
 
+function promptTimestamp(timestamp: number): string {
+  return new Date(timestamp).toLocaleString();
+}
+
+/** Choose a prompt from Codex's append-only cross-session history and submit it to a live tab. */
+export async function sendRecentPrompt(): Promise<void> {
+  let entries: PromptHistoryEntry[];
+  try {
+    entries = await readPromptHistory({
+      homeDirectory: codexHomeDirectory(),
+      maxResults: 50,
+    });
+  } catch (error) {
+    const reason = error instanceof Error ? error.message : String(error);
+    void vscode.window.showErrorMessage(strings.prompts.readFailed(reason));
+    return;
+  }
+  if (entries.length === 0) {
+    void vscode.window.showInformationMessage(strings.prompts.empty());
+    return;
+  }
+
+  const picked = await vscode.window.showQuickPick(
+    entries.map((entry) => ({
+      label: entry.preview,
+      description: `${promptTimestamp(entry.timestamp)} · ${entry.sessionId.slice(0, 8)}`,
+      entry,
+    })),
+    {
+      title: strings.prompts.prompt(),
+      placeHolder: strings.prompts.prompt(),
+      matchOnDescription: true,
+      ignoreFocusOut: true,
+    },
+  );
+  if (!picked) {
+    return;
+  }
+
+  const sessions = services().monitor.live() ?? [];
+  if (sessions.length === 0) {
+    void vscode.window
+      .showWarningMessage(strings.prompts.noTerminal(), strings.warnings.startSession())
+      .then((choice) => {
+        if (choice === strings.warnings.startSession()) {
+          void vscode.commands.executeCommand('codexTerminal.new');
+        }
+      });
+    return;
+  }
+  const target = await pickLiveSession(sessions, strings.prompts.chooseSession());
+  if (!target) {
+    return;
+  }
+  target.terminal.show(false);
+  target.terminal.sendText(picked.entry.text, true);
+  log().info(strings.prompts.sent(target.project || target.label));
+}
+
 export async function copyHistorySessionId(node: unknown): Promise<void> {
   if (!isSessionNode(node)) {
     return;
   }
   await vscode.env.clipboard.writeText(node.session.id);
   void vscode.window.showInformationMessage(strings.history.copied(node.session.id));
+}
+
+export async function copyHistoryCommand(value: unknown): Promise<void> {
+  if (typeof value !== 'string' || !value) {
+    return;
+  }
+  await vscode.env.clipboard.writeText(value);
+  void vscode.window.showInformationMessage(strings.history.commandCopied());
 }
 
 export async function openRawHistorySession(node: unknown): Promise<void> {

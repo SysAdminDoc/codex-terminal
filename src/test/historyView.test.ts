@@ -1,5 +1,8 @@
 import assert from 'node:assert/strict';
+import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import Module from 'node:module';
+import * as os from 'node:os';
+import * as path from 'node:path';
 import { test } from 'node:test';
 
 import type { JournalSession } from '../journal';
@@ -295,6 +298,56 @@ test('history rows surface the durable failed-turn state and usage reset', () =>
   );
 });
 
+test('a session exposes deduplicated commands as copyable children', async () => {
+  const directory = await mkdtemp(path.join(os.tmpdir(), 'codex-history-commands-'));
+  try {
+    const filePath = path.join(directory, 'session.jsonl');
+    await writeFile(
+      filePath,
+      [
+        JSON.stringify({
+          type: 'event_msg',
+          payload: {
+            type: 'item_completed',
+            item: { type: 'CommandExecution', command: ['git', 'status'] },
+          },
+        }),
+        JSON.stringify({
+          type: 'event_msg',
+          payload: {
+            type: 'item_completed',
+            item: { type: 'CommandExecution', command: ['git', 'status'] },
+          },
+        }),
+      ].join('\n'),
+    );
+    const record = session('commands', 'command work');
+    record.filePath = filePath;
+    const provider = new HistoryViewProvider(() => 20, () => directory);
+    const sessionNode = { kind: 'session' as const, session: record, project: 'repo' };
+    const children = await provider.getChildren(sessionNode);
+    assert.equal(children[0]?.kind, 'commands');
+    const commandGroup = children[0];
+    assert.ok(commandGroup && commandGroup.kind === 'commands');
+    const commandChildren = await provider.getChildren(commandGroup);
+    assert.deepEqual(
+      commandChildren.map((node) => (node.kind === 'command' ? node.command : node.kind)),
+      ['git status'],
+    );
+    const item = provider.getTreeItem(commandChildren[0]!);
+    assert.equal(
+      (item.command as { command: string; arguments: unknown[] }).command,
+      'codexTerminal.copyHistoryCommand',
+    );
+    assert.deepEqual(
+      (item.command as { command: string; arguments: unknown[] }).arguments,
+      ['git status'],
+    );
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
 test('every history row provides an accessible name', () => {
   const sessionRecord = session('accessible', 'accessible work');
   const recovery: JournalSession = {
@@ -325,6 +378,8 @@ test('every history row provides an accessible name', () => {
       checkout: { cwd: 'C:\\repo', sessions: [sessionRecord] },
     },
     { kind: 'session', session: sessionRecord, project: 'repo' },
+    { kind: 'commands', session: sessionRecord },
+    { kind: 'command', command: 'git status' },
     { kind: 'usage', fileCount: 1, totalBytes: 10 },
     { kind: 'changed-file', change: { path: 'C:\\repo\\file.ts', kind: 'update' } },
     { kind: 'message', text: 'No sessions' },

@@ -4,6 +4,7 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import { createInterface } from 'node:readline';
 
+import { formatCommand, MAX_COMMAND_LENGTH } from './activity';
 import { parseRolloutFileName } from './binder';
 import { findCheckout, type Checkout } from './worktree';
 import {
@@ -38,6 +39,21 @@ export interface SessionRecord {
   modifiedAt: number;
   /** Optional read-only enrichment from Codex's validated SQLite projections. */
   thread?: ThreadStoreRecord;
+}
+
+export interface PromptHistoryEntry {
+  sessionId: string;
+  /** Epoch milliseconds, normalised from Codex's seconds-based `ts` field. */
+  timestamp: number;
+  /** Full text sent by the operator, retained so choosing it can submit the real prompt. */
+  text: string;
+  /** One-line bounded text for a quick-pick row. */
+  preview: string;
+}
+
+export interface PromptHistoryOptions {
+  homeDirectory?: string;
+  maxResults?: number;
 }
 
 export interface SessionDiscoveryOptions {
@@ -267,6 +283,69 @@ function firstPromptFromLines(lines: readonly string[]): string | undefined {
     }
   }
   return undefined;
+}
+
+function historyTimestamp(value: unknown): number | undefined {
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return value < 1_000_000_000_000 ? value * 1000 : value;
+  }
+  if (typeof value === 'string' && value.trim()) {
+    const parsed = Date.parse(value);
+    return Number.isNaN(parsed) ? undefined : parsed;
+  }
+  return undefined;
+}
+
+/** Parse one append-only Codex prompt-history record without trusting arbitrary JSON. */
+export function parsePromptHistoryLine(line: string): PromptHistoryEntry | undefined {
+  let record: { session_id?: unknown; ts?: unknown; text?: unknown };
+  try {
+    record = JSON.parse(line) as typeof record;
+  } catch {
+    return undefined;
+  }
+  const sessionId = typeof record.session_id === 'string' ? record.session_id.trim() : '';
+  const text = typeof record.text === 'string' ? record.text : '';
+  const timestamp = historyTimestamp(record.ts);
+  if (!sessionId || !text.trim() || timestamp === undefined) {
+    return undefined;
+  }
+  return { sessionId, timestamp, text, preview: summarise(text, 160) };
+}
+
+/** Read the newest prompt history entries, tolerating a first-run machine with no history file. */
+export async function readPromptHistory(
+  options: PromptHistoryOptions = {},
+): Promise<PromptHistoryEntry[]> {
+  const maxResults = Math.max(0, Math.min(500, options.maxResults ?? 50));
+  if (maxResults === 0) {
+    return [];
+  }
+  const stream = createReadStream(path.join(codexHomeDirectory(options.homeDirectory), 'history.jsonl'), {
+    encoding: 'utf8',
+  });
+  const reader = createInterface({ input: stream, crlfDelay: Infinity });
+  const recent: PromptHistoryEntry[] = [];
+  try {
+    for await (const line of reader) {
+      const entry = parsePromptHistoryLine(line);
+      if (!entry) {
+        continue;
+      }
+      recent.push(entry);
+      if (recent.length > maxResults) {
+        recent.shift();
+      }
+    }
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
+      throw error;
+    }
+  } finally {
+    reader.close();
+    stream.destroy();
+  }
+  return recent.sort((left, right) => right.timestamp - left.timestamp);
 }
 
 async function mapWithConcurrency<T, R>(
@@ -556,6 +635,80 @@ export interface ChangedFilesResult {
   files: FileChange[];
   /** True when the scan stopped early; the list is then a prefix, not the whole story. */
   truncated: boolean;
+}
+
+export interface SessionCommandsResult {
+  /** First-seen order, with identical normalised shell commands collapsed. */
+  commands: string[];
+  /** True when the byte or command cap stopped the scan before the rollout ended. */
+  truncated: boolean;
+}
+
+function commandFromLine(line: string): string | undefined {
+  if (!line.includes('"item_completed"') || !line.includes('"CommandExecution"')) {
+    return undefined;
+  }
+  let record: { type?: unknown; payload?: Record<string, unknown> };
+  try {
+    record = JSON.parse(line) as typeof record;
+  } catch {
+    return undefined;
+  }
+  if (record.type !== 'event_msg' || record.payload?.type !== 'item_completed') {
+    return undefined;
+  }
+  const item = record.payload.item;
+  if (typeof item !== 'object' || item === null) {
+    return undefined;
+  }
+  const command = (item as Record<string, unknown>).command;
+  if ((item as Record<string, unknown>).type !== 'CommandExecution' || !Array.isArray(command)) {
+    return undefined;
+  }
+  const text = formatCommand(command, MAX_COMMAND_LENGTH);
+  return text || undefined;
+}
+
+/** Stream the shell commands a session completed, retaining only distinct readable commands. */
+export async function collectCommands(
+  filePath: string,
+  options: { maxCommands?: number; maxBytes?: number } = {},
+): Promise<SessionCommandsResult> {
+  const maxCommands = Math.max(0, options.maxCommands ?? 500);
+  const maxBytes = options.maxBytes ?? 256 * 1024 * 1024;
+  const stream = createReadStream(filePath, { encoding: 'utf8' });
+  const reader = createInterface({ input: stream, crlfDelay: Infinity });
+  const commands: string[] = [];
+  const distinct = new Set<string>();
+  let bytes = 0;
+  let truncated = false;
+
+  try {
+    for await (const line of reader) {
+      bytes += line.length;
+      if (bytes > maxBytes) {
+        truncated = true;
+        break;
+      }
+      const command = commandFromLine(line);
+      if (!command || distinct.has(command)) {
+        continue;
+      }
+      if (commands.length >= maxCommands) {
+        truncated = true;
+        break;
+      }
+      distinct.add(command);
+      commands.push(command);
+    }
+  } catch {
+    // A rollout being written right now can end mid-line; report what was read.
+    truncated = true;
+  } finally {
+    reader.close();
+    stream.destroy();
+  }
+  return { commands, truncated };
 }
 
 /**

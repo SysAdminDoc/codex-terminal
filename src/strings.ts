@@ -225,6 +225,21 @@ export const strings = {
       vscode.l10n.t('… more files were changed than are listed here'),
     changedFilesFailed: (reason: string): string =>
       vscode.l10n.t('Could not read the file changes ({0})', reason),
+    commands: (): string => vscode.l10n.t('Commands'),
+    commandsTooltip: (): string =>
+      vscode.l10n.t('Shell commands Codex ran in this session. Expand to browse and click one to copy it.'),
+    commandsAccessibility: (): string =>
+      vscode.l10n.t('Commands. Expand to browse shell commands from this session.'),
+    noCommands: (): string => vscode.l10n.t('No shell commands recorded in this session'),
+    commandsTruncated: (): string =>
+      vscode.l10n.t('… more commands were run than are listed here'),
+    commandsFailed: (reason: string): string =>
+      vscode.l10n.t('Could not read the session commands ({0})', reason),
+    commandTooltip: (command: string): string => vscode.l10n.t('Click to copy: {0}', command),
+    commandAccessibility: (command: string): string =>
+      vscode.l10n.t('Shell command: {0}. Click to copy.', command),
+    copyCommand: (): string => vscode.l10n.t('Copy Codex Command'),
+    commandCopied: (): string => vscode.l10n.t('Copied Codex command to the clipboard'),
     sessionCount: (count: number): string =>
       count === 1 ? vscode.l10n.t('1 session') : vscode.l10n.t('{0} sessions', count),
     openTranscript: (): string => vscode.l10n.t('Open Transcript'),
@@ -318,6 +333,16 @@ export const strings = {
     askPrompt: (reference: string): string =>
       vscode.l10n.t('Ask Codex about {0}', reference),
     askPlaceholder: (): string => vscode.l10n.t('What should Codex do with this?'),
+  },
+  prompts: {
+    prompt: (): string => vscode.l10n.t('Choose a recent Codex prompt'),
+    empty: (): string => vscode.l10n.t('No recent prompts found in Codex history'),
+    readFailed: (reason: string): string =>
+      vscode.l10n.t('Could not read recent Codex prompts: {0}', reason),
+    chooseSession: (): string => vscode.l10n.t('Choose a Codex session for this prompt'),
+    noTerminal: (): string =>
+      vscode.l10n.t('No live Codex terminal is available to receive this prompt.'),
+    sent: (session: string): string => vscode.l10n.t('Sent the recent prompt to {0}', session),
   },
   names: {
     prompt: (fallback: string): string =>

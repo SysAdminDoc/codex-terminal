@@ -4,6 +4,7 @@ import { activityStatusFromIndexedTurn } from './activity';
 import {
   codexHomeDirectory,
   collectChangedFiles,
+  collectCommands,
   discoverSessions,
   indexCheckouts,
   formatBytes,
@@ -19,7 +20,7 @@ import {
   type SessionRecord,
 } from './sessions';
 import type { JournalSession } from './journal';
-import type { FileChange } from './transcript';
+import { summarise, type FileChange } from './transcript';
 import { displayName, type SessionNames } from './names';
 import { peekServices } from './services';
 import { strings } from './strings';
@@ -85,6 +86,16 @@ interface SessionNode {
   project: string;
 }
 
+interface CommandsNode {
+  kind: 'commands';
+  session: SessionRecord;
+}
+
+interface CommandNode {
+  kind: 'command';
+  command: string;
+}
+
 interface MessageNode {
   kind: 'message';
   text: string;
@@ -110,6 +121,8 @@ export type HistoryNode =
   | ProjectNode
   | CheckoutNode
   | SessionNode
+  | CommandsNode
+  | CommandNode
   | UsageNode
   | ChangedFileNode
   | MessageNode;
@@ -377,6 +390,37 @@ class ChangedFileItem extends vscode.TreeItem {
   }
 }
 
+class CommandsItem extends vscode.TreeItem {
+  constructor() {
+    super(strings.history.commands(), vscode.TreeItemCollapsibleState.Collapsed);
+    this.tooltip = new vscode.MarkdownString(strings.history.commandsTooltip());
+    this.iconPath = new vscode.ThemeIcon('terminal');
+    this.contextValue = 'codexTerminal.sessionCommands';
+    this.accessibilityInformation = {
+      label: strings.history.commandsAccessibility(),
+      role: 'treeitem',
+    };
+  }
+}
+
+class CommandItem extends vscode.TreeItem {
+  constructor(node: CommandNode) {
+    super(summarise(node.command, 160), vscode.TreeItemCollapsibleState.None);
+    this.tooltip = new vscode.MarkdownString(strings.history.commandTooltip(node.command));
+    this.iconPath = new vscode.ThemeIcon('terminal');
+    this.contextValue = 'codexTerminal.sessionCommand';
+    this.command = {
+      command: 'codexTerminal.copyHistoryCommand',
+      title: strings.history.copyCommand(),
+      arguments: [node.command],
+    };
+    this.accessibilityInformation = {
+      label: strings.history.commandAccessibility(node.command),
+      role: 'button',
+    };
+  }
+}
+
 class MessageItem extends vscode.TreeItem {
   constructor(node: MessageNode) {
     super(node.text, vscode.TreeItemCollapsibleState.None);
@@ -412,6 +456,8 @@ export class HistoryViewProvider
   private refreshPendingWhileLoading = false;
   /** Keyed by rollout path, cleared on a real reload; see `changedFiles`. */
   private readonly changedFileCache = new Map<string, HistoryNode[]>();
+  /** Commands are a separate lazy scan because expanding a session should stay cheap. */
+  private readonly commandCache = new Map<string, HistoryNode[]>();
   private pending: NodeJS.Timeout | undefined;
   private pendingHard = false;
 
@@ -438,6 +484,7 @@ export class HistoryViewProvider
       // A live session keeps appending, so its file list is only as current as the last
       // scan. An explicit refresh is the operator asking for it to be re-read.
       this.changedFileCache.clear();
+      this.commandCache.clear();
     }
     this.loaded = false;
     if (this.loading) {
@@ -530,6 +577,34 @@ export class HistoryViewProvider
     }
   }
 
+  private async commands(node: CommandsNode): Promise<HistoryNode[]> {
+    const cached = this.commandCache.get(node.session.filePath);
+    if (cached) {
+      return cached;
+    }
+    try {
+      const { commands, truncated } = await collectCommands(node.session.filePath);
+      const children: HistoryNode[] =
+        commands.length === 0
+          ? [{ kind: 'message', text: strings.history.noCommands() }]
+          : commands.map((command) => ({ kind: 'command' as const, command }));
+      if (truncated) {
+        children.push({ kind: 'message', text: strings.history.commandsTruncated() });
+      }
+      this.commandCache.set(node.session.filePath, children);
+      return children;
+    } catch (error) {
+      return [
+        {
+          kind: 'message',
+          text: strings.history.commandsFailed(
+            error instanceof Error ? error.message : String(error),
+          ),
+        },
+      ];
+    }
+  }
+
   getTreeItem(node: HistoryNode): vscode.TreeItem {
     switch (node.kind) {
       case 'recovery-group':
@@ -544,6 +619,10 @@ export class HistoryViewProvider
         return new CheckoutItem(node);
       case 'session':
         return new SessionItem(node, this.names());
+      case 'commands':
+        return new CommandsItem();
+      case 'command':
+        return new CommandItem(node);
       case 'usage':
         return new UsageItem(node);
       case 'changed-file':
@@ -589,7 +668,13 @@ export class HistoryViewProvider
             : element.project,
         }));
       }
-      return element.kind === 'session' ? this.changedFiles(element) : [];
+      if (element.kind === 'session') {
+        return [
+          { kind: 'commands' as const, session: element.session },
+          ...(await this.changedFiles(element)),
+        ];
+      }
+      return element.kind === 'commands' ? this.commands(element) : [];
     }
 
     if (!this.loaded) {

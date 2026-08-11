@@ -7,6 +7,10 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **Recent prompt and command history.** The Command Palette can send a recent prompt from
+  Codex's history to a live session, and each History session exposes deduplicated shell commands
+  that can be copied.
+
 - **File references target an explicit live session.** The editor commands now use the shared
   status-aware picker when several Codex terminals are open, with cancellation leaving every
   terminal untouched.
