@@ -3,7 +3,7 @@
 All notable changes to Codex Terminal are documented here.
 This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.10.0] - 2026-08-10
+## [0.11.0] - 2026-08-11
 
 ### Added
 
