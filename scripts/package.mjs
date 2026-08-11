@@ -1,10 +1,8 @@
 /**
  * Build a reproducible VSIX and record its checksum.
  *
- * This project ships unsigned, outside any marketplace, so a user sideloading the `.vsix`
- * has no signature to check. A byte-identical rebuild plus a published SHA-256 is the
- * substitute: anyone can rebuild the same commit and compare hashes, which is verifiable
- * without a certificate authority and without a CI service.
+ * A byte-identical rebuild plus a published SHA-256 gives sideloaded artifacts an integrity
+ * check, while the same VSIX is also the input to the Marketplace and Open VSX release paths.
  *
  * `vsce` honours `SOURCE_DATE_EPOCH` (vscode-vsce#1100, shipped in 3.2.2) by sorting entries
  * and fixing modification times. Without it every build differs purely by timestamp, and

@@ -419,6 +419,34 @@ Get-FileHash -Algorithm SHA256 dist\codex-terminal-0.10.0.vsix
 The hash must match `SHA256SUMS.txt` on the release. A mismatch means the file you downloaded
 is not the file this source produces.
 
+## Publishing
+
+Publishing is intentionally credential-free in this checkout; credentials belong in the release
+runner, never in git or a shell history.
+
+For the Visual Studio Marketplace, use Microsoft Entra ID workload identity federation rather
+than a global Azure DevOps PAT. Create an Azure DevOps Azure Resource Manager service connection
+with manual workload federation, connect it to a user-assigned managed identity, grant that
+identity Contributor access to the Marketplace publisher, and authorize the pipeline. The tagged
+release job then runs `npm run package` followed by `vsce publish --azure-credential` from an
+`AzureCLI@2` task. Global Azure DevOps PATs are retired on **2026-12-01**.
+
+For Open VSX, the publishing account must first accept the [Eclipse Open VSX Publisher
+Agreement](https://open-vsx.org/publisher-agreement-v1.1), and its GitHub Username must match the
+account used to publish. After the namespace decision is made, create the namespace matching the
+`publisher` field in `package.json`:
+
+```powershell
+npm exec -- ovsx create-namespace <publisher>
+npm run package
+$env:OVSX_PAT = '<Open VSX token>'
+npm run publish:openvsx
+```
+
+`ovsx` is pinned in `devDependencies`; `publish:openvsx` passes the token through `OVSX_PAT` and
+publishes only the versioned VSIX produced by `npm run package`. Namespace creation and agreement
+acceptance remain operator-gated external steps, so this repository does not attempt them.
+
 ## Unaffiliated
 
 Not affiliated with, endorsed by, or sponsored by OpenAI. "Codex" is used only to name the CLI

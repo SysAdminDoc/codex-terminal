@@ -707,6 +707,7 @@
     "test:integration": "npm run compile && npm run bundle && vscode-test --jobs 1",
     "check": "npm run clean && npm run compile && npm run l10n:export && npm run lint && node --test \"out/test/*.test.js\" && npm run bundle",
     "package": "npm run check && node scripts/package.mjs",
+    "publish:openvsx": "node scripts/publish-openvsx.mjs",
     "vscode:prepublish": "npm run bundle"
   },
   "devDependencies": {
@@ -721,6 +722,7 @@
     "@vscode/vsce": "^3.9.2",
     "esbuild": "^0.28.2",
     "eslint": "10.8.1",
+    "ovsx": "1.0.2",
     "typescript": "^5.7.2"
   },
   "overrides": {

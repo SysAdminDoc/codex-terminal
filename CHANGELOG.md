@@ -7,6 +7,11 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **Publishing preparation.** Open VSX publishing now has a pinned `ovsx` tool and a
+  credential-safe `publish:openvsx` script; the release documentation covers the Eclipse
+  Publisher Agreement and the Microsoft Entra ID workload-federation path before the
+  2026-12-01 Azure DevOps PAT retirement.
+
 - **Raised host floor.** The minimum VS Code/VSCodium version is now 1.101.0, the first stable
   release with the MCP provider API and Node 22 extension runtime. Published `@types/vscode`
   typings are sufficient; no vendored declarations are needed, and runtime feature detection
