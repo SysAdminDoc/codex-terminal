@@ -260,6 +260,7 @@ export async function reviewBase(repository?: unknown): Promise<void> {
   const selected = await vscode.window.showQuickPick(
     branches.map((branch) => ({ label: branch, branch })),
     {
+      title: strings.review.basePrompt(),
       placeHolder: strings.review.basePrompt(),
       ignoreFocusOut: true,
     },

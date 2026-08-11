@@ -206,6 +206,7 @@ export async function resolveCwd(): Promise<string | undefined> {
     const selected = await vscode.window.showQuickPick(
       folders.map((folder) => ({ label: folder.name, description: folder.uri.fsPath, folder })),
       {
+        title: strings.folders.prompt(),
         placeHolder: strings.folders.prompt(),
         ignoreFocusOut: true,
       },
@@ -437,7 +438,9 @@ function discoveredProfiles(): string[] {
 
 export async function launchWithProfile(): Promise<void> {
   const freeTextItem: vscode.QuickPickItem = {
-    label: strings.profiles.freeText(),
+    // Codicons are presentation, not translatable prose: keep the edit glyph outside the
+    // localized string so screen readers and translators see the actual label.
+    label: `$(edit) ${strings.profiles.freeText()}`,
     description: strings.profiles.freeTextDescription(),
   };
   const items: vscode.QuickPickItem[] = [
@@ -448,6 +451,7 @@ export async function launchWithProfile(): Promise<void> {
     freeTextItem,
   ];
   const selected = await vscode.window.showQuickPick(items, {
+    title: strings.profiles.prompt(),
     placeHolder: strings.profiles.prompt(),
     ignoreFocusOut: true,
   });
@@ -485,6 +489,7 @@ export async function resumeFromSessionPicker(): Promise<void> {
     session,
   }));
   const selected = await vscode.window.showQuickPick(items, {
+    title: strings.sessions.prompt(),
     placeHolder: strings.sessions.prompt(),
     matchOnDescription: true,
     matchOnDetail: true,
@@ -575,6 +580,7 @@ export async function focusCodex(): Promise<void> {
       session,
     })),
     {
+      title: strings.sessions.focusPrompt(sessions.length),
       placeHolder: strings.sessions.focusPrompt(sessions.length),
       matchOnDescription: true,
       matchOnDetail: true,

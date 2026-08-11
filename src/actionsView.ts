@@ -276,6 +276,10 @@ class InventoryGroupItem extends vscode.TreeItem {
       group.of === 'plugins' ? strings.inventory.pluginsTooltip() : strings.inventory.mcpTooltip();
     this.iconPath = new vscode.ThemeIcon(group.of === 'plugins' ? 'extensions' : 'server-process');
     this.contextValue = `codexTerminal.inventory.${group.of}`;
+    this.accessibilityInformation = {
+      label: group.of === 'plugins' ? strings.inventory.plugins() : strings.inventory.mcp(),
+      role: 'treeitem',
+    };
   }
 }
 

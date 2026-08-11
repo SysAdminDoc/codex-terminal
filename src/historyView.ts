@@ -147,6 +147,10 @@ class RecoveryGroupItem extends vscode.TreeItem {
       new vscode.ThemeColor('list.warningForeground'),
     );
     this.contextValue = 'codexTerminal.recoveryGroup';
+    this.accessibilityInformation = {
+      label: strings.recovery.accessibilityGroup(node.sessions.length),
+      role: 'treeitem',
+    };
   }
 }
 
@@ -200,6 +204,10 @@ class ArchivedGroupItem extends vscode.TreeItem {
     );
     this.iconPath = new vscode.ThemeIcon('archive');
     this.contextValue = 'codexTerminal.archivedGroup';
+    this.accessibilityInformation = {
+      label: strings.history.archivedAccessibility(node.sessions.length),
+      role: 'treeitem',
+    };
   }
 }
 
@@ -215,6 +223,10 @@ class ProjectItem extends vscode.TreeItem {
     this.iconPath = new vscode.ThemeIcon('folder');
     this.contextValue = 'codexTerminal.historyProject';
     this.resourceUri = group.cwd ? vscode.Uri.file(group.cwd) : undefined;
+    this.accessibilityInformation = {
+      label: strings.history.projectAccessibility(group.project, group.sessions.length),
+      role: 'treeitem',
+    };
   }
 }
 
@@ -235,6 +247,14 @@ class CheckoutItem extends vscode.TreeItem {
     this.iconPath = new vscode.ThemeIcon(checkout.worktree ? 'git-branch' : 'folder-opened');
     this.contextValue = 'codexTerminal.historyCheckout';
     this.resourceUri = checkout.cwd ? vscode.Uri.file(checkout.cwd) : undefined;
+    this.accessibilityInformation = {
+      label: strings.history.checkoutAccessibility(
+        node.project,
+        checkout.worktree ?? strings.history.mainCheckout(),
+        checkout.sessions.length,
+      ),
+      role: 'treeitem',
+    };
   }
 }
 
@@ -311,6 +331,10 @@ class UsageItem extends vscode.TreeItem {
       strings.history.storeTooltip(formatBytes(node.totalBytes)),
     );
     this.contextValue = 'codexTerminal.storeUsage';
+    this.accessibilityInformation = {
+      label: strings.history.storeUsageAccessibility(node.fileCount, formatBytes(node.totalBytes)),
+      role: 'text',
+    };
   }
 }
 
@@ -357,6 +381,10 @@ class MessageItem extends vscode.TreeItem {
   constructor(node: MessageNode) {
     super(node.text, vscode.TreeItemCollapsibleState.None);
     this.iconPath = new vscode.ThemeIcon('info');
+    this.accessibilityInformation = {
+      label: strings.history.messageAccessibility(node.text),
+      role: 'text',
+    };
   }
 }
 

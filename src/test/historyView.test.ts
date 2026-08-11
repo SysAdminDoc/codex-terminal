@@ -2,6 +2,8 @@ import assert from 'node:assert/strict';
 import Module from 'node:module';
 import { test } from 'node:test';
 
+import type { JournalSession } from '../journal';
+
 /**
  * The history provider's race and filtering rules under `node --test`, with a narrow vscode
  * stand-in. The provider itself stays the code under test; only the tree API it subclasses is
@@ -87,6 +89,7 @@ const { HistoryViewProvider } = require('../historyView') as typeof import('../h
 
 type SessionRecord = import('../sessions').SessionRecord;
 type SessionGroup = import('../sessions').SessionGroup;
+type HistoryNode = import('../historyView').HistoryNode;
 
 const originalDiscover = sessions.discoverSessions;
 const originalIndex = sessions.indexCheckouts;
@@ -290,4 +293,50 @@ test('history rows surface the durable failed-turn state and usage reset', () =>
     (item.tooltip as { value: string }).value,
     /failed — usage limit resets at Aug 15th, 2026 4:29 PM/,
   );
+});
+
+test('every history row provides an accessible name', () => {
+  const sessionRecord = session('accessible', 'accessible work');
+  const recovery: JournalSession = {
+    key: 'recovery',
+    sessionId: 'accessible',
+    rolloutPath: sessionRecord.filePath,
+    cwd: sessionRecord.cwd,
+    project: 'repo',
+    label: 'repo — Codex',
+    mode: 'new',
+    launchedAt: Date.now() - 1000,
+    lastActiveAt: Date.now(),
+    status: 'idle',
+    completedTurns: 1,
+  };
+  const group: SessionGroup = {
+    project: 'repo',
+    cwd: 'C:\\repo',
+    sessions: [sessionRecord],
+  };
+  const nodes: HistoryNode[] = [
+    { kind: 'recovery-group', sessions: [recovery] },
+    { kind: 'archived-group', sessions: [sessionRecord] },
+    { kind: 'project', group },
+    {
+      kind: 'checkout',
+      project: 'repo',
+      checkout: { cwd: 'C:\\repo', sessions: [sessionRecord] },
+    },
+    { kind: 'session', session: sessionRecord, project: 'repo' },
+    { kind: 'usage', fileCount: 1, totalBytes: 10 },
+    { kind: 'changed-file', change: { path: 'C:\\repo\\file.ts', kind: 'update' } },
+    { kind: 'message', text: 'No sessions' },
+  ];
+  const provider = new HistoryViewProvider(() => 20, () => 'C:\\codex');
+
+  for (const node of nodes) {
+    const item = provider.getTreeItem(node);
+    assert.ok(item.accessibilityInformation, `${node.kind} needs accessibilityInformation`);
+    assert.ok(
+      (item.accessibilityInformation as { label: string }).label,
+      `${node.kind} needs an accessible label`,
+    );
+  }
 });

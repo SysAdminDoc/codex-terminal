@@ -15,6 +15,10 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   shapes by default, report the replacement count in the header, and make the machine-scoped
   opt-out visibly warn that credentials may be exposed.
 
+- **History and picker accessibility.** Every History and Launch-panel tree row now exposes an
+  accessible name; quick picks have titles, name syncing uses notification progress, and the
+  profile edit glyph is kept out of translated text.
+
 - **Archived sessions are recoverable.** The History view now keeps archived conversations in
   a separate group, with an `Unarchive` action that returns a session to the active list.
 

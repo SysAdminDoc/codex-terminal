@@ -137,6 +137,7 @@ test('the launch panel offers the plugin and MCP sections, collapsed', async () 
   );
   // Collapsed, and nothing has run: an unopened section must not cost a process.
   assert.equal(view.getTreeItem(groups[0]).collapsibleState, 1);
+  assert.ok(view.getTreeItem(groups[0]).accessibilityInformation);
   assert.equal(calls.length, 0);
 });
 

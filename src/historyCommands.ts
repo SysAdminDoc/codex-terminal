@@ -84,7 +84,7 @@ async function pushNameToCodex(sessionId: string, name: string): Promise<void> {
   const entry = nodeEntryFor(resolved);
   try {
     await vscode.window.withProgress(
-      { location: vscode.ProgressLocation.Window, title: strings.names.syncing() },
+      { location: vscode.ProgressLocation.Notification, title: strings.names.syncing() },
       () =>
         setThreadName(
           {

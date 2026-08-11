@@ -114,6 +114,10 @@ export const strings = {
     restored: (project: string): string => vscode.l10n.t('Restoring Codex session in {0}…', project),
     accessibility: (project: string, timestamp: string): string =>
       vscode.l10n.t('{0}, interrupted {1}. Click to restore the session.', project, timestamp),
+    accessibilityGroup: (count: number): string =>
+      count === 1
+        ? vscode.l10n.t('Interrupted sessions, 1 session to restore.')
+        : vscode.l10n.t('Interrupted sessions, {0} sessions to restore.', count),
   },
   notifications: {
     turnCompleted: (workspace: string): string =>
@@ -143,7 +147,7 @@ export const strings = {
     prompt: (): string => vscode.l10n.t('Choose the workspace folder for Codex'),
   },
   profiles: {
-    freeText: (): string => vscode.l10n.t('$(edit) Enter a profile name…'),
+    freeText: (): string => vscode.l10n.t('Enter a profile name…'),
     freeTextDescription: (): string =>
       vscode.l10n.t('Use any profile name supported by Codex'),
     prompt: (): string => vscode.l10n.t('Choose a Codex profile'),
@@ -170,6 +174,10 @@ export const strings = {
   history: {
     empty: (): string => vscode.l10n.t('No Codex sessions recorded yet'),
     archivedGroup: (): string => vscode.l10n.t('Archived'),
+    archivedAccessibility: (count: number): string =>
+      count === 1
+        ? vscode.l10n.t('Archived sessions, 1 session. Expand to browse.')
+        : vscode.l10n.t('Archived sessions, {0} sessions. Expand to browse.', count),
     storeMissing: (directory: string): string =>
       vscode.l10n.t('No session store at {0} — Codex writes one on its first run', directory),
     storeUnreadable: (directory: string): string =>
@@ -183,6 +191,19 @@ export const strings = {
     turnFailedWithReset: (when: string): string =>
       vscode.l10n.t('failed — usage limit resets at {0}', when),
     mainCheckout: (): string => vscode.l10n.t('main checkout'),
+    projectAccessibility: (project: string, count: number): string =>
+      vscode.l10n.t(
+        '{0} project, {1}. Expand to browse its sessions.',
+        project,
+        strings.history.sessionCount(count),
+      ),
+    checkoutAccessibility: (project: string, checkout: string, count: number): string =>
+      vscode.l10n.t(
+        '{0}, {1} checkout, {2}. Expand to browse its sessions.',
+        project,
+        checkout,
+        strings.history.sessionCount(count),
+      ),
     changeKind: (kind: 'add' | 'update' | 'delete'): string =>
       kind === 'add'
         ? vscode.l10n.t('Added by this session')
@@ -223,6 +244,9 @@ export const strings = {
       vscode.l10n.t('Could not export the transcript: {0}', message),
     storeUsage: (files: number, size: string): string =>
       vscode.l10n.t('{0} sessions · {1} on disk', files, size),
+    storeUsageAccessibility: (files: number, size: string): string =>
+      vscode.l10n.t('Codex session store, {0} sessions, {1} on disk.', files, size),
+    messageAccessibility: (text: string): string => vscode.l10n.t('History message: {0}', text),
     storeTooltip: (size: string): string =>
       vscode.l10n.t(
         'Codex keeps every conversation on disk. This store is {0}. Archive, unarchive or delete a session from its context menu to manage it.',
