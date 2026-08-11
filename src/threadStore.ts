@@ -76,7 +76,7 @@ function threadStoreHome(homeDirectory?: string): string {
   return configured ? path.resolve(configured) : path.join(os.homedir(), '.codex');
 }
 
-/** Feature-detects Node 22's built-in SQLite without making it an engine-floor requirement. */
+/** Feature-detects Node 22's built-in SQLite, keeping forced older hosts on rollout scanning. */
 export function sqliteAvailable(): boolean {
   if (databaseConstructor !== undefined) {
     return databaseConstructor !== null;

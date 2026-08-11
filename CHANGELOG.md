@@ -7,6 +7,11 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **Raised host floor.** The minimum VS Code/VSCodium version is now 1.101.0, the first stable
+  release with the MCP provider API and Node 22 extension runtime. Published `@types/vscode`
+  typings are sufficient; no vendored declarations are needed, and runtime feature detection
+  keeps the SQLite and MCP fallbacks safe.
+
 - **Codex MCP provider.** Enabled servers from `codex mcp list --json` are now available to
   VS Code's native MCP client, including stdio and streamable HTTP definitions; disabled servers
   are omitted and older hosts feature-detect the API.

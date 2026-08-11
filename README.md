@@ -325,10 +325,16 @@ default profile they want honoured; prefer any other mode.
 
 ## Requirements
 
-- VS Code or VSCodium `1.90.0` or newer.
+- VS Code or VSCodium `1.101.0` or newer. This is the first stable host with the MCP provider
+  API and the Node 22 extension runtime used by the optional SQLite projections.
 - Codex CLI on `PATH` (`npm install -g @openai/codex`), or an absolute path in
   `codexTerminal.command`. Verify with `codex --version`.
 - Codex authentication is interactive: run `codex login` once in a terminal.
+
+The extension uses the published `@types/vscode` package (`^1.101.0`; the current resolved
+version is 1.125.0) and does not vendor editor typings. The MCP provider and `node:sqlite` are
+still feature-detected at runtime, so a downstream host that bypasses the engine floor falls
+back to the existing inventory and rollout readers instead of failing activation.
 
 ## Troubleshooting
 

@@ -135,8 +135,8 @@ export async function ensureAppServer(): Promise<void> {
   }
   state.appServer = undefined;
   if (!webSocketAvailable()) {
-    // `WebSocket` became a Node global in 22; this extension's engine floor reaches back to
-    // editors built on Node 20, where the feature simply cannot work.
+    // `WebSocket` became a Node global in 22, which the 1.101 engine floor supplies. Keep the
+    // probe because downstream hosts can bypass the manifest floor.
     log().warn(strings.appServer.noWebSocket());
     return;
   }

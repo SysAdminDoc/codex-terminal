@@ -6,6 +6,7 @@ import { test } from 'node:test';
 interface Manifest {
   activationEvents?: string[];
   categories?: string[];
+  engines?: { vscode?: string };
   extensionKind?: string[];
   capabilities?: {
     untrustedWorkspaces?: {
@@ -139,6 +140,10 @@ test('every recovery command reaches the manifest', () => {
   ]) {
     assert.ok(commands.has(id), `${id} must be contributed or the tree item cannot invoke it`);
   }
+});
+
+test('the engine floor supplies the MCP provider and SQLite runtime', () => {
+  assert.equal(readManifest().engines?.vscode, '^1.101.0');
 });
 
 test('the first-run walkthrough covers the real Codex workflow', () => {

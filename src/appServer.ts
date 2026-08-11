@@ -434,9 +434,9 @@ export class HostedAppServer {
 /**
  * Whether this host can open a WebSocket at all.
  *
- * `WebSocket` became a Node global in 22, and this extension's declared engine floor reaches
- * back to VS Code 1.90, which shipped Node 20. Probing beats declaring: the alternative is a
- * feature that fails with a bare `ReferenceError` on the editors that predate it.
+ * `WebSocket` became a Node global in 22, which is the runtime bundled by the declared 1.101
+ * engine floor. Probing still beats assuming: downstream hosts can bypass a manifest floor, and
+ * the experimental app-server setting should fall back cleanly on those editors.
  */
 export function webSocketAvailable(): boolean {
   return typeof (globalThis as { WebSocket?: unknown }).WebSocket === 'function';
