@@ -7,6 +7,10 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **Generated app-server protocol types.** `npm run app-server:generate` records the Codex CLI
+  version that produced the committed schema bindings; a running app-server on another version
+  now reports a warning instead of silently using stale protocol unions.
+
 - **How much of your plan is left, on the tab you are looking at.** Codex writes `rate_limits`
   into its session file beside the token counts — 55,975 of the 55,977 usage records in the
   local store carry a populated window — and none of it was read. Each session row now ends

@@ -5,6 +5,16 @@ import { get as httpGet } from 'node:http';
 import { createServer } from 'node:net';
 import { StringDecoder } from 'node:string_decoder';
 
+import type {
+  ClientNotification,
+  ClientRequest,
+  ClientInfo,
+  InitializeParams,
+  InitializeResponse,
+  RequestId,
+} from './generated/appServer';
+import { APP_SERVER_CLI_VERSION } from './generated/appServer/metadata';
+
 /**
  * A client for `codex app-server`, Codex's own control plane.
  *
@@ -27,19 +37,48 @@ import { StringDecoder } from 'node:string_decoder';
  *    front.
  */
 
-export interface AppServerHandshake {
-  userAgent?: string;
-  codexHome?: string;
-  platformFamily?: string;
-  platformOs?: string;
-}
+export type AppServerHandshake = InitializeResponse;
+
+/** The request and notification unions are generated from the Codex app-server schema. */
+export type AppServerRequest = ClientRequest;
+export type AppServerNotification = ClientNotification;
 
 export interface JsonRpcMessage {
-  id?: number | string;
+  id?: RequestId;
   method?: string;
   params?: unknown;
   result?: unknown;
   error?: { code?: number; message?: string };
+}
+
+const VERSION_PATTERN = /\b\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?\b/;
+
+/** Extract the CLI version from the `initialize` user-agent when the server provides one. */
+export function codexVersionFromUserAgent(userAgent: string | undefined): string | undefined {
+  return userAgent?.match(VERSION_PATTERN)?.[0];
+}
+
+/**
+ * Report a generated-type/runtime mismatch without making the optional app-server unusable.
+ *
+ * Codex does not promise that its protocol is stable yet, so a warning is more useful than
+ * either silently trusting stale unions or refusing a connection whose basic handshake still
+ * works. A missing/unrecognisable user-agent is left alone because it is not evidence of drift.
+ */
+export function warnIfAppServerVersionMismatch(
+  userAgent: string | undefined,
+  log: { warn(message: string): void },
+): boolean {
+  const runningVersion = codexVersionFromUserAgent(userAgent);
+  if (!runningVersion || runningVersion === APP_SERVER_CLI_VERSION) {
+    return false;
+  }
+  log.warn(
+    `app-server protocol types were generated from Codex CLI ${APP_SERVER_CLI_VERSION}, ` +
+      `but the running server reports ${runningVersion}; regenerate with ` +
+      '`npm run app-server:generate`.',
+  );
+  return true;
 }
 
 /** One JSON object per line, which is the framing `app-server` uses in both directions. */
@@ -138,11 +177,18 @@ export class AppServerClient {
       this.failAll(new Error(`codex app-server exited with code ${code ?? 'unknown'}`)),
     );
 
-    const handshake = (await this.request('initialize', {
-      clientInfo: { name: 'codex-terminal', title: 'Codex Terminal', version: clientVersion },
-    })) as AppServerHandshake;
+    const initialize: InitializeParams = {
+      clientInfo: {
+        name: 'codex-terminal',
+        title: 'Codex Terminal',
+        version: clientVersion,
+      } satisfies ClientInfo,
+      capabilities: null,
+    };
+    const handshake = (await this.request('initialize', initialize)) as AppServerHandshake;
+    warnIfAppServerVersionMismatch(handshake.userAgent, this.options.log);
     // A notification, not a request: nothing answers it, so awaiting one would hang.
-    this.notify('initialized', {});
+    this.notify('initialized');
     return handshake;
   }
 
@@ -173,8 +219,12 @@ export class AppServerClient {
     });
   }
 
-  notify(method: string, params: unknown): void {
-    this.child?.stdin.write(encodeMessage({ jsonrpc: '2.0', method, params }));
+  notify(method: string, params?: unknown): void {
+    const message =
+      params === undefined
+        ? { jsonrpc: '2.0', method }
+        : { jsonrpc: '2.0', method, params };
+    this.child?.stdin.write(encodeMessage(message));
   }
 
   private receive(chunk: Buffer): void {

@@ -8,10 +8,12 @@ import * as path from 'node:path';
 import {
   HostedAppServer,
   appServerListenArgs,
+  codexVersionFromUserAgent,
   decodeMessages,
   encodeMessage,
   findFreePort,
   remoteArgs,
+  warnIfAppServerVersionMismatch,
   waitForReady,
 } from '../appServer';
 
@@ -65,6 +67,23 @@ test('a line that is not JSON is dropped without taking the connection with it',
   const { messages } = decodeMessages('not json\n{"id":2,"result":{"ok":true}}\n\n');
   assert.equal(messages.length, 1);
   assert.equal(messages[0].id, 2);
+});
+
+test('the app-server user-agent version can be compared with generated types', () => {
+  assert.equal(codexVersionFromUserAgent('codex-cli 0.147.0'), '0.147.0');
+  assert.equal(codexVersionFromUserAgent('codex-cli/dev'), undefined);
+
+  const warnings: string[] = [];
+  assert.equal(
+    warnIfAppServerVersionMismatch('codex-cli 999.999.999', {
+      warn: (message) => warnings.push(message),
+    }),
+    true,
+  );
+  assert.equal(warnings.length, 1);
+  assert.match(warnings[0], /generated from Codex CLI 0\.147\.0/);
+  assert.match(warnings[0], /running server reports 999\.999\.999/);
+  assert.equal(warnIfAppServerVersionMismatch('codex-cli 0.147.0', { warn: () => undefined }), false);
 });
 
 test('the listen and remote endpoints agree on host and port', () => {
