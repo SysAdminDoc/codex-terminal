@@ -62,6 +62,11 @@ interface RecoveryNode {
   session: JournalSession;
 }
 
+interface ArchivedGroupNode {
+  kind: 'archived-group';
+  sessions: SessionRecord[];
+}
+
 interface ProjectNode {
   kind: 'project';
   group: SessionGroup;
@@ -101,6 +106,7 @@ interface UsageNode {
 export type HistoryNode =
   | RecoveryGroupNode
   | RecoveryNode
+  | ArchivedGroupNode
   | ProjectNode
   | CheckoutNode
   | SessionNode
@@ -185,6 +191,18 @@ class RecoveryItem extends vscode.TreeItem {
   }
 }
 
+class ArchivedGroupItem extends vscode.TreeItem {
+  constructor(node: ArchivedGroupNode) {
+    super(strings.history.archivedGroup(), vscode.TreeItemCollapsibleState.Collapsed);
+    this.description = strings.history.sessionCount(node.sessions.length);
+    this.tooltip = new vscode.MarkdownString(
+      strings.history.sessionCount(node.sessions.length),
+    );
+    this.iconPath = new vscode.ThemeIcon('archive');
+    this.contextValue = 'codexTerminal.archivedGroup';
+  }
+}
+
 class ProjectItem extends vscode.TreeItem {
   constructor(group: SessionGroup) {
     super(group.project, vscode.TreeItemCollapsibleState.Collapsed);
@@ -266,7 +284,9 @@ class SessionItem extends vscode.TreeItem {
         : activityStatus === 'working'
           ? new vscode.ThemeIcon('sync~spin')
           : new vscode.ThemeIcon('comment-discussion');
-    this.contextValue = 'codexTerminal.historySession';
+    this.contextValue = session.thread?.archived
+      ? 'codexTerminal.archivedSession'
+      : 'codexTerminal.historySession';
     this.command = {
       command: 'codexTerminal.resumeHistorySession',
       title: strings.history.resume(),
@@ -345,6 +365,7 @@ export class HistoryViewProvider
 {
   private readonly changes = new vscode.EventEmitter<HistoryNode | undefined | null | void>();
   private groups: SessionGroup[] = [];
+  private archived: SessionRecord[] = [];
   private loaded = false;
   private filter = '';
   private recoverable: JournalSession[] = [];
@@ -487,6 +508,8 @@ export class HistoryViewProvider
         return new RecoveryGroupItem(node);
       case 'recovery':
         return new RecoveryItem(node);
+      case 'archived-group':
+        return new ArchivedGroupItem(node);
       case 'project':
         return new ProjectItem(node.group);
       case 'checkout':
@@ -506,6 +529,13 @@ export class HistoryViewProvider
     if (element) {
       if (element.kind === 'recovery-group') {
         return element.sessions.map((session) => ({ kind: 'recovery' as const, session }));
+      }
+      if (element.kind === 'archived-group') {
+        return element.sessions.map((session) => ({
+          kind: 'session' as const,
+          session,
+          project: sessionProject(session) || session.cwd,
+        }));
       }
       if (element.kind === 'project') {
         // The worktree level appears only where there is something to disambiguate; a
@@ -563,11 +593,13 @@ export class HistoryViewProvider
       } finally {
         this.loading = false;
       }
+      const active = sessions.filter((session) => !session.thread?.archived);
+      this.archived = sessions.filter((session) => session.thread?.archived === true);
       // One `.git` walk per distinct directory, not per session: a project with forty
       // sessions has one working directory — and the previous index is reused, so a
       // directory already resolved is not walked again on the next append.
-      this.checkoutIndex = await indexCheckouts(sessions, this.checkoutIndex);
-      this.groups = groupSessionsByProject(sessions, this.checkoutIndex);
+      this.checkoutIndex = await indexCheckouts(active, this.checkoutIndex);
+      this.groups = groupSessionsByProject(active, this.checkoutIndex);
       // A second full walk of the store, so it is rate-limited rather than run per refresh.
       // The comment that used to sit here claimed it ran "only on a real reload"; it sat
       // inside this block, which every debounced refresh reaches.
@@ -591,7 +623,10 @@ export class HistoryViewProvider
       : [];
 
     const groups = this.filter ? this.applyFilter(this.groups) : this.groups;
-    if (groups.length === 0) {
+    const archived = this.filter
+      ? this.archived.filter((session) => this.matches(session, sessionProject(session) || session.cwd))
+      : this.archived;
+    if (groups.length === 0 && archived.length === 0) {
       return [
         ...recovery,
         ...usage,
@@ -613,23 +648,27 @@ export class HistoryViewProvider
       ...recovery,
       ...usage,
       ...groups.map((group) => ({ kind: 'project' as const, group })),
+      ...(archived.length > 0 ? [{ kind: 'archived-group' as const, sessions: archived }] : []),
     ];
   }
 
-  private applyFilter(groups: readonly SessionGroup[]): SessionGroup[] {
-    const matches = (session: SessionRecord, project: string): boolean =>
+  private matches(session: SessionRecord, project: string): boolean {
+    return (
       project.toLowerCase().includes(this.filter) ||
       session.cwd.toLowerCase().includes(this.filter) ||
       (session.preview ?? '').toLowerCase().includes(this.filter) ||
-      session.id.toLowerCase().includes(this.filter);
+      session.id.toLowerCase().includes(this.filter)
+    );
+  }
 
+  private applyFilter(groups: readonly SessionGroup[]): SessionGroup[] {
     return groups
       .map((group) => {
-        const sessions = group.sessions.filter((session) => matches(session, group.project));
+        const sessions = group.sessions.filter((session) => this.matches(session, group.project));
         const checkouts = group.checkouts
           ?.map((checkout) => ({
             ...checkout,
-            sessions: checkout.sessions.filter((session) => matches(session, group.project)),
+            sessions: checkout.sessions.filter((session) => this.matches(session, group.project)),
           }))
           .filter((checkout) => checkout.sessions.length > 0);
         const filteredGroup = {

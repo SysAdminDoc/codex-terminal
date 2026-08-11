@@ -25,6 +25,7 @@
   "command.openRawHistory.title": "Open Raw Codex Rollout",
   "command.forkHistory.title": "Fork This Codex Session",
   "command.archiveSession.title": "Archive Codex Session",
+  "command.unarchiveSession.title": "Unarchive Codex Session",
   "command.nameSession.title": "Name Codex Session",
   "command.deleteSession.title": "Delete Codex Session",
   "command.restoreSession.title": "Restore Interrupted Session",

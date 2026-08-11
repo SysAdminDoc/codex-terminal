@@ -169,6 +169,7 @@ export const strings = {
   },
   history: {
     empty: (): string => vscode.l10n.t('No Codex sessions recorded yet'),
+    archivedGroup: (): string => vscode.l10n.t('Archived'),
     storeMissing: (directory: string): string =>
       vscode.l10n.t('No session store at {0} — Codex writes one on its first run', directory),
     storeUnreadable: (directory: string): string =>
@@ -224,23 +225,30 @@ export const strings = {
       vscode.l10n.t('{0} sessions · {1} on disk', files, size),
     storeTooltip: (size: string): string =>
       vscode.l10n.t(
-        'Codex keeps every conversation on disk. This store is {0}. Archive or delete a session from its context menu to reclaim space.',
+        'Codex keeps every conversation on disk. This store is {0}. Archive, unarchive or delete a session from its context menu to manage it.',
         size,
       ),
     confirmArchive: (id: string): string =>
       vscode.l10n.t('Archive Codex session {0}? It stops appearing in the picker and in this view.', id),
+    confirmUnarchive: (id: string): string =>
+      vscode.l10n.t('Unarchive Codex session {0}? It will appear in the active History list again.', id),
     confirmDelete: (id: string): string =>
       vscode.l10n.t('Permanently delete Codex session {0} and its transcript? This cannot be undone.', id),
     archiveAction: (): string => vscode.l10n.t('Archive'),
+    unarchiveAction: (): string => vscode.l10n.t('Unarchive'),
     deleteAction: (): string => vscode.l10n.t('Delete'),
-    lifecycleSucceeded: (action: 'archive' | 'delete', id: string): string =>
+    lifecycleSucceeded: (action: 'archive' | 'unarchive' | 'delete', id: string): string =>
       action === 'archive'
         ? vscode.l10n.t('Archived Codex session {0}.', id)
-        : vscode.l10n.t('Deleted Codex session {0}.', id),
-    lifecycleFailed: (action: 'archive' | 'delete', id: string): string =>
+        : action === 'unarchive'
+          ? vscode.l10n.t('Unarchived Codex session {0}.', id)
+          : vscode.l10n.t('Deleted Codex session {0}.', id),
+    lifecycleFailed: (action: 'archive' | 'unarchive' | 'delete', id: string): string =>
       action === 'archive'
         ? vscode.l10n.t('Could not archive Codex session {0}', id)
-        : vscode.l10n.t('Could not delete Codex session {0}', id),
+        : action === 'unarchive'
+          ? vscode.l10n.t('Could not unarchive Codex session {0}', id)
+          : vscode.l10n.t('Could not delete Codex session {0}', id),
     lifecycleRan: (action: string, id: string, output: string): string =>
       vscode.l10n.t('codex {0} {1}: {2}', action, id, output),
   },

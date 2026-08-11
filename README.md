@@ -75,12 +75,13 @@ The real Codex TUI, started in the workspace folder:
   sits under one entry, with a level naming each worktree when there is more than one — and keeps the first real prompt as a preview.
   **Click a session to resume it** in a terminal, in the directory it was originally written in;
   the inline actions open a readable Markdown transcript or copy its id, and the context menu adds
-  resume, fork, the raw rollout, and archive/delete. New and changed rollouts refresh the view
+  resume, fork, the raw rollout, and archive/unarchive/delete. New and changed rollouts refresh the view
   automatically. A row at the top reports how much disk Codex's session store is using — it grows
-  without bound, and archive/delete hand the work to `codex archive` / `codex delete` so Codex's
+  without bound, and archive/unarchive/delete hand the work to Codex so its
   own state database stays in step. **Expand a session** to list the files it changed — added,
   edited or deleted — read back from the rollout; click one to open it. Deleted files are shown
-  without a link. Where Codex's compatible SQLite projections are available, a row also shows
+  without a link. Archived sessions appear in their own group and can be unarchived from the
+  row's context menu. Where Codex's compatible SQLite projections are available, a row also shows
   the last durable turn state; a failed usage-limit turn includes its reset time. Those databases
   are opened read-only, and an unknown generation falls back to the rollout scan. The file-change
   scan runs when you expand the row, not during the listing.

@@ -167,19 +167,32 @@ export async function openRawHistorySession(node: unknown): Promise<void> {
  *
  * Codex keeps a state database alongside the rollouts, so deleting a file behind its back
  * leaves the two disagreeing — `codex doctor` reports exactly that as a parity check.
- * `codex archive` and `codex delete` take a session id and keep both in step.
+ * `codex archive`, `codex unarchive` and `codex delete` take a session id and keep both in step.
  */
-export async function runSessionLifecycle(node: unknown, action: 'archive' | 'delete'): Promise<void> {
+export async function runSessionLifecycle(
+  node: unknown,
+  action: 'archive' | 'unarchive' | 'delete',
+): Promise<void> {
   if (!isSessionNode(node)) {
     return;
   }
   const { id } = node.session;
   const confirm =
-    action === 'delete' ? strings.history.confirmDelete(id) : strings.history.confirmArchive(id);
+    action === 'delete'
+      ? strings.history.confirmDelete(id)
+      : action === 'unarchive'
+        ? strings.history.confirmUnarchive(id)
+        : strings.history.confirmArchive(id);
+  const actionLabel =
+    action === 'delete'
+      ? strings.history.deleteAction()
+      : action === 'unarchive'
+        ? strings.history.unarchiveAction()
+        : strings.history.archiveAction();
   const proceed = await vscode.window.showWarningMessage(
     confirm,
     { modal: true },
-    action === 'delete' ? strings.history.deleteAction() : strings.history.archiveAction(),
+    actionLabel,
   );
   if (!proceed) {
     return;

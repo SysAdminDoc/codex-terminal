@@ -143,6 +143,22 @@ test('Git SCM menus expose the three Codex review targets', () => {
   assert.ok(history.some((item) => item.command === 'codexTerminal.reviewCommit'));
 });
 
+test('archived history sessions expose an unarchive command', () => {
+  const manifest = readManifest();
+  const commands = new Set(
+    (manifest.contributes?.commands ?? []).map((command) => command.command),
+  );
+  assert.ok(commands.has('codexTerminal.unarchiveSession'));
+  const history = manifest.contributes?.menus?.['view/item/context'] ?? [];
+  assert.ok(
+    history.some(
+      (item) =>
+        item.command === 'codexTerminal.unarchiveSession' &&
+        item.when?.includes('codexTerminal.archivedSession'),
+    ),
+  );
+});
+
 test('every command a menu offers is a command the manifest declares', () => {
   // Found in the running editor, not here: VS Code silently drops a menu item whose command
   // is undeclared and logs `Menu item references a command … which is not defined in the

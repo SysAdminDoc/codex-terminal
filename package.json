@@ -222,6 +222,12 @@
         "icon": "$(archive)"
       },
       {
+        "command": "codexTerminal.unarchiveSession",
+        "title": "%command.unarchiveSession.title%",
+        "category": "%category.codexTerminal%",
+        "icon": "$(archive)"
+      },
+      {
         "command": "codexTerminal.nameSession",
         "title": "%command.nameSession.title%",
         "category": "%category.codexTerminal%",
@@ -314,27 +320,27 @@
         },
         {
           "command": "codexTerminal.nameSession",
-          "when": "view == codexTerminal.history && viewItem == codexTerminal.historySession",
+          "when": "view == codexTerminal.history && viewItem =~ /^codexTerminal\\.(history|archived)Session$/",
           "group": "codexTerminal@0"
         },
         {
           "command": "codexTerminal.openTranscript",
-          "when": "view == codexTerminal.history && viewItem == codexTerminal.historySession",
+          "when": "view == codexTerminal.history && viewItem =~ /^codexTerminal\\.(history|archived)Session$/",
           "group": "inline@1"
         },
         {
           "command": "codexTerminal.copyHistorySessionId",
-          "when": "view == codexTerminal.history && viewItem == codexTerminal.historySession",
+          "when": "view == codexTerminal.history && viewItem =~ /^codexTerminal\\.(history|archived)Session$/",
           "group": "inline@2"
         },
         {
           "command": "codexTerminal.resumeHistorySession",
-          "when": "view == codexTerminal.history && viewItem == codexTerminal.historySession",
+          "when": "view == codexTerminal.history && viewItem =~ /^codexTerminal\\.(history|archived)Session$/",
           "group": "codexTerminal@1"
         },
         {
           "command": "codexTerminal.openRawHistorySession",
-          "when": "view == codexTerminal.history && viewItem == codexTerminal.historySession",
+          "when": "view == codexTerminal.history && viewItem =~ /^codexTerminal\\.(history|archived)Session$/",
           "group": "codexTerminal@2"
         },
         {
@@ -358,13 +364,18 @@
           "group": "codexTerminal@3"
         },
         {
+          "command": "codexTerminal.unarchiveSession",
+          "when": "view == codexTerminal.history && viewItem == codexTerminal.archivedSession",
+          "group": "codexTerminal@3"
+        },
+        {
           "command": "codexTerminal.deleteSession",
-          "when": "view == codexTerminal.history && viewItem == codexTerminal.historySession",
+          "when": "view == codexTerminal.history && viewItem =~ /^codexTerminal\\.(history|archived)Session$/",
           "group": "codexTerminal@4"
         },
         {
           "command": "codexTerminal.forkHistorySession",
-          "when": "view == codexTerminal.history && viewItem == codexTerminal.historySession",
+          "when": "view == codexTerminal.history && viewItem =~ /^codexTerminal\\.(history|archived)Session$/",
           "group": "codexTerminal@2"
         }
       ]

@@ -196,6 +196,47 @@ test('history filtering also filters sessions under repository checkouts', async
   }
 });
 
+test('archived sessions are separated from active projects and expose unarchive context', async () => {
+  const active = session('active', 'active work');
+  const archived = session('archived', 'old work');
+  archived.thread = {
+    id: archived.id,
+    rolloutPath: archived.filePath,
+    cwd: archived.cwd,
+    archived: true,
+    pinned: false,
+    tokensUsed: 10,
+  };
+  patchSessions({
+    discoverSessions: async () => [active, archived],
+    indexCheckouts: async () => new Map(),
+    groupSessionsByProject: (sessions) => [
+      { project: 'repo', cwd: 'C:\\repo', sessions: [...sessions] },
+    ],
+  });
+
+  try {
+    const provider = new HistoryViewProvider(() => 20, () => 'C:\\codex');
+    const roots = await provider.getChildren();
+    assert.deepEqual(
+      roots.filter((node) => node.kind !== 'usage').map((node) => node.kind),
+      ['project', 'archived-group'],
+    );
+
+    const archivedGroup = roots.find((node) => node.kind === 'archived-group');
+    assert.ok(archivedGroup && archivedGroup.kind === 'archived-group');
+    const children = await provider.getChildren(archivedGroup);
+    assert.deepEqual(
+      children.map((node) => (node.kind === 'session' ? node.session.id : undefined)),
+      ['archived'],
+    );
+    const item = provider.getTreeItem(children[0]!);
+    assert.equal(item.contextValue, 'codexTerminal.archivedSession');
+  } finally {
+    restoreSessions();
+  }
+});
+
 test('history rows surface the durable failed-turn state and usage reset', () => {
   const failed = session('failed', 'limit work');
   failed.thread = {

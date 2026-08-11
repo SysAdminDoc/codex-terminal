@@ -7,6 +7,9 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **Archived sessions are recoverable.** The History view now keeps archived conversations in
+  a separate group, with an `Unarchive` action that returns a session to the active list.
+
 - **SCM review commands.** Git's Source Control title menu can review uncommitted changes or
   choose a base branch, and the history graph can review a selected commit. Each review opens
   `codex review` in the repository root through the extension's existing shell and argument

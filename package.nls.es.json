@@ -25,6 +25,7 @@
   "command.openRawHistory.title": "Abrir el archivo de sesión de Codex sin procesar",
   "command.forkHistory.title": "Bifurcar esta sesión de Codex",
   "command.archiveSession.title": "Archivar la sesión de Codex",
+  "command.unarchiveSession.title": "Desarchivar la sesión de Codex",
   "command.nameSession.title": "Poner nombre a la sesión de Codex",
   "command.deleteSession.title": "Eliminar la sesión de Codex",
   "command.restoreSession.title": "Restaurar la sesión interrumpida",

@@ -298,6 +298,9 @@ export async function activate(context: vscode.ExtensionContext): Promise<CodexT
     vscode.commands.registerCommand('codexTerminal.archiveSession', (node: unknown) => {
       void runSessionLifecycle(node, 'archive');
     }),
+    vscode.commands.registerCommand('codexTerminal.unarchiveSession', (node: unknown) => {
+      void runSessionLifecycle(node, 'unarchive');
+    }),
     vscode.commands.registerCommand('codexTerminal.deleteSession', (node: unknown) => {
       void runSessionLifecycle(node, 'delete');
     }),
