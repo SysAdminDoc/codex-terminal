@@ -219,6 +219,14 @@ export const strings = {
       vscode.l10n.t('Permanently delete Codex session {0} and its transcript? This cannot be undone.', id),
     archiveAction: (): string => vscode.l10n.t('Archive'),
     deleteAction: (): string => vscode.l10n.t('Delete'),
+    lifecycleSucceeded: (action: 'archive' | 'delete', id: string): string =>
+      action === 'archive'
+        ? vscode.l10n.t('Archived Codex session {0}.', id)
+        : vscode.l10n.t('Deleted Codex session {0}.', id),
+    lifecycleFailed: (action: 'archive' | 'delete', id: string): string =>
+      action === 'archive'
+        ? vscode.l10n.t('Could not archive Codex session {0}', id)
+        : vscode.l10n.t('Could not delete Codex session {0}', id),
     lifecycleRan: (action: string, id: string, output: string): string =>
       vscode.l10n.t('codex {0} {1}: {2}', action, id, output),
   },

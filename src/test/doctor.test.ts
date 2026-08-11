@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
-import { collectDoctorReport } from '../doctor';
+import { collectDoctorReport, runCommandResult } from '../doctor';
 import type { LaunchRequest } from '../launcher';
 
 function request(overrides: Partial<LaunchRequest> = {}): LaunchRequest {
@@ -57,4 +57,25 @@ test('doctor does not run a missing command', async () => {
   assert.equal(versionProbes, 0);
   assert.equal(report.commandPath, undefined);
   assert.equal(report.version, '');
+});
+
+test('command results retain a non-zero exit instead of looking successful', async () => {
+  const result = await runCommandResult(
+    process.execPath,
+    ['-e', "process.stdout.write('failed'); process.exit(7)"],
+    process.platform,
+  );
+
+  assert.equal(result.ok, false);
+  assert.equal(result.output, 'failed');
+});
+
+test('command results report successful probes separately', async () => {
+  const result = await runCommandResult(
+    process.execPath,
+    ['-e', "process.stdout.write('ok')"],
+    process.platform,
+  );
+
+  assert.deepEqual(result, { ok: true, output: 'ok' });
 });

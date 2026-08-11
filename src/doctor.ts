@@ -61,6 +61,11 @@ interface Invocation {
   verbatim?: boolean;
 }
 
+export interface CommandResult {
+  ok: boolean;
+  output: string;
+}
+
 function commandInvocation(
   command: string,
   platform: NodeJS.Platform,
@@ -104,18 +109,21 @@ function commandInvocation(
 }
 
 /** Run a Codex probe without opening a console window on Windows. */
-export function runCommand(
+export function runCommandResult(
   command: string,
   commandArgs: readonly string[],
   platform: NodeJS.Platform = process.platform,
   maxBuffer = 16 * 1024,
   timeoutMs = 5000,
-): Promise<string> {
+): Promise<CommandResult> {
   let invocation: Invocation;
   try {
     invocation = commandInvocation(command, platform, commandArgs);
   } catch (error) {
-    return Promise.resolve(error instanceof Error ? error.message : String(error));
+    return Promise.resolve({
+      ok: false,
+      output: error instanceof Error ? error.message : String(error),
+    });
   }
   return new Promise((resolve) => {
     execFile(
@@ -130,13 +138,26 @@ export function runCommand(
       (error, stdout, stderr) => {
         const output = `${stdout}${stderr}`.trim();
         if (error) {
-          resolve(output || error.message);
+          resolve({ ok: false, output: output || error.message });
           return;
         }
-        resolve(output || '<no output>');
+        resolve({ ok: true, output: output || '<no output>' });
       },
     );
   });
+}
+
+/** Run a Codex probe, retaining whether the process actually exited successfully. */
+export function runCommand(
+  command: string,
+  commandArgs: readonly string[],
+  platform: NodeJS.Platform = process.platform,
+  maxBuffer = 16 * 1024,
+  timeoutMs = 5000,
+): Promise<string> {
+  return runCommandResult(command, commandArgs, platform, maxBuffer, timeoutMs).then(
+    (result) => result.output,
+  );
 }
 
 export function runCommandVersion(

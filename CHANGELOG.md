@@ -24,6 +24,10 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- **Archive and Delete now report the CLI result.** A failed Codex lifecycle command no longer
+  looks successful or refreshes the History view; failures offer the existing Show Log action,
+  while successful operations confirm the session id and refresh once.
+
 - **History refreshes no longer get stuck on the loading row.** A refresh that arrived during
   the first session scan could leave the view showing “Reading Codex sessions…” until another
   unrelated event occurred. The completed scan now asks the tree to render its real contents.

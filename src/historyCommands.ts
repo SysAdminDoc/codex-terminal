@@ -1,12 +1,12 @@
 import * as vscode from 'vscode';
 
 import { nodeEntryFor, setThreadName } from './appServer';
-import { runCommand } from './doctor';
+import { runCommandResult } from './doctor';
 import { isRunningSessionNode } from './actionsView';
 import { isSessionNode } from './historyView';
 import { launch, preflightCodexCommand } from './launch';
 import { idForName, normaliseName, setSessionName, type SessionNames } from './names';
-import { SESSION_NAMES_KEY, config, log, services } from './services';
+import { SESSION_NAMES_KEY, config, log, reportError, services } from './services';
 import { strings } from './strings';
 import { transcriptUri } from './transcriptDocument';
 
@@ -190,8 +190,13 @@ export async function runSessionLifecycle(node: unknown, action: 'archive' | 'de
   if (!resolved) {
     return;
   }
-  const output = await runCommand(resolved, [action, id], process.platform);
-  log().info(strings.history.lifecycleRan(action, id, output));
+  const result = await runCommandResult(resolved, [action, id], process.platform);
+  if (!result.ok) {
+    reportError(result.output, strings.history.lifecycleFailed(action, id));
+    return;
+  }
+  log().info(strings.history.lifecycleRan(action, id, result.output));
+  void vscode.window.showInformationMessage(strings.history.lifecycleSucceeded(action, id));
   services().history.refresh(true);
 }
 
