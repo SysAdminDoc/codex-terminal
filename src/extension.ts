@@ -213,6 +213,9 @@ export async function activate(context: vscode.ExtensionContext): Promise<CodexT
   // from here, so this is the line that has to come first.
   const state: ExtensionServices = { log, context, monitor, registry, history, transcript };
   setServices(state);
+  // Before anything renders: these are the words every session row, tooltip and
+  // screen-reader announcement is built from.
+  configurePresentation(presentationLabels());
   context.subscriptions.push(monitor, history, transcript);
 
   await adoptSurvivingTerminals(store);
@@ -381,12 +384,6 @@ export async function activate(context: vscode.ExtensionContext): Promise<CodexT
   );
 
   createStatusBarItem(context, monitor);
-
-  // Worth logging: with `workbench.statusBar.visible: false` the status bar item is created
-  // successfully and is simply never rendered, with no error anywhere to explain it.
-  // Before anything renders: these are the words every session row, tooltip and
-  // screen-reader announcement is built from.
-  configurePresentation(presentationLabels());
 
   const statusBarVisible = vscode.workspace
     .getConfiguration('workbench')

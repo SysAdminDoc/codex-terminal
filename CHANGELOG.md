@@ -7,6 +7,10 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **Presentation labels are configured before view construction.** Localized labels are installed
+  before the badge, status bar, and tree providers can render, preventing an early English render
+  from leaking into a localized window.
+
 - **Workbench-setting reverts explain their state.** Successful restoration now says that
   automatic application is off and how to re-enable it; a revert with nothing restorable leaves
   the setting and ledger untouched.
