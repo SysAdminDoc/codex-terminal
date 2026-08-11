@@ -12,6 +12,10 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   and queue when notifications are disabled. Turning off `journal.storeMessages` clears pending
   notification hand-offs as well as journal messages.
 
+- **Restricted process settings.** The experimental app-server and completion-notification
+  switches are now machine-scoped and restricted in untrusted workspaces, so a folder cannot
+  enable either process-hosting path through its own settings.
+
 - **Publishing preparation.** Open VSX publishing now has a pinned `ovsx` tool and a
   credential-safe `publish:openvsx` script; the release documentation covers the Eclipse
   Publisher Agreement and the Microsoft Entra ID workload-federation path before the

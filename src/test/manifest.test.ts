@@ -248,15 +248,26 @@ test('every command-bearing setting is restricted in an untrusted workspace', ()
   const restricted = new Set(
     manifest.capabilities?.untrustedWorkspaces?.restrictedConfigurations ?? [],
   );
-  const properties = manifest.contributes?.configuration?.properties ?? {};
+  // Keep this list explicit: deriving it from the manifest would make a newly contributed
+  // process switch silently safe in the test while still missing from Restricted Mode.
+  for (const key of [
+    'codexTerminal.command',
+    'codexTerminal.customShellPath',
+    'codexTerminal.shell',
+    'codexTerminal.args',
+    'codexTerminal.env',
+    'codexTerminal.titleItems',
+    'codexTerminal.notifyOnCompletion',
+    'codexTerminal.appServer.enabled',
+  ]) {
+    assert.ok(restricted.has(key), `${key} must be restricted in untrusted workspaces`);
+  }
+});
 
-  // Anything that names a program, its arguments, or its environment decides what executes
-  // when a folder is opened, so a workspace must not be able to set it untrusted.
-  for (const key of Object.keys(properties)) {
-    const leaf = key.split('.').pop() ?? '';
-    if (['command', 'customShellPath', 'shell', 'args', 'env', 'titleItems'].includes(leaf)) {
-      assert.ok(restricted.has(key), `${key} must be restricted in untrusted workspaces`);
-    }
+test('process-hosting settings cannot be changed by a workspace', () => {
+  const properties = readManifest().contributes?.configuration?.properties ?? {};
+  for (const key of ['codexTerminal.notifyOnCompletion', 'codexTerminal.appServer.enabled']) {
+    assert.equal(properties[key]?.scope, 'machine', `${key} must not be workspace-configurable`);
   }
 });
 

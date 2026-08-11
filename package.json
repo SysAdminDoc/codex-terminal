@@ -631,7 +631,7 @@
           "type": "boolean",
           "default": false,
           "description": "%setting.notifyOnCompletion.description%",
-          "scope": "machine-overridable"
+          "scope": "machine"
         },
         "codexTerminal.titleItems": {
           "type": "array",
@@ -656,6 +656,7 @@
           "type": "boolean",
           "default": false,
           "markdownDescription": "%setting.appServer.enabled.markdownDescription%",
+          "scope": "machine",
           "tags": [
             "experimental"
           ]
@@ -739,7 +740,9 @@
         "codexTerminal.shell",
         "codexTerminal.args",
         "codexTerminal.env",
-        "codexTerminal.titleItems"
+        "codexTerminal.titleItems",
+        "codexTerminal.notifyOnCompletion",
+        "codexTerminal.appServer.enabled"
       ]
     },
     "virtualWorkspaces": {
