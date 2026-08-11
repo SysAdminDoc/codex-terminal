@@ -10,6 +10,8 @@
  * real rollout lines, and a caller can fold a 100 MB rollout without holding it in memory.
  */
 
+import { KNOWN_ROLLOUT_RECORD_TYPES } from './transcript';
+
 /**
  * `silent` is not a state Codex reports — it is what this extension concludes when a turn
  * has claimed to be working for implausibly long without writing anything. See
@@ -124,12 +126,15 @@ export interface SessionActivity {
   ordinal: number;
   /** Turns completed in this rollout. */
   completedTurns: number;
+  /** Unique record/event types this reducer did not understand, for one diagnostic per session. */
+  unknownRecordTypes: string[];
 }
 
 export const INITIAL_ACTIVITY: SessionActivity = {
   status: 'unknown',
   ordinal: -1,
   completedTurns: 0,
+  unknownRecordTypes: [],
 };
 
 interface RolloutRecord {
@@ -245,6 +250,17 @@ const SHELLS = new Set(['pwsh', 'powershell', 'cmd', 'bash', 'sh', 'zsh', 'fish'
 /** The flag after which a shell's real argument is the script, not another option. */
 const SCRIPT_FLAGS = new Set(['-command', '-c', '/c', '/k', '-file']);
 
+const KNOWN_RECORD_TYPES = new Set<string>(KNOWN_ROLLOUT_RECORD_TYPES);
+const KNOWN_EVENT_TYPES = new Set([
+  'task_started',
+  'task_complete',
+  'turn_aborted',
+  'token_count',
+  'item_completed',
+  // Settings are already reflected in Codex's thread state and do not describe activity.
+  'thread_settings_applied',
+]);
+
 function tidySubject(value: string): string {
   const collapsed = value.replace(/\s+/g, ' ').trim();
   return collapsed.length > MAX_SUBJECT_LENGTH
@@ -310,6 +326,13 @@ function describeFileChange(changes: unknown): string {
   return tidySubject(`${baseName(paths[0])}, ${baseName(paths[1])} +${paths.length - 2} more`);
 }
 
+function noteUnknownRecord(state: SessionActivity, type: string): SessionActivity {
+  if (state.unknownRecordTypes.includes(type)) {
+    return state;
+  }
+  return { ...state, unknownRecordTypes: [...state.unknownRecordTypes, type] };
+}
+
 /**
  * Turn one completed item into a kind and a subject.
  *
@@ -348,10 +371,11 @@ export function describeItem(item: unknown): ActivityItem | undefined {
 /**
  * Fold one rollout line into the activity state.
  *
- * Unparseable lines and unrelated record types return the state untouched, so a caller
- * can hand over every line of the file without filtering. A tailer may re-read a line it
- * has already folded after a partial write, so records at or below the current ordinal
- * are ignored rather than double-counted.
+ * Unparseable lines and known unrelated record types return the state untouched, so a caller
+ * can hand over every line of the file without filtering. Unknown types are retained as a
+ * diagnostic while their ordinal is still consumed. A tailer may re-read a line it has already
+ * folded after a partial write, so records at or below the current ordinal are ignored rather
+ * than double-counted.
  */
 export function reduceActivityLine(state: SessionActivity, line: string): SessionActivity {
   if (!line.trim()) {
@@ -363,12 +387,18 @@ export function reduceActivityLine(state: SessionActivity, line: string): Sessio
   } catch {
     return state;
   }
-  if (!record.payload) {
+  const ordinal = typeof record.ordinal === 'number' ? record.ordinal : state.ordinal + 1;
+  if (ordinal <= state.ordinal) {
     return state;
   }
 
-  const ordinal = typeof record.ordinal === 'number' ? record.ordinal : state.ordinal + 1;
-  if (ordinal <= state.ordinal) {
+  const type = typeof record.type === 'string' ? record.type : undefined;
+  const unknownRecord = type !== undefined && !KNOWN_RECORD_TYPES.has(type);
+  const unknown = unknownRecord ? noteUnknownRecord(state, type) : state;
+  if (unknownRecord) {
+    return { ...unknown, ordinal };
+  }
+  if (!record.payload) {
     return state;
   }
 
@@ -378,8 +408,8 @@ export function reduceActivityLine(state: SessionActivity, line: string): Sessio
   if (record.type === 'turn_context') {
     const model = record.payload.model;
     return typeof model === 'string' && model
-      ? { ...state, ordinal, model }
-      : { ...state, ordinal };
+      ? { ...unknown, ordinal, model }
+      : { ...unknown, ordinal };
   }
   if (record.type !== 'event_msg') {
     return state;
@@ -387,8 +417,11 @@ export function reduceActivityLine(state: SessionActivity, line: string): Sessio
 
   const payload = record.payload;
   const timestamp = typeof record.timestamp === 'string' ? record.timestamp : state.lastEventAt;
+  const eventType = typeof payload.type === 'string' ? payload.type : undefined;
+  const eventState =
+    eventType && !KNOWN_EVENT_TYPES.has(eventType) ? noteUnknownRecord(unknown, eventType) : unknown;
   const base: SessionActivity = {
-    ...state,
+    ...eventState,
     ordinal,
     lastEventAt: timestamp,
     // `silent` is a conclusion drawn purely from records *not* arriving. One arriving
@@ -435,6 +468,9 @@ export function reduceActivityLine(state: SessionActivity, line: string): Sessio
       const item = describeItem(payload.item);
       return item ? { ...base, lastItem: item } : base;
     }
+    case 'thread_settings_applied':
+      // This is configuration replay, not a turn boundary or a user-visible activity item.
+      return base;
     default:
       return base;
   }

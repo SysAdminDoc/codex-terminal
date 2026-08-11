@@ -26,9 +26,51 @@ export type TranscriptRole =
 export const SKIPPED_RECORD_TYPES = [
   'turn_context',
   'world_state',
+  // Thread settings affect Codex configuration, not conversation content or live activity;
+  // the state database and the next event carry the values that matter to this extension.
+  'thread_settings_applied',
   'inter_agent_communication',
   'inter_agent_communication_metadata',
 ] as const;
+
+/** Top-level rollout records known to the supported legacy and modern schemas. */
+export const KNOWN_ROLLOUT_RECORD_TYPES = [
+  'session_meta',
+  'response_item',
+  'event_msg',
+  'turn_context',
+  'world_state',
+  'compacted',
+  'thread_settings_applied',
+  'inter_agent_communication',
+  'inter_agent_communication_metadata',
+] as const;
+
+export type RolloutSchemaGeneration = 'legacy' | 'modern' | 'unknown';
+
+/**
+ * The rollout trace has two formats worth supporting: the pre-0.44 Aug-2025 format and the
+ * ordinal-bearing format introduced at 0.44. A missing or future version is not guessed at.
+ * Callers can still render records they recognise, but they have a truthful compatibility signal
+ * for diagnostics and fixtures instead of silently treating a new format as the current one.
+ */
+export function rolloutSchemaGeneration(
+  meta: Pick<TranscriptMeta, 'cliVersion' | 'historyMode'>,
+): RolloutSchemaGeneration {
+  if (meta.historyMode?.toLowerCase().includes('legacy')) {
+    return 'legacy';
+  }
+  const version = meta.cliVersion?.match(/^(\d+)\.(\d+)(?:\.(\d+))?/);
+  if (!version) {
+    return 'unknown';
+  }
+  const major = Number(version[1]);
+  const minor = Number(version[2]);
+  if (major === 0 && minor < 44) {
+    return 'legacy';
+  }
+  return major === 0 ? 'modern' : 'unknown';
+}
 
 export interface TranscriptEntry {
   role: TranscriptRole;
@@ -43,6 +85,8 @@ export interface TranscriptMeta {
   timestamp: string;
   cwd: string;
   cliVersion?: string;
+  historyMode?: string;
+  schemaGeneration: RolloutSchemaGeneration;
   originator?: string;
 }
 
@@ -171,13 +215,15 @@ export function parseSessionMeta(line: string): TranscriptMeta | undefined {
   if (typeof id !== 'string' || typeof payload.timestamp !== 'string') {
     return undefined;
   }
-  return {
+  const meta: Omit<TranscriptMeta, 'schemaGeneration'> = {
     id,
     timestamp: payload.timestamp,
     cwd: typeof payload.cwd === 'string' ? payload.cwd : '',
     ...(typeof payload.cli_version === 'string' ? { cliVersion: payload.cli_version } : {}),
+    ...(typeof payload.history_mode === 'string' ? { historyMode: payload.history_mode } : {}),
     ...(typeof payload.originator === 'string' ? { originator: payload.originator } : {}),
   };
+  return { ...meta, schemaGeneration: rolloutSchemaGeneration(meta) };
 }
 
 /**
@@ -336,6 +382,7 @@ export function renderTranscriptHeader(meta: TranscriptMeta, project: string): s
     `- **Started:** ${meta.timestamp}`,
     `- **Working directory:** \`${meta.cwd}\``,
     ...(meta.cliVersion ? [`- **Codex CLI:** ${meta.cliVersion}`] : []),
+    `- **Rollout schema:** ${meta.schemaGeneration}`,
     ...(meta.originator ? [`- **Originator:** ${meta.originator}`] : []),
     '',
     `Resume it with \`codex resume ${meta.id}\`.`,

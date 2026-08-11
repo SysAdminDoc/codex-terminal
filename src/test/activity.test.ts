@@ -1,4 +1,6 @@
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import * as path from 'node:path';
 import { test } from 'node:test';
 
 import {
@@ -15,6 +17,13 @@ import {
   silentFor,
   SILENT_AFTER_SECONDS,
 } from '../activity';
+import { parseSessionMeta, rolloutSchemaGeneration } from '../transcript';
+
+function fixtureLines(name: string): string[] {
+  return readFileSync(path.resolve(__dirname, '../../src/test/fixtures', name), 'utf8')
+    .trim()
+    .split(/\r?\n/);
+}
 
 test('SQLite turn states map to the live activity vocabulary', () => {
   assert.equal(activityStatusFromIndexedTurn('inProgress'), 'working');
@@ -529,6 +538,31 @@ const RATE_LIMITED = JSON.stringify({
       plan_type: 'pro',
     },
   },
+});
+
+test('legacy and modern rollout fixtures fold without unrecognised records', () => {
+  for (const name of ['rollout-legacy.jsonl', 'rollout-modern.jsonl']) {
+    const lines = fixtureLines(name);
+    const meta = parseSessionMeta(lines[0]);
+    assert.ok(meta, name);
+    assert.equal(
+      rolloutSchemaGeneration(meta),
+      name.includes('legacy') ? 'legacy' : 'modern',
+      name,
+    );
+    const state = reduceActivity(INITIAL_ACTIVITY, lines);
+    assert.deepEqual(state.unknownRecordTypes, [], name);
+  }
+});
+
+test('an unknown rollout record type is retained once for the session diagnostic', () => {
+  const lines = [
+    JSON.stringify({ ordinal: 1, type: 'future_record', payload: { value: true } }),
+    JSON.stringify({ ordinal: 2, type: 'future_record', payload: { value: false } }),
+    JSON.stringify({ ordinal: 3, type: 'event_msg', payload: { type: 'future_event' } }),
+  ];
+  const state = reduceActivity(INITIAL_ACTIVITY, lines);
+  assert.deepEqual(state.unknownRecordTypes, ['future_record', 'future_event']);
 });
 
 test('the plan window Codex reports is folded, seconds converted to milliseconds', () => {

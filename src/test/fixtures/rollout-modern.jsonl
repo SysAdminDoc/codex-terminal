@@ -1,0 +1,9 @@
+{"ordinal":0,"type":"session_meta","payload":{"id":"modern-session","timestamp":"2026-08-10T12:00:00.000Z","cwd":"C:\\repo","cli_version":"0.147.0","history_mode":"default"}}
+{"ordinal":1,"type":"world_state","payload":{"cwd":"C:\\repo"}}
+{"ordinal":2,"type":"thread_settings_applied","payload":{"approval_policy":"never","sandbox_mode":"workspace-write"}}
+{"ordinal":3,"type":"turn_context","payload":{"model":"gpt-5.6-luna"}}
+{"ordinal":4,"type":"event_msg","payload":{"type":"task_started","turn_id":"modern-turn","started_at":1786363200}}
+{"ordinal":5,"type":"response_item","payload":{"type":"message","role":"assistant","content":[{"text":"I am reading it."}]}}
+{"ordinal":6,"type":"event_msg","payload":{"type":"item_completed","item":{"type":"CommandExecution","command":["git","status"]}}}
+{"ordinal":7,"type":"compacted","payload":{"message":"Earlier work was compacted."}}
+{"ordinal":8,"type":"event_msg","payload":{"type":"task_complete","turn_id":"modern-turn","last_agent_message":"Done."}}

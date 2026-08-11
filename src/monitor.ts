@@ -366,6 +366,7 @@ export class SessionMonitor implements vscode.Disposable {
         `dropped ${dropped} oversized record(s) from ${entry.rolloutPath ?? entry.label}`,
       );
     }
+    this.warnUnknownRecords(entry, next);
     if (lines === 0 || next === entry.activity) {
       return false;
     }
@@ -420,10 +421,28 @@ export class SessionMonitor implements vscode.Disposable {
     // Fold the whole file, not just the tail, a bounded chunk at a time: a rollout bound a
     // few seconds late already holds the opening turn, and skipping it would report an idle
     // session that is busy.
-    entry.activity =
-      (await entry.tailer?.fold(entry.activity, reduceActivityLine))?.value ?? entry.activity;
+    const folded = await entry.tailer?.fold(entry.activity, reduceActivityLine);
+    if (folded) {
+      this.warnUnknownRecords(entry, folded.value);
+      entry.activity = folded.value;
+    }
     this.persist(entry);
     return true;
+  }
+
+  /** Warn once for each new type in this session, including a late bind's initial full fold. */
+  private warnUnknownRecords(entry: Tracked, next: SessionActivity): void {
+    const newlyUnknown = next.unknownRecordTypes.filter(
+      (type) => !entry.activity.unknownRecordTypes.includes(type),
+    );
+    if (newlyUnknown.length === 0) {
+      return;
+    }
+    this.options.log.warn(
+      `unrecognised rollout record type(s) ${newlyUnknown
+        .map((type) => JSON.stringify(type))
+        .join(', ')} in ${entry.rolloutPath ?? entry.label}; skipped`,
+    );
   }
 
   private persist(entry: Tracked, closedAt?: number): void {

@@ -163,6 +163,43 @@ test('a restored session tails its rollout from the start without any scan', asy
   });
 });
 
+test('unknown rollout record types are logged once per session', async () => {
+  await withMonitor(async ({ monitor, directory }) => {
+    const rolloutPath = path.join(directory, 'rollout.jsonl');
+    await writeFile(
+      rolloutPath,
+      [
+        JSON.stringify({ ordinal: 1, type: 'future_record', payload: { value: true } }),
+        JSON.stringify({ ordinal: 2, type: 'future_record', payload: { value: false } }),
+        '',
+      ].join('\n'),
+      'utf8',
+    );
+    const before = messages.length;
+    monitor.track(fakeTerminal(), {
+      cwd: directory,
+      project: 'fixture',
+      label: 'fixture',
+      mode: 'new',
+      key: 'unknown-records',
+      sessionId: 'session-unknown-records',
+      rolloutPath,
+    });
+
+    await (monitor as unknown as { poll(): Promise<void> }).poll();
+    await (monitor as unknown as { poll(): Promise<void> }).poll();
+
+    assert.deepEqual(monitor.live()[0].activity.unknownRecordTypes, ['future_record']);
+    assert.equal(
+      messages
+        .slice(before)
+        .filter((message) => message.includes('unrecognised rollout record type'))
+        .length,
+      1,
+    );
+  });
+});
+
 test('closing a terminal stops it counting as working', async () => {
   await withMonitor(async ({ monitor, directory }) => {
     const rolloutPath = path.join(directory, 'rollout.jsonl');

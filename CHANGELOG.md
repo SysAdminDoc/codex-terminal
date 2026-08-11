@@ -7,6 +7,10 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **Rollout schema diagnostics.** Legacy and modern rollout fixtures now guard the parser's
+  known record vocabulary; unknown record types are retained and warned once per live session
+  instead of disappearing silently.
+
 - **Archived sessions are recoverable.** The History view now keeps archived conversations in
   a separate group, with an `Unarchive` action that returns a session to the active list.
 

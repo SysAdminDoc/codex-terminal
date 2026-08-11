@@ -7,6 +7,7 @@ import {
   parseSessionMeta,
   parseTranscriptLine,
   renderTranscriptEntry,
+  rolloutSchemaGeneration,
   summarise,
   mayContainFileChange,
   netFileChanges,
@@ -28,6 +29,7 @@ test('transcript parsing keeps metadata and real conversation messages', () => {
     id: 'session-1',
     timestamp: '2026-08-09T12:00:00.000Z',
     cwd: 'C:\\repo',
+    schemaGeneration: 'unknown',
   });
 
   const line = JSON.stringify({
@@ -175,6 +177,17 @@ test('tool calls and tool output are gated separately', () => {
   assert.ok(renderTranscriptEntry(call, { includeToolCalls: true }));
   assert.equal(renderTranscriptEntry(output, { includeToolCalls: true, includeToolOutput: false }), undefined);
   assert.ok(renderTranscriptEntry(output, { includeToolOutput: true }));
+});
+
+test('session metadata selects the supported legacy and modern schema generations', () => {
+  assert.equal(
+    rolloutSchemaGeneration({ cliVersion: '0.43.0', historyMode: 'legacy' }),
+    'legacy',
+  );
+  assert.equal(rolloutSchemaGeneration({ cliVersion: '0.147.0' }), 'modern');
+  assert.equal(rolloutSchemaGeneration({ cliVersion: '0.148.0' }), 'modern');
+  assert.equal(rolloutSchemaGeneration({ cliVersion: '1.0.0' }), 'unknown');
+  assert.equal(rolloutSchemaGeneration({}), 'unknown');
 });
 
 test('a tool block is capped far tighter than prose', () => {

@@ -141,7 +141,10 @@ class RunningGroupItem extends vscode.TreeItem {
     this.tooltip = strings.running.tooltip();
     this.iconPath = new vscode.ThemeIcon(
       working > 0
-        ? presentStatus({ status: 'working', ordinal: 0, completedTurns: 0 }, animate).icon
+        ? presentStatus(
+            { status: 'working', ordinal: 0, completedTurns: 0, unknownRecordTypes: [] },
+            animate,
+          ).icon
         : 'pulse',
     );
     this.accessibilityInformation = {
