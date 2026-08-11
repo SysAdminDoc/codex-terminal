@@ -7,6 +7,9 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **Status-bar context usage is labeled.** The compact percentage remains in the item text, while
+  its tooltip now identifies it as the highest context usage across open sessions.
+
 - **Reduced-motion behavior is explicit.** The extension documents that the extension host cannot
   resolve the operating-system preference behind `workbench.reduceMotion: auto`; the doctor report
   names the setting and explains that only `"on"` suppresses its spinner.

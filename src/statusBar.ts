@@ -39,6 +39,9 @@ export function createStatusBarItem(context: vscode.ExtensionContext, monitor: S
           ? strings.status.liveTooltip(live)
           : strings.status.tooltip();
     const parts = [stalled > 0 ? `${base} ${strings.status.stalledTooltip(stalled)}` : base];
+    if (peak !== undefined) {
+      parts.push(strings.status.contextTooltip(Math.round(peak * 100)));
+    }
     // Every session bills the same account, so the tightest window across all of them is the
     // one that will stop the next turn, whichever tab it is started from.
     const limit = describeRateLimit(

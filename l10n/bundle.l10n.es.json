@@ -191,6 +191,7 @@
   "{0} of them have produced no output for a while.": "{0} de ellas llevan un rato sin producir salida.",
   "1 idle Codex session. Click to focus.": "1 sesión de Codex inactiva. Haga clic para enfocar.",
   "{0} idle Codex sessions. Click to focus.": "{0} sesiones de Codex inactivas. Haga clic para enfocar.",
+  "Highest context usage across open sessions: {0}%": "Mayor uso de contexto entre las sesiones abiertas: {0}%",
   "Codex Terminal: working in {0} sessions": "Codex Terminal: trabajando en {0} sesiones",
   "Codex Terminal: 1 session open, none working": "Codex Terminal: 1 sesión abierta, ninguna trabajando",
   "Codex Terminal: {0} sessions open, none working": "Codex Terminal: {0} sesiones abiertas, ninguna trabajando",

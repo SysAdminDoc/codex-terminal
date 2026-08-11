@@ -406,6 +406,8 @@ export const strings = {
       total === 1
         ? vscode.l10n.t('1 idle Codex session. Click to focus.')
         : vscode.l10n.t('{0} idle Codex sessions. Click to focus.', total),
+    contextTooltip: (percentage: number): string =>
+      vscode.l10n.t('Highest context usage across open sessions: {0}%', percentage),
     accessibilityWorking: (working: number): string =>
       vscode.l10n.t('Codex Terminal: working in {0} sessions', working),
     // Without this, working 1 → 0 leaves the same accessible name as having nothing open at
