@@ -17,6 +17,7 @@ interface Manifest {
   };
   contributes?: {
     views?: Record<string, Array<{ id?: string }>>;
+    mcpServerDefinitionProviders?: Array<{ id?: string; label?: string }>;
     walkthroughs?: Array<{
       id?: string;
       title?: string;
@@ -165,6 +166,13 @@ test('the first-run walkthrough covers the real Codex workflow', () => {
   assert.deepEqual(steps[1].completionEvents, ['onCommand:codexTerminal.new']);
   assert.deepEqual(steps[2].completionEvents, ['onCommand:codexTerminal.newWithProfile']);
   assert.deepEqual(steps[3].completionEvents, ['onView:codexTerminal.history']);
+});
+
+test('the Codex MCP provider is contributed for hosts that support it', () => {
+  const providers = readManifest().contributes?.mcpServerDefinitionProviders ?? [];
+  const provider = providers.find((candidate) => candidate.id === 'codexTerminal.mcp');
+  assert.ok(provider);
+  assert.equal(provider.label, '%mcp.provider.label%');
 });
 
 test('Git SCM menus expose the three Codex review targets', () => {

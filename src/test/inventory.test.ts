@@ -5,6 +5,7 @@ import {
   REDACTED,
   describeMcpServer,
   describePlugin,
+  parseMcpDefinitions,
   parseMcpList,
   parsePluginList,
   redactSecrets,
@@ -37,6 +38,70 @@ test('an MCP list is parsed down to what is safe to show', () => {
   assert.equal(parsed?.[1].disabledReason, 'command not found');
   // The environment carries API tokens and is deliberately not carried through.
   assert.ok(!JSON.stringify(parsed).includes('sk-live-0123456789abcdef'));
+});
+
+test('an MCP object emitted for one server is accepted as well as the array shape', () => {
+  const parsed = parseMcpList(
+    JSON.stringify({
+      name: 'single',
+      enabled: true,
+      transport: { type: 'streamable_http', url: 'https://example.test/mcp' },
+    }),
+  );
+  assert.deepEqual(parsed, [
+    { name: 'single', enabled: true, transport: 'streamable_http' },
+  ]);
+});
+
+test('MCP launch definitions preserve transports and omit malformed entries', () => {
+  const parsed = parseMcpDefinitions(
+    JSON.stringify([
+      {
+        name: 'stdio-server',
+        enabled: true,
+        transport: {
+          type: 'stdio',
+          command: 'node',
+          args: ['server.js'],
+          env: { MODE: 'test' },
+          env_vars: ['HOME'],
+          cwd: 'C:/workspace',
+        },
+      },
+      {
+        name: 'http-server',
+        enabled: true,
+        transport: {
+          type: 'streamable_http',
+          url: 'https://example.test/mcp',
+          http_headers: { 'X-Client': 'codex' },
+          env_http_headers: { Authorization: 'MCP_TOKEN' },
+        },
+      },
+      {
+        name: 'disabled',
+        enabled: false,
+        transport: { type: 'stdio', command: 'disabled-server' },
+      },
+      { name: 'unknown', enabled: true, transport: { type: 'other' } },
+    ]),
+  );
+  assert.equal(parsed?.length, 3);
+  assert.deepEqual(parsed?.[0].transport, {
+    type: 'stdio',
+    command: 'node',
+    args: ['server.js'],
+    env: { MODE: 'test' },
+    envVars: ['HOME'],
+    cwd: 'C:/workspace',
+  });
+  assert.deepEqual(parsed?.[1].transport, {
+    type: 'streamable_http',
+    url: 'https://example.test/mcp',
+    httpHeaders: { 'X-Client': 'codex' },
+    envHttpHeaders: { Authorization: 'MCP_TOKEN' },
+  });
+  assert.equal(parsed?.[2].enabled, false);
 });
 
 test('output that is not the expected shape is rejected rather than half-read', () => {

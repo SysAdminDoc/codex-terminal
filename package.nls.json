@@ -14,6 +14,7 @@
   "walkthrough.profile.description": "Use the terminal `+` dropdown and choose **Codex**, or run [New Session with Profile](command:codexTerminal.newWithProfile) to select a saved profile.",
   "walkthrough.history.title": "Find conversations in History",
   "walkthrough.history.description": "Open the History view in the Codex Terminal activity bar. It reads Codex's local session store and lets you resume, export, archive, or delete conversations. Use [Refresh Codex History](command:codexTerminal.refreshHistory) after changing the store.",
+  "mcp.provider.label": "Codex configured MCP servers",
   "terminal.profile.title": "Codex",
   "category.codexTerminal": "Codex Terminal",
   "command.new.title": "New Session",

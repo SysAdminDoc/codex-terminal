@@ -107,6 +107,11 @@ available from VS Code's Getting Started page.
   `Review Uncommitted Changes with Codex`, `Review Changes Against Base Branch…`,
   `Review This Commit with Codex`, `Revert Workbench Settings`, `Check Codex App Server`,
   `Doctor`, `Show Log`.
+- **MCP client** — on VS Code 1.101 and newer, configured and enabled Codex MCP servers are
+  also published to VS Code's native MCP server list. Stdio servers carry their configured
+  command, arguments, working directory and environment; streamable HTTP servers carry their
+  URL and headers. Disabled servers stay out of that list, and older hosts keep the existing
+  Launch-panel inventory without an error.
 - **SCM review** — Git's Source Control title menu can launch `codex review --uncommitted` or
   let you choose a base branch for `codex review --base <branch>`. The Source Control history
   graph adds a commit action for `codex review --commit <sha>`. Each review opens in the

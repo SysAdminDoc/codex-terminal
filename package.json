@@ -121,6 +121,12 @@
         ]
       }
     ],
+    "mcpServerDefinitionProviders": [
+      {
+        "id": "codexTerminal.mcp",
+        "label": "%mcp.provider.label%"
+      }
+    ],
     "terminal": {
       "profiles": [
         {

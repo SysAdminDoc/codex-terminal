@@ -7,6 +7,10 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **Codex MCP provider.** Enabled servers from `codex mcp list --json` are now available to
+  VS Code's native MCP client, including stdio and streamable HTTP definitions; disabled servers
+  are omitted and older hosts feature-detect the API.
+
 - **First-run walkthrough.** A localized Getting Started walkthrough now covers installing the
   Codex CLI, launching a session, choosing the native terminal profile, and opening History, with
   completion events tied to the contributed commands and view.

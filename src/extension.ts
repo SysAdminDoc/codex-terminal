@@ -38,6 +38,7 @@ import {
   terminalOptions,
 } from './launch';
 import { migrateSettings, type MigrationTarget } from './migrate';
+import { registerMcpServerProvider, type McpProviderRegistration } from './mcpProvider';
 import { SessionMonitor } from './monitor';
 import { DEFAULT_STALL_SECONDS, configurePresentation } from './present';
 import {
@@ -326,6 +327,12 @@ export async function activate(context: vscode.ExtensionContext): Promise<CodexT
     () => config().get<RateTable>('modelRates'),
     readCodexInventory,
   );
+  const mcpProvider: McpProviderRegistration | undefined = registerMcpServerProvider(() =>
+    readCodexInventory(['mcp', 'list', '--json']),
+  );
+  if (mcpProvider) {
+    context.subscriptions.push(mcpProvider);
+  }
   const actionsView = vscode.window.createTreeView('codexTerminal.actions', {
     treeDataProvider: actionsProvider,
   });
@@ -403,6 +410,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<CodexT
       }
       if (event.affectsConfiguration('codexTerminal.command')) {
         actionsProvider.refreshInventory();
+        mcpProvider?.refresh();
       }
       if (
         event.affectsConfiguration('codexTerminal.journal.storeMessages') &&

@@ -28,6 +28,29 @@ export interface CodexMcpServer {
   transport?: string;
 }
 
+/** The launchable parts of one server from `codex mcp list --json`. */
+export interface CodexMcpServerDefinition {
+  name: string;
+  enabled: boolean;
+  disabledReason?: string;
+  transport:
+    | {
+        type: 'stdio';
+        command: string;
+        args: string[];
+        env: Record<string, string>;
+        envVars: string[];
+        cwd?: string;
+      }
+    | {
+        type: 'streamable_http';
+        url: string;
+        bearerTokenEnvVar?: string;
+        httpHeaders: Record<string, string>;
+        envHttpHeaders: Record<string, string>;
+      };
+}
+
 function record(value: unknown): Record<string, unknown> | undefined {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
     ? (value as Record<string, unknown>)
@@ -36,6 +59,49 @@ function record(value: unknown): Record<string, unknown> | undefined {
 
 function text(value: unknown): string | undefined {
   return typeof value === 'string' && value ? value : undefined;
+}
+
+function strings(value: unknown): string[] {
+  return Array.isArray(value)
+    ? value.filter((entry): entry is string => typeof entry === 'string' && entry.length > 0)
+    : [];
+}
+
+function stringMap(value: unknown): Record<string, string> {
+  const object = record(value);
+  if (!object) {
+    return {};
+  }
+  return Object.fromEntries(
+    Object.entries(object).filter(
+      (entry): entry is [string, string] => typeof entry[1] === 'string',
+    ),
+  );
+}
+
+function transportType(entry: Record<string, unknown>): string | undefined {
+  const transport = record(entry.transport);
+  return text(transport?.type) ?? text(entry.transport);
+}
+
+function entries(output: string): Record<string, unknown>[] | undefined {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(output);
+  } catch {
+    return undefined;
+  }
+
+  if (Array.isArray(parsed)) {
+    return parsed
+      .map((entry) => record(entry))
+      .filter((entry): entry is Record<string, unknown> => entry !== undefined);
+  }
+
+  const root = record(parsed);
+  // Codex 0.147 emits a single object when one server is configured. Keep accepting that
+  // shape alongside the array emitted by older versions and by multi-server configurations.
+  return root && text(root.name) ? [root] : undefined;
 }
 
 function plugin(entry: Record<string, unknown>): CodexPlugin | undefined {
@@ -124,34 +190,95 @@ export function redactSecrets(text: string): string {
  * its environment — is deliberately dropped, because that environment carries API tokens.
  */
 export function parseMcpList(output: string): CodexMcpServer[] | undefined {
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(output);
-  } catch {
-    return undefined;
-  }
-  if (!Array.isArray(parsed)) {
+  const parsed = entries(output);
+  if (!parsed) {
     return undefined;
   }
   return parsed
-    .map((entry) => record(entry))
-    .filter((entry): entry is Record<string, unknown> => entry !== undefined)
     .map((entry) => {
       const name = text(entry.name);
       if (!name) {
         return undefined;
       }
-      const transport = record(entry.transport);
       return {
         name,
         // Absent means enabled: Codex writes the flag only when it has an opinion, and
         // defaulting the other way would report a working server as switched off.
         enabled: entry.enabled !== false,
         ...(text(entry.disabled_reason) ? { disabledReason: text(entry.disabled_reason) } : {}),
-        ...(text(transport?.type) ? { transport: text(transport?.type) } : {}),
+        ...(transportType(entry) ? { transport: transportType(entry) } : {}),
       } satisfies CodexMcpServer;
     })
     .filter((entry): entry is CodexMcpServer => entry !== undefined);
+}
+
+/**
+ * Parse the launch configuration needed by VS Code's MCP client.
+ *
+ * This deliberately lives beside the safe display parser but is a separate result: the MCP
+ * client needs the configured environment and headers to start a server, while the sidebar and
+ * logs must never retain those values. Callers must pass the result straight to the client and
+ * must not render or log it.
+ */
+export function parseMcpDefinitions(output: string): CodexMcpServerDefinition[] | undefined {
+  const parsed = entries(output);
+  if (!parsed) {
+    return undefined;
+  }
+  return parsed
+    .map((entry): CodexMcpServerDefinition | undefined => {
+      const name = text(entry.name);
+      const transport = record(entry.transport);
+      const type = transportType(entry);
+      if (!name || !transport || !type) {
+        return undefined;
+      }
+
+      const common = {
+        name,
+        enabled: entry.enabled !== false,
+        ...(text(entry.disabled_reason) ? { disabledReason: text(entry.disabled_reason) } : {}),
+      };
+      if (type === 'stdio') {
+        const command = text(transport.command);
+        if (!command) {
+          return undefined;
+        }
+        return {
+          ...common,
+          transport: {
+            type: 'stdio',
+            command,
+            args: strings(transport.args),
+            env: stringMap(transport.env),
+            envVars: strings(transport.env_vars),
+            ...(text(transport.cwd) ? { cwd: text(transport.cwd) } : {}),
+          },
+        };
+      }
+
+      if (type === 'streamable_http') {
+        const url = text(transport.url);
+        if (!url) {
+          return undefined;
+        }
+        return {
+          ...common,
+          transport: {
+            type: 'streamable_http',
+            url,
+            ...(text(transport.bearer_token_env_var)
+              ? { bearerTokenEnvVar: text(transport.bearer_token_env_var) }
+              : {}),
+            httpHeaders: stringMap(transport.http_headers),
+            envHttpHeaders: stringMap(transport.env_http_headers),
+          },
+        };
+      }
+
+      return undefined;
+    })
+    .filter((entry): entry is CodexMcpServerDefinition => entry !== undefined);
 }
 
 /** One-line summary for a plugin row. */
