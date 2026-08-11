@@ -7,6 +7,10 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **File references target an explicit live session.** The editor commands now use the shared
+  status-aware picker when several Codex terminals are open, with cancellation leaving every
+  terminal untouched.
+
 - **Token readouts distinguish lifetime usage from context occupancy.** Live rows label the
   session total separately, while tooltips show the current prompt's tokens against its context
   window instead of implying that the two figures are related.

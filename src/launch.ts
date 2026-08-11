@@ -48,6 +48,7 @@ import {
   sessionProject,
   type SessionRecord,
 } from './sessions';
+import type { LiveSession } from './monitor';
 import { strings } from './strings';
 import { KNOWN_TITLE_ITEMS, partitionTitleItems, titleItemsArgs } from './workbench';
 
@@ -350,6 +351,41 @@ export function liveOwnedTerminal(): vscode.Terminal | undefined {
   return live.length > 0 ? live[live.length - 1].terminal : undefined;
 }
 
+/**
+ * Pick a live Codex session for a command that needs to put text in a terminal.
+ *
+ * One session is an unambiguous target and stays silent. Once there are several, choosing the
+ * newest is a coin flip precisely when the operator needs to know where a reference will go, so
+ * show the same status-aware picker used by the focus command. Cancellation is a real no-op.
+ */
+export async function pickLiveSession(
+  sessions: readonly LiveSession[],
+  title = strings.sessions.focusPrompt(sessions.length),
+): Promise<LiveSession | undefined> {
+  if (sessions.length <= 1) {
+    return sessions[0];
+  }
+
+  const now = Date.now();
+  const stallSeconds = config().get<number>('stallSeconds', DEFAULT_STALL_SECONDS);
+  const animate = animationAllowed();
+  const picked = await vscode.window.showQuickPick(
+    pickerOrder(sessions).map((session) => ({
+      label: `$(${presentStatus(session.activity, animate).icon}) ${session.project || session.label}`,
+      description: describeActivity(session.activity, now, stallSeconds),
+      detail: session.cwd,
+      session,
+    })),
+    {
+      title,
+      placeHolder: title,
+      matchOnDescription: true,
+      matchOnDetail: true,
+    },
+  );
+  return picked?.session;
+}
+
 export async function launch(request: LaunchOptions): Promise<void> {
   try {
     await syncNotifyBridge();
@@ -550,27 +586,6 @@ export async function focusCodex(): Promise<void> {
     void launch({ mode: 'new' });
     return;
   }
-  if (sessions.length === 1) {
-    sessions[0].terminal.show(false);
-    return;
-  }
-
-  const now = Date.now();
-  const stallSeconds = config().get<number>('stallSeconds', DEFAULT_STALL_SECONDS);
-  const animate = animationAllowed();
-  const picked = await vscode.window.showQuickPick(
-    pickerOrder(sessions).map((session) => ({
-      label: `$(${presentStatus(session.activity, animate).icon}) ${session.project || session.label}`,
-      description: describeActivity(session.activity, now, stallSeconds),
-      detail: session.cwd,
-      session,
-    })),
-    {
-      title: strings.sessions.focusPrompt(sessions.length),
-      placeHolder: strings.sessions.focusPrompt(sessions.length),
-      matchOnDescription: true,
-      matchOnDetail: true,
-    },
-  );
-  picked?.session.terminal.show(false);
+  const picked = await pickLiveSession(sessions);
+  picked?.terminal.show(false);
 }

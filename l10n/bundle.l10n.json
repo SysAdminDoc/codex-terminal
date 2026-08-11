@@ -147,6 +147,7 @@
   "Codex Terminal has not changed any workbench settings.": "Codex Terminal has not changed any workbench settings.",
   "Could not update {0}: {1}": "Could not update {0}: {1}",
   "unset": "unset",
+  "Choose a Codex session for this file reference": "Choose a Codex session for this file reference",
   "Ask Codex about {0}": "Ask Codex about {0}",
   "What should Codex do with this?": "What should Codex do with this?",
   "Name this Codex session (currently shown as “{0}”)": "Name this Codex session (currently shown as “{0}”)",

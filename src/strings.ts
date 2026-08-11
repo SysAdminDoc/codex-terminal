@@ -313,6 +313,8 @@ export const strings = {
     unset: (): string => vscode.l10n.t('unset'),
   },
   reference: {
+    chooseSession: (): string =>
+      vscode.l10n.t('Choose a Codex session for this file reference'),
     askPrompt: (reference: string): string =>
       vscode.l10n.t('Ask Codex about {0}', reference),
     askPlaceholder: (): string => vscode.l10n.t('What should Codex do with this?'),

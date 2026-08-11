@@ -10,7 +10,7 @@ import { collectDoctorReport, runCommandResult } from './doctor';
 import { reviewArgs } from './launcher';
 import {
   launch,
-  liveOwnedTerminal,
+  pickLiveSession,
   preflightCodexCommand,
   readLaunchRequest,
   resolveCwd,
@@ -59,9 +59,10 @@ export async function runDoctor(): Promise<void> {
 }
 
 /** The `@path#L10-L20` for what is selected right now, with the terminal to send it to. */
-function resolveReferenceTarget():
+async function resolveReferenceTarget(): Promise<
   | { reference: string; terminal: vscode.Terminal }
-  | undefined {
+  | undefined
+> {
   const editor = vscode.window.activeTextEditor;
   if (!editor) {
     void vscode.window.showWarningMessage(strings.warnings.noEditor());
@@ -70,7 +71,11 @@ function resolveReferenceTarget():
   // Deliberately not `?? vscode.window.activeTerminal`. With no Codex session tracked, that
   // typed the file reference — and, for "Ask Codex about selection", pressed Enter — into
   // whatever terminal happened to be focused: a running build, an SSH session, a REPL.
-  const terminal = liveOwnedTerminal();
+  const session = await pickLiveSession(
+    services().monitor.live() ?? [],
+    strings.reference.chooseSession(),
+  );
+  const terminal = session?.terminal;
   if (!terminal) {
     void vscode.window
       .showWarningMessage(strings.warnings.noTerminal(), strings.warnings.startSession())
@@ -103,8 +108,8 @@ function resolveReferenceTarget():
  * Kept exactly as it was. It is the right command when the question is easier to type in the
  * terminal — with Codex's own completion and history — than in a modal input box.
  */
-export function sendFileReference(): void {
-  const target = resolveReferenceTarget();
+export async function sendFileReference(): Promise<void> {
+  const target = await resolveReferenceTarget();
   if (!target) {
     return;
   }
@@ -123,7 +128,7 @@ export function sendFileReference(): void {
  * while you are looking at the code: ask it here, and the whole line is submitted.
  */
 export async function askAboutSelection(): Promise<void> {
-  const target = resolveReferenceTarget();
+  const target = await resolveReferenceTarget();
   if (!target) {
     return;
   }

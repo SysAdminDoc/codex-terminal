@@ -231,7 +231,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<CodexT
         void launchWithProfile();
       },
     ],
-    ['codexTerminal.sendFileReference', sendFileReference],
+    ['codexTerminal.sendFileReference', () => void sendFileReference()],
     [
       'codexTerminal.askAboutSelection',
       () => {

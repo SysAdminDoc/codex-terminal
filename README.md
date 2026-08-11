@@ -121,7 +121,8 @@ available from VS Code's Getting Started page.
 - **Right-click in the editor** — *Send File Reference to Codex* puts `@src/file.ts#L10-L20`
   on the Codex prompt without submitting it, so you can type the question after it.
   *Ask Codex About Selection…* takes the question in an input box and submits reference and
-  question together, for when you already know what you want to ask.
+  question together, for when you already know what you want to ask. If several Codex sessions
+  are live, either command asks which one should receive the reference.
 - **New Session with Profile…** — lists `~/.codex/<name>.config.toml` profiles, plus a free-text
   entry for profiles that are not stored locally. The selected profile is passed as
   `--profile <name>` and appended to the terminal tab name.
