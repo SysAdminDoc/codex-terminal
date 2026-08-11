@@ -17,6 +17,7 @@ import {
   emptyJournal,
   stampShutdown,
   upsertSession,
+  type JournalSession,
   type JournalState,
 } from './journal';
 import { codexSessionsDirectory } from './sessions';
@@ -83,6 +84,43 @@ interface Tracked extends LiveSession {
   watcher?: FSWatcher;
   watchTimer?: NodeJS.Timeout;
   closed: boolean;
+  /** Set when the shell died under the tab rather than the tab being dismissed. */
+  lostAt?: number;
+}
+
+/**
+ * `vscode.TerminalExitReason`, mirrored as plain numbers.
+ *
+ * The enum object is not reachable from the unit tests, which load this module against a
+ * hand-written `vscode` stub. The values are fixed API contract, so mirroring them keeps
+ * the rule below under test instead of pushing it somewhere nothing exercises it.
+ */
+const EXIT_REASON = { unknown: 0, shutdown: 1, process: 2, user: 3, extension: 4 } as const;
+
+/**
+ * Whether a terminal went away because somebody meant it to.
+ *
+ * `User` and `Extension` are explicit acts, and `Shutdown` is the window closing, which
+ * `stampShutdown` already accounts for. `Process` is the shell itself ending: these shells
+ * run with `-NoExit` specifically so they outlive Codex, so a zero status is somebody
+ * typing `exit` and anything else is a death. `Unknown` — and a close event carrying no
+ * status at all — is what a pty host going down and taking every shell with it looks like
+ * from here, which is the case this whole distinction exists to catch.
+ */
+export function isDeliberateExit(status: vscode.TerminalExitStatus | undefined): boolean {
+  if (!status) {
+    return false;
+  }
+  switch (status.reason as number) {
+    case EXIT_REASON.user:
+    case EXIT_REASON.extension:
+    case EXIT_REASON.shutdown:
+      return true;
+    case EXIT_REASON.process:
+      return status.code === 0;
+    default:
+      return false;
+  }
 }
 
 export interface SessionMonitorOptions {
@@ -195,7 +233,20 @@ export class SessionMonitor implements vscode.Disposable {
     entry.closed = true;
     this.unwatch(entry);
     entry.activity = { ...entry.activity, status: 'idle' };
-    this.persist(entry, Date.now());
+    const now = Date.now();
+    // Every close used to be stamped the same way, so a session the operator dismissed and
+    // one whose shell died underneath it left identical records and neither was offered
+    // back. `lostAt` is what separates them.
+    const lost = !isDeliberateExit(terminal.exitStatus);
+    if (lost) {
+      entry.lostAt = now;
+      this.options.log.warn(
+        `${entry.label} ended without being closed (exit reason ${
+          terminal.exitStatus?.reason ?? 'none'
+        }); keeping it recoverable`,
+      );
+    }
+    this.persist(entry, now);
     this.changes.fire();
     this.reschedule();
   }
@@ -224,6 +275,19 @@ export class SessionMonitor implements vscode.Disposable {
 
   forTerminal(terminal: vscode.Terminal): LiveSession | undefined {
     return this.tracked.find((entry) => entry.terminal === terminal && !entry.closed);
+  }
+
+  /**
+   * Bound sessions whose shell died under them, newest first.
+   *
+   * Read by the window they died in, so the loss is answerable while the operator is still
+   * sitting there — waiting for the next window to offer them back is what turned a pty
+   * host going down into a night of work that looked gone.
+   */
+  lostSessions(): JournalSession[] {
+    return this.journal.sessions
+      .filter((session) => session.lostAt !== undefined && session.sessionId !== undefined)
+      .sort((left, right) => (right.lostAt ?? 0) - (left.lostAt ?? 0));
   }
 
   /** Sessions this window already knows about, so recovery never offers a duplicate. */
@@ -462,6 +526,7 @@ export class SessionMonitor implements vscode.Disposable {
       launchedAt: entry.launchedAt,
       lastActiveAt: Date.now(),
       ...(closedAt ? { closedAt } : {}),
+      ...(entry.lostAt ? { lostAt: entry.lostAt } : {}),
       status: entry.activity.status,
       // Opt-out: the journal is a second copy of conversation text, outside $CODEX_HOME.
       // The key is always present, with `undefined` when the setting is off: `upsertSession`

@@ -119,6 +119,13 @@ export const strings = {
             count,
           ),
     restored: (project: string): string => vscode.l10n.t('Restoring Codex session in {0}…', project),
+    lost: (count: number): string =>
+      count === 1
+        ? vscode.l10n.t('1 Codex session ended without being closed. Its conversation is safe.')
+        : vscode.l10n.t(
+            '{0} Codex sessions ended without being closed. Their conversations are safe.',
+            count,
+          ),
     accessibility: (project: string, timestamp: string): string =>
       vscode.l10n.t('{0}, interrupted {1}. Click to restore the session.', project, timestamp),
     accessibilityGroup: (count: number): string =>

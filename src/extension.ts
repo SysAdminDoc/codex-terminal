@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import * as path from 'node:path';
 import * as vscode from 'vscode';
 
@@ -183,7 +184,15 @@ export async function activate(context: vscode.ExtensionContext): Promise<CodexT
     log.error(strings.migration.failed(message));
   }
 
-  const windowId = vscode.env.sessionId;
+  // Generated here rather than taken from `vscode.env.sessionId`, which is documented to
+  // change every time the editor starts and on VSCodium does not: its telemetry patch
+  // compiles the value to the constant `"someValue.sessionId"`, identical in every window
+  // of every launch forever. The journal is built on that id — one file per window, and
+  // `interruptedSessions` skips journals whose id is its own — so a constant collapsed the
+  // whole store to a single file that every new window classified as itself and skipped.
+  // Crash recovery could not fire on this editor at all, which is how a night of sessions
+  // came back as empty tabs. A fresh id per activation is what the journal actually wants.
+  const windowId = randomUUID();
   const store = new JournalStore(path.join(context.globalStorageUri.fsPath, 'sessions'), windowId);
   const monitor = new SessionMonitor({
     store,
@@ -363,13 +372,62 @@ export async function activate(context: vscode.ExtensionContext): Promise<CodexT
   };
   renderBadge();
 
+  /**
+   * Tell the operator their shells died, in the window it happened to.
+   *
+   * Recovery used to be reachable only from the *next* window's activation, which assumes
+   * the editor goes down with the sessions. A pty host can die on its own and leave the
+   * window sitting there with a row of tabs that look fine and are not, and nobody should
+   * have to learn that restarting is what surfaces them.
+   *
+   * Coalesced, because that failure closes every terminal in the same tick: announcing per
+   * close event meant thirteen identical warnings for one event. Announced ids are
+   * remembered so a later close does not re-raise sessions already offered.
+   */
+  const announced = new Set<string>();
+  let announcement: NodeJS.Timeout | undefined;
+  const announceLostSessions = (): void => {
+    clearTimeout(announcement);
+    announcement = setTimeout(() => {
+      const lost = monitor.lostSessions();
+      const fresh = lost.filter(
+        (session) => session.sessionId && !announced.has(session.sessionId),
+      );
+      if (fresh.length === 0) {
+        return;
+      }
+      for (const session of fresh) {
+        announced.add(session.sessionId as string);
+      }
+      history.setRecoverable(lost);
+      void vscode.window
+        .showWarningMessage(
+          strings.recovery.lost(fresh.length),
+          strings.recovery.restoreAll(),
+          strings.recovery.review(),
+          strings.recovery.dismiss(),
+        )
+        .then((choice) => {
+          if (choice === strings.recovery.restoreAll()) {
+            restoreAllSessions();
+          } else if (choice === strings.recovery.review()) {
+            void vscode.commands.executeCommand('codexTerminal.history.focus');
+          } else if (choice === strings.recovery.dismiss()) {
+            dismissRecovery();
+          }
+        });
+    }, 250);
+  };
+
   context.subscriptions.push(
+    new vscode.Disposable(() => clearTimeout(announcement)),
     vscode.window.registerTerminalProfileProvider('codexTerminal.profile', {
       provideTerminalProfile,
     }),
     vscode.window.onDidCloseTerminal((closed) => {
       registry.remove(closed);
       monitor.close(closed);
+      announceLostSessions();
     }),
     vscode.workspace.registerTextDocumentContentProvider(TRANSCRIPT_SCHEME, transcript),
     vscode.window.registerTreeDataProvider('codexTerminal.history', history),

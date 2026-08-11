@@ -1,5 +1,7 @@
 import assert from 'node:assert/strict';
 import Module from 'node:module';
+import { homedir } from 'node:os';
+import * as path from 'node:path';
 import { test } from 'node:test';
 
 import { INITIAL_ACTIVITY } from '../activity';
@@ -38,6 +40,8 @@ const originalLoad = loader._load;
 const vscodeStub = {
   workspace: {
     getConfiguration: (): Configuration => configuration,
+    workspaceFolders: undefined as ReadonlyArray<{ uri: { fsPath: string } }> | undefined,
+    getWorkspaceFolder: (): undefined => undefined,
   },
   window: {
     activeTextEditor: undefined,
@@ -54,9 +58,31 @@ loader._load = function patched(request: string, parent: unknown, isMain: boolea
 };
 
 /* eslint-disable @typescript-eslint/no-require-imports */
-const { pickLiveSession, readLaunchRequest } = require('../launch') as typeof import('../launch');
+const { pickLiveSession, readLaunchRequest, resolveCwd } =
+  require('../launch') as typeof import('../launch');
 const { clearServices, setServices } = require('../services') as typeof import('../services');
 /* eslint-enable @typescript-eslint/no-require-imports */
+
+/**
+ * A folderless window is the normal way this extension gets used — the operator opens
+ * VSCodium, starts Codex sessions from the activity bar and never opens a folder. That
+ * resolved to `undefined`, and `undefined` is the one value the launcher refuses to track:
+ * no journal record, no rollout binding, no recovery. Home is where such a terminal already
+ * starts, so naming it changes nothing except that the directory becomes knowable.
+ */
+test('a window with no folder open still resolves a working directory', async () => {
+  vscodeStub.workspace.workspaceFolders = undefined;
+  assert.equal(await resolveCwd(), homedir());
+});
+
+test('an open folder still wins over the home fallback', async () => {
+  vscodeStub.workspace.workspaceFolders = [{ uri: { fsPath: path.join('C:', 'repos', 'x') } }];
+  try {
+    assert.equal(await resolveCwd(), path.join('C:', 'repos', 'x'));
+  } finally {
+    vscodeStub.workspace.workspaceFolders = undefined;
+  }
+});
 
 test('launch settings become one safely quoted argv plan in every shell family', () => {
   setServices({

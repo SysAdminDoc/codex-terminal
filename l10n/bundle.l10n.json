@@ -60,6 +60,8 @@
   "1 Codex session was interrupted when a window closed unexpectedly.": "1 Codex session was interrupted when a window closed unexpectedly.",
   "{0} Codex sessions were interrupted when a window closed unexpectedly.": "{0} Codex sessions were interrupted when a window closed unexpectedly.",
   "Restoring Codex session in {0}…": "Restoring Codex session in {0}…",
+  "1 Codex session ended without being closed. Its conversation is safe.": "1 Codex session ended without being closed. Its conversation is safe.",
+  "{0} Codex sessions ended without being closed. Their conversations are safe.": "{0} Codex sessions ended without being closed. Their conversations are safe.",
   "{0}, interrupted {1}. Click to restore the session.": "{0}, interrupted {1}. Click to restore the session.",
   "Interrupted sessions, 1 session to restore.": "Interrupted sessions, 1 session to restore.",
   "Interrupted sessions, {0} sessions to restore.": "Interrupted sessions, {0} sessions to restore.",

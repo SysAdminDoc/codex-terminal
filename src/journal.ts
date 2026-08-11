@@ -41,8 +41,17 @@ export interface JournalSession {
   profile?: string;
   launchedAt: number;
   lastActiveAt: number;
-  /** Set when the terminal closed normally; absent means it was still open. */
+  /** Set when the terminal went away, for any reason; absent means it was still open. */
   closedAt?: number;
+  /**
+   * Set when the terminal went away without the operator asking — the shell died under it.
+   *
+   * Recorded alongside `closedAt` rather than instead of it, because the two answer
+   * different questions: `closedAt` is "is this tab still on screen", which the history
+   * view needs, and `lostAt` is "did anyone mean for that to happen", which is the only
+   * thing that decides whether the session is worth offering back.
+   */
+  lostAt?: number;
   status: ActivityStatus;
   lastMessage?: string;
   completedTurns: number;
@@ -121,10 +130,29 @@ export function stripMessages(state: JournalState): JournalState {
  *
  * Only rollout-bound sessions qualify: a launch that never produced a rollout has no
  * conversation to return to, and offering it would be offering an empty terminal.
+ *
+ * Still-open sessions and lost ones both count. A session that died under a window which
+ * then closed in good order is closed *and* worth offering back, and keying only off
+ * `closedAt` used to drop exactly that case on the floor.
  */
 export function recoverableSessions(state: JournalState): JournalSession[] {
   return state.sessions.filter(
-    (session) => session.closedAt === undefined && session.sessionId !== undefined,
+    (session) =>
+      session.sessionId !== undefined &&
+      (session.closedAt === undefined || session.lostAt !== undefined),
+  );
+}
+
+/**
+ * Sessions whose shell died under them.
+ *
+ * The pty host going down takes every terminal with it while the window carries on and
+ * shuts down normally, so a clean shutdown is no evidence that the operator was finished
+ * with these.
+ */
+export function lostSessions(state: JournalState): JournalSession[] {
+  return state.sessions.filter(
+    (session) => session.sessionId !== undefined && session.lostAt !== undefined,
   );
 }
 
@@ -162,11 +190,21 @@ export function isCrashed(
 }
 
 /**
- * Collect every session left open by a window that is no longer running.
+ * Collect every session a window that is no longer running failed to hand back.
  *
  * `ownWindowId` is skipped so a window never offers to recover itself, and the newest
  * record wins when the same Codex session appears in more than one journal (a session
  * that was already recovered once and crashed again).
+ *
+ * Two shapes qualify, and only the first used to. A window that *died* owes back every
+ * session it still held. A window that shut down in good order owes back only the ones
+ * that had already been lost under it — which is the overnight case that started this:
+ * the pty host went down at 08:47, taking thirteen live sessions with it, and the window
+ * then closed normally thirty-seven seconds later. Keying the whole decision off
+ * `isCrashed` read that as thirteen deliberate closes and offered nothing.
+ *
+ * The staleness check stays in front of both: a window whose heartbeat is current may
+ * still be alive, and its sessions are its own to offer.
  */
 export function interruptedSessions(
   journals: readonly JournalState[],
@@ -176,10 +214,13 @@ export function interruptedSessions(
 ): JournalSession[] {
   const byId = new Map<string, JournalSession>();
   for (const journal of journals) {
-    if (journal.windowId === ownWindowId || !isCrashed(journal, now, staleMs)) {
+    if (journal.windowId === ownWindowId || now - journal.heartbeatAt <= staleMs) {
       continue;
     }
-    for (const session of recoverableSessions(journal)) {
+    const owed = isCrashed(journal, now, staleMs)
+      ? recoverableSessions(journal)
+      : lostSessions(journal);
+    for (const session of owed) {
       const previous = byId.get(session.sessionId as string);
       if (!previous || session.lastActiveAt > previous.lastActiveAt) {
         byId.set(session.sessionId as string, session);

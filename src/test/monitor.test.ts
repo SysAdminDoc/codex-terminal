@@ -54,7 +54,7 @@ loader._load = function patched(request: string, parent: unknown, isMain: boolea
 };
 
 /* eslint-disable @typescript-eslint/no-require-imports */
-const { SessionMonitor } = require('../monitor') as typeof import('../monitor');
+const { SessionMonitor, isDeliberateExit } = require('../monitor') as typeof import('../monitor');
 const { JournalStore } = require('../journal') as typeof import('../journal');
 /* eslint-enable @typescript-eslint/no-require-imports */
 
@@ -64,10 +64,17 @@ const log = {
   warn: (message: string) => messages.push(message),
 } as never;
 
-/** Enough of a terminal for identity comparison, which is all the monitor does with one. */
-function fakeTerminal(): never {
-  return { exitStatus: undefined } as never;
+/**
+ * Enough of a terminal for identity comparison, which is most of what the monitor does
+ * with one. `exitStatus` is the exception: closing reads it to tell a tab the operator
+ * dismissed from a shell that died underneath one.
+ */
+function fakeTerminal(exitStatus?: { code: number | undefined; reason: number }): never {
+  return { exitStatus } as never;
 }
+
+/** `vscode.TerminalExitReason`, which the stub does not carry. */
+const REASON = { unknown: 0, shutdown: 1, process: 2, user: 3, extension: 4 } as const;
 
 /**
  * A rollout whose events are `ageSeconds` old.
@@ -197,6 +204,76 @@ test('unknown rollout record types are logged once per session', async () => {
         .length,
       1,
     );
+  });
+});
+
+test('an exit nobody asked for is told apart from a tab being dismissed', () => {
+  assert.equal(isDeliberateExit({ code: undefined, reason: REASON.user } as never), true);
+  assert.equal(isDeliberateExit({ code: undefined, reason: REASON.extension } as never), true);
+  assert.equal(isDeliberateExit({ code: undefined, reason: REASON.shutdown } as never), true);
+  // `-NoExit` keeps these shells alive past Codex, so a clean shell exit is somebody typing
+  // `exit` at the prompt and anything else is the shell dying.
+  assert.equal(isDeliberateExit({ code: 0, reason: REASON.process } as never), true);
+  assert.equal(isDeliberateExit({ code: 1, reason: REASON.process } as never), false);
+  assert.equal(isDeliberateExit({ code: undefined, reason: REASON.process } as never), false);
+  // What a pty host taking every shell down with it looks like from here.
+  assert.equal(isDeliberateExit({ code: undefined, reason: REASON.unknown } as never), false);
+  assert.equal(isDeliberateExit(undefined), false);
+});
+
+test('a session whose shell died is journalled as lost and offered back', async () => {
+  await withMonitor(async ({ monitor, store, directory }) => {
+    const rolloutPath = path.join(directory, 'rollout.jsonl');
+    await writeFile(rolloutPath, rollout(), 'utf8');
+    const terminal = fakeTerminal({ code: undefined, reason: REASON.unknown });
+    monitor.track(terminal, {
+      cwd: directory,
+      project: 'fixture',
+      label: 'fixture',
+      mode: 'new',
+      key: 'k',
+      sessionId: 'session-abc',
+      rolloutPath,
+    });
+
+    monitor.close(terminal);
+    assert.deepEqual(
+      monitor.lostSessions().map((entry) => entry.sessionId),
+      ['session-abc'],
+    );
+
+    await new Promise((resolve) => setTimeout(resolve, 25));
+    const [journal] = await store.readAll();
+    assert.ok(journal);
+    const [session] = journal.sessions;
+    assert.ok(session.closedAt, 'the tab is gone, so the session is closed');
+    assert.ok(session.lostAt, 'but nobody closed it, so it stays recoverable');
+  });
+});
+
+test('a tab the operator closed is not treated as lost', async () => {
+  await withMonitor(async ({ monitor, store, directory }) => {
+    const rolloutPath = path.join(directory, 'rollout.jsonl');
+    await writeFile(rolloutPath, rollout(), 'utf8');
+    const terminal = fakeTerminal({ code: undefined, reason: REASON.user });
+    monitor.track(terminal, {
+      cwd: directory,
+      project: 'fixture',
+      label: 'fixture',
+      mode: 'new',
+      key: 'k',
+      sessionId: 'session-abc',
+      rolloutPath,
+    });
+
+    monitor.close(terminal);
+    assert.deepEqual(monitor.lostSessions(), []);
+
+    await new Promise((resolve) => setTimeout(resolve, 25));
+    const [journal] = await store.readAll();
+    assert.ok(journal);
+    assert.ok(journal.sessions[0].closedAt);
+    assert.equal(journal.sessions[0].lostAt, undefined);
   });
 });
 

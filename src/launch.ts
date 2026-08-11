@@ -1,4 +1,5 @@
 import { existsSync, readdirSync } from 'node:fs';
+import { homedir } from 'node:os';
 import * as path from 'node:path';
 import * as vscode from 'vscode';
 
@@ -205,7 +206,13 @@ export async function resolveCwd(): Promise<string | undefined> {
     );
     return selected?.folder.uri.fsPath;
   }
-  return folders?.[0]?.uri.fsPath;
+  // Home is where a terminal with no `cwd` option already starts, so naming it explicitly
+  // moves nothing — it only makes the directory *knowable*. With no folder open this
+  // returned undefined, and undefined is the one value the caller refuses to track: every
+  // session started from a folderless window was invisible to the journal, the rollout
+  // binder and crash recovery alike, which is the state thirteen overnight sessions were
+  // in when the terminal host took them down.
+  return folders?.[0]?.uri.fsPath ?? homedir();
 }
 
 function resolveLocation(): vscode.TerminalOptions['location'] {

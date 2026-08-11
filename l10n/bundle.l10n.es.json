@@ -60,6 +60,8 @@
   "1 Codex session was interrupted when a window closed unexpectedly.": "1 sesión de Codex se interrumpió al cerrarse inesperadamente una ventana.",
   "{0} Codex sessions were interrupted when a window closed unexpectedly.": "{0} sesiones de Codex se interrumpieron al cerrarse inesperadamente una ventana.",
   "Restoring Codex session in {0}…": "Restaurando la sesión de Codex en {0}…",
+  "1 Codex session ended without being closed. Its conversation is safe.": "1 sesión de Codex terminó sin que se cerrara. Su conversación está a salvo.",
+  "{0} Codex sessions ended without being closed. Their conversations are safe.": "{0} sesiones de Codex terminaron sin que se cerraran. Sus conversaciones están a salvo.",
   "{0}, interrupted {1}. Click to restore the session.": "{0}, interrumpida {1}. Haga clic para restaurar la sesión.",
   "Interrupted sessions, 1 session to restore.": "Sesiones interrumpidas: 1 sesión para restaurar.",
   "Interrupted sessions, {0} sessions to restore.": "Sesiones interrumpidas: {0} sesiones para restaurar.",

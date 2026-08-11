@@ -3,7 +3,7 @@
   "displayName": "%extension.displayName%",
   "description": "%extension.description%",
   "l10n": "./l10n",
-  "version": "0.11.0",
+  "version": "0.12.0",
   "publisher": "sysadmindoc",
   "license": "MIT",
   "author": "SysAdminDoc",

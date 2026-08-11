@@ -13,6 +13,7 @@ import {
   interruptedSessions,
   isCrashed,
   isDisposable,
+  lostSessions,
   parseJournal,
   recoverableSessions,
   stampShutdown,
@@ -143,6 +144,74 @@ test('a session recorded by two crashed windows is offered once, from the newer 
 test('a live window is left alone even when it has open sessions', () => {
   const live = journal({ windowId: 'other', heartbeatAt: NOW - 5_000 });
   assert.deepEqual(interruptedSessions([live], NOW, 'me'), []);
+});
+
+/**
+ * The overnight case, and the reason `lostAt` exists.
+ *
+ * The pty host went down at 08:47:48 taking thirteen live shells with it, and the window
+ * closed in good order thirty-seven seconds later — so the journal was stamped clean and
+ * every session in it was stamped closed. Both flags said "nothing to see here" and the
+ * next window offered nothing back.
+ */
+test('a session lost under a window that then shut down cleanly is still offered back', () => {
+  const state = stampShutdown(
+    journal({
+      windowId: 'died-overnight',
+      sessions: [session({ key: 'lost', sessionId: 'aaa', lostAt: NOW - 40_000 })],
+    }),
+    NOW - 39_000,
+  );
+  const found = interruptedSessions([state], NOW + STALE_HEARTBEAT_MS + 1, 'me');
+  assert.deepEqual(
+    found.map((entry) => entry.sessionId),
+    ['aaa'],
+  );
+});
+
+test('a session the operator closed is not offered back after a clean shutdown', () => {
+  const state = stampShutdown(
+    journal({
+      windowId: 'closed-on-purpose',
+      sessions: [session({ key: 'dismissed', sessionId: 'bbb' })],
+    }),
+    NOW,
+  );
+  assert.deepEqual(interruptedSessions([state], NOW + STALE_HEARTBEAT_MS + 1, 'me'), []);
+});
+
+test('a window still beating keeps its lost sessions to itself', () => {
+  const live = journal({
+    windowId: 'other',
+    heartbeatAt: NOW - 5_000,
+    sessions: [session({ key: 'lost', sessionId: 'ccc', lostAt: NOW - 6_000 })],
+  });
+  assert.deepEqual(interruptedSessions([live], NOW, 'me'), []);
+});
+
+test('the shutdown stamp closes a lost session without forgetting that it was lost', () => {
+  const before = journal({ sessions: [session({ key: 'lost', lostAt: NOW - 40_000 })] });
+  const after = stampShutdown(before, NOW);
+  assert.equal(after.sessions[0].closedAt, NOW);
+  assert.equal(after.sessions[0].lostAt, NOW - 40_000);
+  assert.deepEqual(
+    recoverableSessions(after).map((entry) => entry.key),
+    ['lost'],
+  );
+});
+
+test('only bound lost sessions are lost sessions', () => {
+  const state = journal({
+    sessions: [
+      session({ key: 'lost', lostAt: NOW }),
+      session({ key: 'closed' }),
+      session({ key: 'unbound', sessionId: undefined, lostAt: NOW }),
+    ],
+  });
+  assert.deepEqual(
+    lostSessions(state).map((entry) => entry.key),
+    ['lost'],
+  );
 });
 
 test('disposable journals exclude our own and anything still beating', () => {

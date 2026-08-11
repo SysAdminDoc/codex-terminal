@@ -3,6 +3,33 @@
 All notable changes to Codex Terminal are documented here.
 This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.12.0] - 2026-08-11
+
+### Fixed
+
+- **Crash recovery could never fire on VSCodium.** The journal keys every window off
+  `vscode.env.sessionId`, which is documented to change each time the editor starts. VSCodium's
+  telemetry patch compiles it to the constant `"someValue.sessionId"` — the same value in every
+  window of every launch, forever. So the whole store collapsed to a single file that each new
+  window read, recognised as its own id, and skipped. The feature was inert on this editor since
+  it shipped, and reported nothing while being inert. The window id is now generated per
+  activation, which is what the journal always meant by "a window".
+- **Sessions started with no folder open were not tracked at all.** With no workspace folder the
+  working directory resolved to nothing, and the launcher refuses to track a session without one:
+  no journal record, no rollout binding, no live status, no recovery. Opening the editor and
+  starting Codex from the activity bar — the ordinary way to use this extension — took that path
+  every time. It now falls back to the home directory, which is where such a terminal already
+  starts, so nothing moves and the directory simply becomes knowable.
+- **A shell that died was recorded as a tab the operator closed.** Both stamped `closedAt` and
+  nothing else, so a session killed underneath a window was indistinguishable from one dismissed
+  on purpose, and recovery correctly declined to offer it back. Sessions now also record *why*
+  they ended, and a session nobody closed stays recoverable even when the window it died in went
+  on to shut down normally.
+- **A lost session is now reported in the window it was lost in.** Recovery was reachable only
+  from the next window's activation, which assumes the editor goes down with the sessions. A pty
+  host can die on its own and leave the window sitting there with a row of tabs that look fine
+  and are not.
+
 ## [0.11.0] - 2026-08-11
 
 ### Added
