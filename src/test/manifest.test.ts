@@ -127,6 +127,22 @@ test('every recovery command reaches the manifest', () => {
   }
 });
 
+test('Git SCM menus expose the three Codex review targets', () => {
+  const manifest = readManifest();
+  const commands = new Set(
+    (manifest.contributes?.commands ?? []).map((command) => command.command),
+  );
+  assert.ok(commands.has('codexTerminal.reviewUncommitted'));
+  assert.ok(commands.has('codexTerminal.reviewBase'));
+  assert.ok(commands.has('codexTerminal.reviewCommit'));
+
+  const title = manifest.contributes?.menus?.['scm/title'] ?? [];
+  assert.ok(title.some((item) => item.command === 'codexTerminal.reviewUncommitted'));
+  assert.ok(title.some((item) => item.command === 'codexTerminal.reviewBase'));
+  const history = manifest.contributes?.menus?.['scm/historyItem/context'] ?? [];
+  assert.ok(history.some((item) => item.command === 'codexTerminal.reviewCommit'));
+});
+
 test('every command a menu offers is a command the manifest declares', () => {
   // Found in the running editor, not here: VS Code silently drops a menu item whose command
   // is undeclared and logs `Menu item references a command … which is not defined in the

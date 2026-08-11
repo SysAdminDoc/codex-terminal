@@ -7,6 +7,11 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **SCM review commands.** Git's Source Control title menu can review uncommitted changes or
+  choose a base branch, and the history graph can review a selected commit. Each review opens
+  `codex review` in the repository root through the extension's existing shell and argument
+  quoting path.
+
 - **Generated app-server protocol types.** `npm run app-server:generate` records the Codex CLI
   version that produced the committed schema bindings; a running app-server on another version
   now reports a warning instead of silently using stale protocol unions.

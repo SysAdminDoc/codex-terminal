@@ -6,6 +6,9 @@ import type { RateTable } from './cost';
 import {
   askAboutSelection,
   checkAppServer,
+  reviewBase,
+  reviewCommit,
+  reviewUncommitted,
   runDoctor,
   sendFileReference,
 } from './editorCommands';
@@ -280,6 +283,18 @@ export async function activate(context: vscode.ExtensionContext): Promise<CodexT
     vscode.commands.registerCommand('codexTerminal.openRawHistorySession', openRawHistorySession),
     vscode.commands.registerCommand('codexTerminal.restoreSession', restoreSession),
     vscode.commands.registerCommand('codexTerminal.forkHistorySession', forkHistorySession),
+    vscode.commands.registerCommand('codexTerminal.reviewUncommitted', (repository: unknown) => {
+      void reviewUncommitted(repository);
+    }),
+    vscode.commands.registerCommand('codexTerminal.reviewBase', (repository: unknown) => {
+      void reviewBase(repository);
+    }),
+    vscode.commands.registerCommand(
+      'codexTerminal.reviewCommit',
+      (repository: unknown, historyItem: unknown) => {
+        void reviewCommit(repository, historyItem);
+      },
+    ),
     vscode.commands.registerCommand('codexTerminal.archiveSession', (node: unknown) => {
       void runSessionLifecycle(node, 'archive');
     }),

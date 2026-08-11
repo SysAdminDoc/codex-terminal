@@ -2,12 +2,20 @@ import * as path from 'node:path';
 import * as vscode from 'vscode';
 
 import { AppServerClient, nodeEntryFor, type AppServerHandshake } from './appServer';
-import { collectDoctorReport } from './doctor';
-import { liveOwnedTerminal, preflightCodexCommand, readLaunchRequest, resolveCwd } from './launch';
+import { collectDoctorReport, runCommandResult } from './doctor';
+import { reviewArgs } from './launcher';
+import {
+  launch,
+  liveOwnedTerminal,
+  preflightCodexCommand,
+  readLaunchRequest,
+  resolveCwd,
+} from './launch';
 import { DEFAULT_TITLE_ITEMS } from './naming';
 import { buildFileReference } from './reference';
 import { config, log, reportError, services } from './services';
 import { strings } from './strings';
+import { findCheckout } from './worktree';
 
 /** Commands driven from the editor: diagnostics, and getting a selection to Codex. */
 
@@ -132,6 +140,151 @@ export async function askAboutSelection(): Promise<void> {
   log().info(strings.logs.sentReference(line));
 }
 
+type UnknownRecord = Record<string, unknown>;
+
+function asRecord(value: unknown): UnknownRecord | undefined {
+  return value !== null && typeof value === 'object' ? (value as UnknownRecord) : undefined;
+}
+
+function filePath(value: unknown): string | undefined {
+  if (typeof value === 'string' && value.trim()) {
+    return value;
+  }
+  const record = asRecord(value);
+  const fsPath = record?.fsPath;
+  return typeof fsPath === 'string' && fsPath.trim() ? fsPath : undefined;
+}
+
+/** SCM menu arguments are intentionally read structurally: the history API is still proposed. */
+function repositoryPath(context: unknown): string | undefined {
+  const record = asRecord(context);
+  if (!record) {
+    return undefined;
+  }
+  return (
+    filePath(record.root) ??
+    filePath(record.rootUri) ??
+    repositoryPath(record.sourceControl)
+  );
+}
+
+async function reviewRepositoryRoot(...contexts: unknown[]): Promise<string | undefined> {
+  for (const context of contexts) {
+    const root = repositoryPath(context);
+    if (root) {
+      return root;
+    }
+  }
+
+  const cwd = await resolveCwd();
+  if (!cwd) {
+    void vscode.window.showWarningMessage(strings.review.noRepository());
+    return undefined;
+  }
+  const checkout = await findCheckout(cwd);
+  if (!checkout) {
+    void vscode.window.showWarningMessage(strings.review.noRepository());
+    return undefined;
+  }
+  return checkout.root;
+}
+
+function reviewCommitId(value: unknown): string | undefined {
+  const record = asRecord(value);
+  if (!record) {
+    return undefined;
+  }
+  for (const key of ['id', 'commit', 'hash']) {
+    const candidate = record[key];
+    if (typeof candidate === 'string' && candidate.trim()) {
+      return candidate.trim();
+    }
+  }
+  return undefined;
+}
+
+function parsedBranches(output: string): string[] {
+  return [...new Set(
+    output
+      .split(/\r?\n/)
+      .map((branch) => branch.trim())
+      .filter((branch) => branch && !branch.endsWith('/HEAD')),
+  )].sort((left, right) => left.localeCompare(right));
+}
+
+async function startReview(repositoryRoot: string, args: readonly string[]): Promise<void> {
+  await launch({
+    mode: 'new',
+    cwd: repositoryRoot,
+    additionalArgs: args,
+    attachAppServer: false,
+    // A review is a separate non-interactive command; reusing a live session would silently
+    // skip it and leave the operator looking at the wrong terminal.
+    reuseTerminal: false,
+  });
+}
+
+/** Review the current checkout's working tree from the SCM title menu. */
+export async function reviewUncommitted(repository?: unknown): Promise<void> {
+  const root = await reviewRepositoryRoot(repository);
+  if (root) {
+    await startReview(root, reviewArgs('uncommitted'));
+  }
+}
+
+/** Pick a local or remote branch and review the current checkout against it. */
+export async function reviewBase(repository?: unknown): Promise<void> {
+  const root = await reviewRepositoryRoot(repository);
+  if (!root) {
+    return;
+  }
+
+  const result = await runCommandResult(
+    'git',
+    ['-C', root, 'for-each-ref', '--format=%(refname:short)', 'refs/heads', 'refs/remotes'],
+    process.platform,
+    64 * 1024,
+    5000,
+  );
+  if (!result.ok) {
+    log().warn(strings.review.branchListFailed(result.output));
+    void vscode.window.showWarningMessage(strings.review.branchListFailed(result.output));
+    return;
+  }
+
+  const branches = parsedBranches(result.output);
+  if (branches.length === 0) {
+    void vscode.window.showWarningMessage(strings.review.noBranches());
+    return;
+  }
+  const selected = await vscode.window.showQuickPick(
+    branches.map((branch) => ({ label: branch, branch })),
+    {
+      placeHolder: strings.review.basePrompt(),
+      ignoreFocusOut: true,
+    },
+  );
+  if (selected) {
+    await startReview(root, reviewArgs({ base: selected.branch }));
+  }
+}
+
+/** Review a commit selected in the SCM history graph. */
+export async function reviewCommit(
+  repository?: unknown,
+  historyItem?: unknown,
+): Promise<void> {
+  const commit = reviewCommitId(historyItem ?? repository);
+  if (!commit || !/^[0-9a-f]{7,64}$/i.test(commit)) {
+    void vscode.window.showWarningMessage(strings.review.invalidCommit());
+    return;
+  }
+  const root = await reviewRepositoryRoot(repository, historyItem);
+  if (root) {
+    await startReview(root, reviewArgs({ commit }));
+  }
+}
+
 
 /**
  * Connect to `codex app-server` once, report what came back, and disconnect.
@@ -184,4 +337,3 @@ function describeHandshake(handshake: AppServerHandshake): string {
     handshake.platformOs ?? 'unknown',
   );
 }
-

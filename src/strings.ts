@@ -158,6 +158,15 @@ export const strings = {
     resumeLabel: (timestamp: string, id: string): string =>
       vscode.l10n.t('{0} — {1}', timestamp, id),
   },
+  review: {
+    basePrompt: (): string => vscode.l10n.t('Choose a base branch for Codex review'),
+    noRepository: (): string => vscode.l10n.t('No Git repository found for Codex review'),
+    branchListFailed: (reason: string): string =>
+      vscode.l10n.t('Could not list Git branches for Codex review: {0}', reason),
+    noBranches: (): string => vscode.l10n.t('No Git branches found for Codex review'),
+    invalidCommit: (): string =>
+      vscode.l10n.t('The selected SCM history item is not a commit hash'),
+  },
   history: {
     empty: (): string => vscode.l10n.t('No Codex sessions recorded yet'),
     storeMissing: (directory: string): string =>

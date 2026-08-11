@@ -121,6 +121,21 @@
         "category": "%category.codexTerminal%"
       },
       {
+        "command": "codexTerminal.reviewUncommitted",
+        "title": "%command.reviewUncommitted.title%",
+        "category": "%category.codexTerminal%"
+      },
+      {
+        "command": "codexTerminal.reviewBase",
+        "title": "%command.reviewBase.title%",
+        "category": "%category.codexTerminal%"
+      },
+      {
+        "command": "codexTerminal.reviewCommit",
+        "title": "%command.reviewCommit.title%",
+        "category": "%category.codexTerminal%"
+      },
+      {
         "command": "codexTerminal.doctor",
         "title": "%command.doctor.title%",
         "category": "%category.codexTerminal%"
@@ -260,6 +275,25 @@
           "command": "codexTerminal.askAboutSelection",
           "group": "codexTerminal@2",
           "when": "resourceScheme == file"
+        }
+      ],
+      "scm/title": [
+        {
+          "command": "codexTerminal.reviewUncommitted",
+          "when": "scmProvider == git",
+          "group": "codexTerminal@1"
+        },
+        {
+          "command": "codexTerminal.reviewBase",
+          "when": "scmProvider == git",
+          "group": "codexTerminal@2"
+        }
+      ],
+      "scm/historyItem/context": [
+        {
+          "command": "codexTerminal.reviewCommit",
+          "when": "scmProvider == git && !listMultiSelection",
+          "group": "codexTerminal@1"
         }
       ],
       "view/item/context": [

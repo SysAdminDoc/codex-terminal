@@ -83,5 +83,8 @@
   "setting.transcript.includeToolCalls.description": "Incluir en la transcripción exportada los comandos que ejecutó Codex y los parches que aplicó. Cada bloque tiene un límite, porque una llamada apply_patch lleva el contenido completo de cada archivo que escribe.",
   "setting.transcript.includeToolOutput.description": "Incluir también lo que imprimieron esos comandos. Desactivado de forma predeterminada: la salida de las herramientas es la mayor parte de una sesión y rara vez es lo que se vuelve a leer.",
   "setting.history.maxSessions.description": "Número máximo de sesiones recientes de Codex mostradas en la barra lateral de historial.",
-  "command.checkAppServer.title": "Comprobar el app server de Codex"
+  "command.checkAppServer.title": "Comprobar el app server de Codex",
+  "command.reviewUncommitted.title": "Revisar cambios sin confirmar con Codex",
+  "command.reviewBase.title": "Revisar cambios contra la rama base…",
+  "command.reviewCommit.title": "Revisar este commit con Codex"
 }

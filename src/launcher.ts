@@ -358,6 +358,27 @@ export function buildLaunchPlan(req: LaunchRequest): LaunchPlan {
 /** Codex subcommand for each launch mode the extension exposes. */
 export type LaunchMode = 'new' | 'resumeLast' | 'resumePicker' | 'forkLast' | 'forkPicker';
 
+/** Arguments for Codex's non-interactive review command. */
+export function reviewArgs(
+  target: 'uncommitted' | { base: string } | { commit: string },
+): string[] {
+  if (target === 'uncommitted') {
+    return ['review', '--uncommitted'];
+  }
+  if ('base' in target) {
+    const base = target.base.trim();
+    if (!base) {
+      throw new Error('Codex review base is empty.');
+    }
+    return ['review', '--base', base];
+  }
+  const commit = target.commit.trim();
+  if (!commit) {
+    throw new Error('Codex review commit is empty.');
+  }
+  return ['review', '--commit', commit];
+}
+
 export function modeArgs(mode: LaunchMode): string[] {
   switch (mode) {
     case 'resumeLast':

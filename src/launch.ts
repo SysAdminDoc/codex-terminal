@@ -71,7 +71,13 @@ function remoteArgsFor(server: HostedAppServer | undefined): string[] {
   return server ? remoteArgs(server.port) : [];
 }
 
-export function readLaunchRequest(mode: LaunchMode, profile?: string, sessionId?: string): LaunchRequest {
+export function readLaunchRequest(
+  mode: LaunchMode,
+  profile?: string,
+  sessionId?: string,
+  additionalArgs: readonly string[] = [],
+  attachAppServer = true,
+): LaunchRequest {
   const cfg = config();
   const titleItems = cfg.get<string[]>('titleItems', [...DEFAULT_TITLE_ITEMS]);
   // Codex drops identifiers it does not recognise without complaining, so an unknown item
@@ -87,6 +93,7 @@ export function readLaunchRequest(mode: LaunchMode, profile?: string, sessionId?
     args: [
       ...modeArgs(mode),
       ...(sessionId ? [sessionId] : []),
+      ...additionalArgs,
       ...(profile ? profileArgs(profile) : []),
       ...cfg.get<string[]>('args', []),
       // Codex writes this title through OSC sequences. The activity item is a live
@@ -95,7 +102,7 @@ export function readLaunchRequest(mode: LaunchMode, profile?: string, sessionId?
       // Attach the TUI to the app-server this window is hosting, so its turns are reported
       // over the protocol instead of inferred from a rollout file. Absent unless the
       // experimental setting is on and the server actually came up.
-      ...remoteArgsFor(services().appServer),
+      ...remoteArgsFor(attachAppServer ? services().appServer : undefined),
       ...(services().notify?.launchArgs() ?? []),
     ],
     keepShellOpen: cfg.get<boolean>('keepShellOpen', true),
@@ -231,6 +238,12 @@ export interface LaunchOptions {
   sessionId?: string;
   /** Overrides the resolved workspace cwd, so a saved chat resumes where it was written. */
   cwd?: string;
+  /** Extra Codex arguments for commands such as `codex review`. */
+  additionalArgs?: readonly string[];
+  /** Set false for non-TUI subcommands that do not accept the app-server attachment flag. */
+  attachAppServer?: boolean;
+  /** Review commands must get their own terminal even when terminal reuse is enabled. */
+  reuseTerminal?: boolean;
   /**
    * Journal key for this launch, stamped into the terminal environment so a window reload
    * can find the conversation again. Absent for the contributed terminal profile, whose
@@ -251,7 +264,15 @@ export async function terminalOptions(
   label: string;
 }> {
   const { mode, profile, sessionId } = request;
-  const plan = buildLaunchPlan(readLaunchRequest(mode, profile, sessionId));
+  const plan = buildLaunchPlan(
+    readLaunchRequest(
+      mode,
+      profile,
+      sessionId,
+      request.additionalArgs,
+      request.attachAppServer !== false,
+    ),
+  );
   const cfg = config();
   const baseName = cfg.get<string>('terminalName', 'Codex');
   const cwd = request.cwd ?? (await resolveCwd());
@@ -340,10 +361,13 @@ export function liveOwnedTerminal(): vscode.Terminal | undefined {
 export async function launch(request: LaunchOptions): Promise<void> {
   try {
     await syncNotifyBridge();
-    await ensureAppServer();
+    if (request.attachAppServer !== false) {
+      await ensureAppServer();
+    }
     if (
       request.mode === 'new' &&
       !request.profile &&
+      request.reuseTerminal !== false &&
       config().get<boolean>('reuseTerminal', false)
     ) {
       const existing = liveOwnedTerminal();
@@ -353,7 +377,13 @@ export async function launch(request: LaunchOptions): Promise<void> {
       }
     }
 
-    const launchRequest = readLaunchRequest(request.mode, request.profile, request.sessionId);
+    const launchRequest = readLaunchRequest(
+      request.mode,
+      request.profile,
+      request.sessionId,
+      request.additionalArgs,
+      request.attachAppServer !== false,
+    );
     if (!preflightCodexCommand(launchRequest.command)) {
       return;
     }

@@ -98,7 +98,13 @@ The real Codex TUI, started in the workspace folder:
 - **Command Palette** — `Codex Terminal: New Session`, `Resume Last Session`,
   `Resume Session (picker)`, `Fork Last Session`, `Focus Codex Terminal`,
   `New Session with Profile…`, `Send File Reference to Codex`, `Ask Codex About Selection…`,
-  `Revert Workbench Settings`, `Check Codex App Server`, `Doctor`, `Show Log`.
+  `Review Uncommitted Changes with Codex`, `Review Changes Against Base Branch…`,
+  `Review This Commit with Codex`, `Revert Workbench Settings`, `Check Codex App Server`,
+  `Doctor`, `Show Log`.
+- **SCM review** — Git's Source Control title menu can launch `codex review --uncommitted` or
+  let you choose a base branch for `codex review --base <branch>`. The Source Control history
+  graph adds a commit action for `codex review --commit <sha>`. Each review opens in the
+  repository's root and uses the configured shell, arguments and profile plumbing.
 - **Right-click in the editor** — *Send File Reference to Codex* puts `@src/file.ts#L10-L20`
   on the Codex prompt without submitting it, so you can type the question after it.
   *Ask Codex About Selection…* takes the question in an input box and submits reference and

@@ -9,6 +9,7 @@ import {
   quoteCmd,
   quotePosix,
   quotePowerShell,
+  reviewArgs,
   resolveCommandPath,
   type LaunchRequest,
 } from '../launcher';
@@ -173,6 +174,24 @@ test('resume and fork map to real Codex subcommands', () => {
   assert.deepEqual(modeArgs('resumeLast'), ['resume', '--last']);
   assert.deepEqual(modeArgs('resumePicker'), ['resume']);
   assert.deepEqual(modeArgs('forkLast'), ['fork', '--last']);
+});
+
+test('review targets map to the non-interactive Codex review forms', () => {
+  assert.deepEqual(reviewArgs('uncommitted'), ['review', '--uncommitted']);
+  assert.deepEqual(reviewArgs({ base: 'main' }), ['review', '--base', 'main']);
+  assert.deepEqual(reviewArgs({ commit: 'abc1234' }), ['review', '--commit', 'abc1234']);
+  assert.throws(() => reviewArgs({ base: '  ' }), /review base is empty/);
+  assert.throws(() => reviewArgs({ commit: '' }), /review commit is empty/);
+});
+
+test('review arguments stay inside the existing shell quoting plan', () => {
+  const plan = buildLaunchPlan(req({ args: reviewArgs({ base: 'feature/review & me' }) }));
+  assert.deepEqual(plan.shellArgs, [
+    '-NoLogo',
+    '-NoExit',
+    '-Command',
+    "& 'codex' 'review' '--base' 'feature/review & me'",
+  ]);
 });
 
 test('mode args land ahead of the user args on the command line', () => {
