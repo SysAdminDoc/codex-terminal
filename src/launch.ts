@@ -284,7 +284,13 @@ export async function terminalOptions(
   }
   if (plan.shellPath) {
     options.shellPath = plan.shellPath;
-    options.shellArgs = plan.shellArgs;
+    // VS Code accepts a Windows-only string form that reaches cmd.exe verbatim. Passing the
+    // same command line as string[] lets node-pty quote the second element again, which changes
+    // cmd's outer-quote parsing and splits otherwise valid arguments containing spaces or `&`.
+    options.shellArgs =
+      plan.family === 'cmd' && process.platform === 'win32'
+        ? plan.shellArgs.join(' ')
+        : plan.shellArgs;
   }
   log().info(
     strings.logs.launch(

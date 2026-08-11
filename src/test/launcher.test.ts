@@ -95,6 +95,15 @@ test('cmd.exe refuses a path it cannot quote rather than emitting a broken line'
   assert.throws(() => quoteCmd('C:\\we"ird\\codex.cmd'), /cannot quote/);
 });
 
+test('cmd.exe arguments use an escaped quote pair for verbatim shell arguments', () => {
+  assert.equal(quoteCmd('a b&c;d'), '^"a b^&c;d^"');
+  assert.equal(quoteCmd('percent%PATH%'), '^"percent^%PATH^%^"');
+  assert.equal(
+    buildCommandLine('C:\\Program Files\\nodejs\\node.exe', ['a b&c;d'], 'cmd'),
+    '"C:\\Program Files\\nodejs\\node.exe" ^"a b^&c;d^"',
+  );
+});
+
 test('posix shells re-exec interactively so the tab survives Codex exiting', () => {
   const plan = buildLaunchPlan(req({ shell: 'bash', platform: 'linux' }));
   assert.equal(plan.family, 'posix');
@@ -237,11 +246,11 @@ test('a value with no metacharacters is quoted anyway, and is unchanged by it', 
 });
 
 test('cmd quotes everything it could otherwise execute', () => {
-  // `;` and `,` are argument delimiters in cmd rather than command separators; only these can
-  // start something running, and `()` was the one missing from the set.
+  // The caret-escaped quote pair is what survives the verbatim shellArgs path; a plain pair is
+  // what node-pty would create when it re-quotes a string[].
   for (const argument of ['amp&ersand', 'pipe|d', 'redirect>out', 'in<put', 'caret^x', 'paren(s)', 'a b']) {
     assert.ok(
-      buildCommandLine('codex', [argument], 'cmd').includes(`"${argument}"`),
+      buildCommandLine('codex', [argument], 'cmd').endsWith(quoteCmd(argument)),
       `${argument} was left bare`,
     );
   }

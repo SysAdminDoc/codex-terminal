@@ -24,6 +24,10 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- **cmd.exe launches now preserve hostile arguments.** Windows cmd profiles use the verbatim
+  shell-argument form and protect spaces, metacharacters and percent expansion, so values such
+  as `a b&c;d` reach Codex as one unchanged argument.
+
 - **Archive and Delete now report the CLI result.** A failed Codex lifecycle command no longer
   looks successful or refreshes the History view; failures offer the existing Show Log action,
   while successful operations confirm the session id and refresh once.

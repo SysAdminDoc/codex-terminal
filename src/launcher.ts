@@ -87,22 +87,31 @@ export function quotePosix(value: string): string {
  * `>`, `^` and grouping parentheses can start something executing, and `()` was missing here
  * while being present in the (now removed) PowerShell/POSIX predicate.
  *
- * Deliberately not extended to `%`, `!`, `,`, `;` or `=`: quoting more values changes how many
- * quotes `cmd /C` sees on the line, and it strips the outermost pair under rules that depend
- * on that count. Widening this set is a behaviour change that needs a real terminal to verify,
- * not a unit test — see the roadmap item.
+ * `;`, `,` and `=` are not command separators, but values containing them still use the same
+ * escaped argument form when they also contain spaces. `%` expands even inside a normal quoted
+ * argument, so it is escaped with a caret as well. The escaped quote pair is intentional: a
+ * plain `"..."` pair is what node-pty re-creates when it receives an argument array, while
+ * `^"...^"` survives as one argument when the complete command line is handed to cmd verbatim.
  */
-const CMD_METACHARACTERS = /[\s&|<>^()]/;
+const CMD_METACHARACTERS = /[\s&|<>^()%!,;=]/;
+const CMD_ESCAPABLE = /([&|<>^()%!])/g;
 
 /**
- * cmd.exe has no escape for `"` inside a quoted string, so a value containing one
- * is unquotable. Quote when we must, leave bare otherwise.
- *
- * The conditional is not a stylistic choice here, unlike the other two families: `cmd /c`
- * strips the outermost quotes of the whole command line under rules that depend on how many
- * quotes it sees, so quoting things that do not need it changes what cmd does with the rest.
+ * cmd.exe has no escape for `"` inside a quoted string, so a value containing one is unquotable.
+ * Values that need protection use a caret-escaped quote pair; that pair is removed by cmd while
+ * the inner carets protect metacharacters during its expansion pass.
  */
 export function quoteCmd(value: string): string {
+  if (value.includes('"')) {
+    throw new Error(`cmd.exe cannot quote a path containing a double quote: ${value}`);
+  }
+  return CMD_METACHARACTERS.test(value)
+    ? `^"${value.replace(CMD_ESCAPABLE, '^$1')}^"`
+    : value;
+}
+
+/** The executable is the first token, so it needs ordinary path quoting rather than an argv. */
+function quoteCmdCommand(value: string): string {
   if (value.includes('"')) {
     throw new Error(`cmd.exe cannot quote a path containing a double quote: ${value}`);
   }
@@ -127,7 +136,7 @@ export function buildCommandLine(command: string, args: string[], family: ShellF
     return [`& ${quotePowerShell(command)}`, ...args.map(quotePowerShell)].join(' ');
   }
   if (family === 'cmd') {
-    return [command, ...args].map(quoteCmd).join(' ');
+    return [quoteCmdCommand(command), ...args.map(quoteCmd)].join(' ');
   }
   return [command, ...args].map(quotePosix).join(' ');
 }

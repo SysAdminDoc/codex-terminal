@@ -69,6 +69,18 @@ async function openCodexTerminal(command: string, timeoutMs = 10_000): Promise<v
   }
 }
 
+async function waitForFile(filePath: string, timeoutMs = 10_000): Promise<string> {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    try {
+      return await readFile(filePath, 'utf8');
+    } catch {
+      await new Promise((resolve) => setTimeout(resolve, 50));
+    }
+  }
+  throw new Error(`timed out waiting for ${filePath}`);
+}
+
 /** Global scope only: it lands in the throwaway test user-data dir, never in the fixture. */
 async function withTabTitle(mode: string, body: () => Promise<void>): Promise<void> {
   const configuration = vscode.workspace.getConfiguration('codexTerminal');
@@ -166,6 +178,58 @@ suite('Codex Terminal hostile settings integration', () => {
       assert.ok(isOwned(terminal));
     } finally {
       terminal.dispose();
+    }
+  });
+
+  test('cmd.exe passes an argument containing spaces, ampersand and semicolon verbatim', async () => {
+    if (process.platform !== 'win32') {
+      return;
+    }
+
+    const directory = await mkdtemp(path.join(tmpdir(), 'codex-cmd-'));
+    const output = path.join(directory, 'argument.txt');
+    const settings = vscode.workspace.getConfiguration('codexTerminal');
+    const previous = {
+      command: settings.inspect<string>('command')?.workspaceValue,
+      shell: settings.inspect<string>('shell')?.workspaceValue,
+      args: settings.inspect<string[]>('args')?.workspaceValue,
+      keepShellOpen: settings.inspect<boolean>('keepShellOpen')?.workspaceValue,
+    };
+    const previousOutput = process.env.CODEX_ARG_OUTPUT;
+    process.env.CODEX_ARG_OUTPUT = output;
+    const script = "require('fs').writeFileSync(process.env.CODEX_ARG_OUTPUT, process.argv[1])";
+    const hostile = 'a b&c;d';
+    try {
+      await settings.update('command', process.execPath, vscode.ConfigurationTarget.Workspace);
+      await settings.update('shell', 'cmd', vscode.ConfigurationTarget.Workspace);
+      await settings.update(
+        'args',
+        ['-e', script, hostile],
+        vscode.ConfigurationTarget.Workspace,
+      );
+      await settings.update('keepShellOpen', false, vscode.ConfigurationTarget.Workspace);
+
+      const terminal = await openCodexTerminal('codexTerminal.new');
+      try {
+        assert.equal(await waitForFile(output), hostile);
+      } finally {
+        terminal.dispose();
+      }
+    } finally {
+      await settings.update('command', previous.command, vscode.ConfigurationTarget.Workspace);
+      await settings.update('shell', previous.shell, vscode.ConfigurationTarget.Workspace);
+      await settings.update('args', previous.args, vscode.ConfigurationTarget.Workspace);
+      await settings.update(
+        'keepShellOpen',
+        previous.keepShellOpen,
+        vscode.ConfigurationTarget.Workspace,
+      );
+      if (previousOutput === undefined) {
+        delete process.env.CODEX_ARG_OUTPUT;
+      } else {
+        process.env.CODEX_ARG_OUTPUT = previousOutput;
+      }
+      await rm(directory, { recursive: true, force: true });
     }
   });
 
