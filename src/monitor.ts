@@ -97,6 +97,8 @@ export interface SessionMonitorOptions {
   enabled?: () => boolean;
   /** `codexTerminal.journal.storeMessages`. False keeps conversation text out of the journal. */
   storeMessages?: () => boolean;
+  /** Clear notification hand-offs too: they can contain the same conversation payload. */
+  clearStoredNotifications?: () => Promise<void>;
 }
 
 let keyCounter = 0;
@@ -507,6 +509,11 @@ export class SessionMonitor implements vscode.Disposable {
    */
   async stripStoredMessages(): Promise<void> {
     this.journal = stripMessages(this.journal);
+    try {
+      await this.options.clearStoredNotifications?.();
+    } catch {
+      // Best effort: notification cleanup must never prevent journal redaction.
+    }
     try {
       const rewritten = await this.options.store.stripMessagesEverywhere();
       if (rewritten > 0) {

@@ -7,6 +7,11 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **Notification payloads are no longer persisted.** Turn-completion hand-offs now retain only
+  the workspace, timestamp and event type, sweep stale files on startup, and remove their hook
+  and queue when notifications are disabled. Turning off `journal.storeMessages` clears pending
+  notification hand-offs as well as journal messages.
+
 - **Publishing preparation.** Open VSX publishing now has a pinned `ovsx` tool and a
   credential-safe `publish:openvsx` script; the release documentation covers the Eclipse
   Publisher Agreement and the Microsoft Entra ID workload-federation path before the

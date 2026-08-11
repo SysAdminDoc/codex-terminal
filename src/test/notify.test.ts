@@ -1,6 +1,15 @@
 import assert from 'node:assert/strict';
 import { execFile } from 'node:child_process';
-import { mkdtemp, rm } from 'node:fs/promises';
+import {
+  access,
+  mkdir,
+  mkdtemp,
+  readdir,
+  readFile,
+  rm,
+  utimes,
+  writeFile,
+} from 'node:fs/promises';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import { promisify } from 'node:util';
@@ -10,6 +19,8 @@ import {
   buildNotifyConfigValue,
   buildNotifyHookScript,
   NotifyBridge,
+  NOTIFY_EVENT_MAX_AGE_MS,
+  notifyEventType,
   resolveNodeExecutable,
   type NotifyEvent,
 } from '../notify';
@@ -31,7 +42,7 @@ test('notify config is an invocation-scoped TOML override', () => {
   assert.throws(() => buildNotifyConfigValue("C:\\a'''b\\node.exe", 'C:\\hook.cjs'), /TOML/);
 });
 
-test('the generated hook writes a turn-ended event the bridge consumes', async () => {
+test('the generated hook stores only a bounded event type', async () => {
   const directory = await mkdtemp(path.join(os.tmpdir(), 'codex-terminal-notify-'));
   const events: NotifyEvent[] = [];
   const bridge = new NotifyBridge({
@@ -42,7 +53,12 @@ test('the generated hook writes a turn-ended event the bridge consumes', async (
   });
   try {
     await bridge.start();
-    await execFileAsync(process.execPath, [path.join(directory, 'notify-hook.cjs'), 'turn-ended'], {
+    const payload = JSON.stringify({
+      type: 'agent-turn-complete',
+      'last-assistant-message': 'SECRET ASSISTANT MESSAGE',
+      'input-messages': ['SECRET USER MESSAGE'],
+    });
+    await execFileAsync(process.execPath, [path.join(directory, 'notify-hook.cjs'), payload], {
       windowsHide: true,
     });
     const deadline = Date.now() + 2000;
@@ -51,8 +67,103 @@ test('the generated hook writes a turn-ended event the bridge consumes', async (
     }
     assert.equal(events.length, 1);
     assert.equal(events[0].workspace, 'codex-terminal');
-    assert.deepEqual(events[0].args, ['turn-ended']);
-    assert.match(buildNotifyHookScript(directory, 'codex-terminal'), /process\.argv\.slice\(2\)/);
+    assert.equal(events[0].eventType, 'agent-turn-complete');
+    const files = await readdir(path.join(directory, 'events'));
+    assert.deepEqual(files, []);
+    const hook = buildNotifyHookScript(directory, 'codex-terminal');
+    assert.doesNotMatch(hook, /process\.argv\.slice\(2\)/);
+    assert.doesNotMatch(hook, /last-assistant-message/);
+  } finally {
+    bridge.dispose();
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test('the hook file itself contains no Codex conversation fields', async () => {
+  const directory = await mkdtemp(path.join(os.tmpdir(), 'codex-terminal-notify-raw-'));
+  const inbox = path.join(directory, 'events');
+  const hook = path.join(directory, 'notify-hook.cjs');
+  try {
+    await mkdir(inbox, { recursive: true });
+    await writeFile(hook, buildNotifyHookScript(inbox, 'codex-terminal'), 'utf8');
+    await execFileAsync(process.execPath, [
+      hook,
+      JSON.stringify({
+        type: 'agent-turn-complete',
+        'last-assistant-message': 'SECRET ASSISTANT MESSAGE',
+        'input-messages': ['SECRET USER MESSAGE'],
+      }),
+    ], { windowsHide: true });
+    const [name] = await readdir(inbox);
+    const contents = await readFile(path.join(inbox, name), 'utf8');
+    assert.deepEqual(JSON.parse(contents), {
+      workspace: 'codex-terminal',
+      eventType: 'agent-turn-complete',
+      timestamp: JSON.parse(contents).timestamp,
+    });
+    assert.doesNotMatch(contents, /SECRET|last-assistant-message|input-messages/);
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test('event type parsing never falls back to the notification payload', () => {
+  assert.equal(
+    notifyEventType([
+      JSON.stringify({ type: 'agent-turn-complete', 'last-assistant-message': 'SECRET' }),
+    ]),
+    'agent-turn-complete',
+  );
+  assert.equal(notifyEventType(['SECRET ASSISTANT MESSAGE']), 'unknown');
+  assert.equal(notifyEventType([JSON.stringify({ type: 'not safe because spaces' })]), 'unknown');
+});
+
+test('startup consumes recent pending events and drops stale files', async () => {
+  const directory = await mkdtemp(path.join(os.tmpdir(), 'codex-terminal-notify-start-'));
+  const eventsDirectory = path.join(directory, 'events');
+  const received: NotifyEvent[] = [];
+  const bridge = new NotifyBridge({
+    directory,
+    executable: process.execPath,
+    workspaceName: 'codex-terminal',
+    onTurnEnded: (event) => received.push(event),
+  });
+  try {
+    await mkdir(eventsDirectory, { recursive: true });
+    await writeFile(
+      path.join(eventsDirectory, 'recent.json'),
+      JSON.stringify({ workspace: 'codex-terminal', timestamp: new Date().toISOString(), eventType: 'agent-turn-complete' }),
+      'utf8',
+    );
+    await writeFile(path.join(eventsDirectory, 'stale.json'), 'SECRET OLD PAYLOAD', 'utf8');
+    const old = new Date(Date.now() - NOTIFY_EVENT_MAX_AGE_MS - 1000);
+    await utimes(path.join(eventsDirectory, 'stale.json'), old, old);
+
+    await bridge.start();
+    assert.deepEqual(received.map((event) => event.eventType), ['agent-turn-complete']);
+    assert.deepEqual(await readdir(eventsDirectory), []);
+  } finally {
+    bridge.dispose();
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test('dispose removes the hook and pending event files', async () => {
+  const directory = await mkdtemp(path.join(os.tmpdir(), 'codex-terminal-notify-dispose-'));
+  const bridge = new NotifyBridge({
+    directory,
+    executable: process.execPath,
+    workspaceName: 'codex-terminal',
+    onTurnEnded: () => undefined,
+  });
+  try {
+    await bridge.start();
+    await import('node:fs/promises').then(({ writeFile }) =>
+      writeFile(path.join(directory, 'events', 'pending.json'), 'SECRET', 'utf8'),
+    );
+    bridge.dispose();
+    await assert.rejects(access(path.join(directory, 'notify-hook.cjs')));
+    await assert.rejects(access(path.join(directory, 'events')));
   } finally {
     bridge.dispose();
     await rm(directory, { recursive: true, force: true });

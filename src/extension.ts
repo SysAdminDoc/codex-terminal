@@ -40,6 +40,7 @@ import {
 import { migrateSettings, type MigrationTarget } from './migrate';
 import { registerMcpServerProvider, type McpProviderRegistration } from './mcpProvider';
 import { SessionMonitor } from './monitor';
+import { clearNotifyEvents } from './notify';
 import { DEFAULT_STALL_SECONDS, configurePresentation } from './present';
 import {
   adoptSurvivingTerminals,
@@ -191,6 +192,8 @@ export async function activate(context: vscode.ExtensionContext): Promise<CodexT
     stallSeconds: () => config().get<number>('stallSeconds', DEFAULT_STALL_SECONDS),
     enabled: () => config().get<boolean>('monitor.enabled', true),
     storeMessages: () => config().get<boolean>('journal.storeMessages', true),
+    clearStoredNotifications: () =>
+      clearNotifyEvents(path.join(context.globalStorageUri.fsPath, 'notify')),
   });
   const registry = new TerminalRegistry();
   const history = new HistoryViewProvider(

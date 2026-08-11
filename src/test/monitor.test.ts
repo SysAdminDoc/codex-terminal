@@ -406,12 +406,16 @@ test('monitoring can be turned off, and then nothing reads a rollout', async () 
 test('the journal can be kept free of conversation text', async () => {
   const directory = await mkdtemp(path.join(tmpdir(), 'codex-monitor-quiet-'));
   const store = new JournalStore(path.join(directory, 'journal'), 'w');
+  let clearedNotifications = 0;
   const monitor = new SessionMonitor({
     store,
     windowId: 'w',
     codexHome: () => directory,
     log,
     storeMessages: () => false,
+    clearStoredNotifications: async () => {
+      clearedNotifications += 1;
+    },
   });
   try {
     const rolloutPath = path.join(directory, 'rollout.jsonl');
@@ -443,6 +447,8 @@ test('the journal can be kept free of conversation text', async () => {
     assert.ok(journal, 'the journal is still written — recovery needs the identifiers');
     assert.equal(journal.sessions[0].lastMessage, undefined);
     assert.equal(journal.sessions[0].sessionId, 'session-abc');
+    await monitor.stripStoredMessages();
+    assert.equal(clearedNotifications, 1);
   } finally {
     monitor.dispose();
     await rm(directory, { recursive: true, force: true, maxRetries: 5, retryDelay: 20 });

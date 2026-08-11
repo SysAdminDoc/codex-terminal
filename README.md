@@ -142,9 +142,11 @@ scan remains the source of truth. It **writes** a small crash-recovery journal
 into its own extension storage — which sessions a window had open, their ids and timestamps,
 and by default Codex's closing message for each turn so an interrupted session is recognisable.
 Both are switchable: see `codexTerminal.monitor.enabled` and
-`codexTerminal.journal.storeMessages`. It also changes three workbench settings, which it
-announces and can revert. Exported transcripts redact recognised bearer tokens and API-key
-shapes by default and put the replacement count in the Markdown header; the machine-scoped
+`codexTerminal.journal.storeMessages`. When turn-completion notifications are enabled, a
+short-lived hand-off file contains only the workspace, timestamp and event type — never
+Codex's notification payload — and the same `journal.storeMessages` opt-out removes pending
+hand-offs. It also changes three workbench settings, which it announces and can revert.
+Exported transcripts redact recognised bearer tokens and API-key shapes by default and put the replacement count in the Markdown header; the machine-scoped
 `codexTerminal.transcript.redactSecrets` setting can opt out with an explicit warning.
 
 ## Settings
@@ -166,7 +168,7 @@ shapes by default and put the replacement count in the Markdown header; the mach
 | `codexTerminal.showEditorTitleButton` | `true` | |
 | `codexTerminal.showContextInStatusBar` | `true` | Append the highest context usage across live sessions to the status bar — the session nearest its limit is the one about to compact. |
 | `codexTerminal.stallSeconds` | `45` | Seconds of silence after which a working session is reported as producing no output. Codex writes nothing both while awaiting an approval and while stuck, and the two are indistinguishable from its session file. |
-| `codexTerminal.notifyOnCompletion` | `false` | Opt in to turn-completion notifications without modifying `~/.codex/config.toml`. |
+| `codexTerminal.notifyOnCompletion` | `false` | Opt in to turn-completion notifications without modifying `~/.codex/config.toml`; the temporary hand-off stores only event metadata. |
 | `codexTerminal.tabTitle` | `live` | `live` leaves the tab name unset so Codex's own title — including its activity indicator — drives the tab. `static` shows a fixed `project — Codex` label and **cannot animate**; see below. |
 | `codexTerminal.titleItems` | `["activity", "project-name", "app-name"]` | Codex title items. The default gives the live activity indicator, the project name, and the constant `Codex` marker used to recognise our tabs after a window reload. |
 | `codexTerminal.history.maxSessions` | `200` | Maximum recent sessions shown in the History view. |
