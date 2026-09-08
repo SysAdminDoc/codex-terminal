@@ -9,11 +9,11 @@ import {
 } from '../naming';
 
 test('project names use the workspace folder or cwd leaf', () => {
-  assert.equal(projectName({ name: 'Codex', cwd: 'C:\\Users\\--\\repos\\codex-terminal', mode: 'new' }), 'codex-terminal');
+  assert.equal(projectName({ name: 'Codex', cwd: 'C:\\Users\\dev\\repos\\codex-terminal', mode: 'new' }), 'codex-terminal');
   assert.equal(
     projectName({
       name: 'Codex',
-      cwd: 'C:\\Users\\--\\repos\\other',
+      cwd: 'C:\\Users\\dev\\repos\\other',
       workspaceFolder: 'other-workspace',
       mode: 'new',
     }),
@@ -25,7 +25,7 @@ test('terminal fallback names put the project before Codex', () => {
   assert.equal(
     renderTerminalName(DEFAULT_TERMINAL_NAME_TEMPLATE, {
       name: 'Codex',
-      cwd: 'C:\\Users\\--\\repos\\codex-terminal',
+      cwd: 'C:\\Users\\dev\\repos\\codex-terminal',
       mode: 'new',
     }),
     'codex-terminal — Codex',
@@ -33,7 +33,7 @@ test('terminal fallback names put the project before Codex', () => {
   assert.equal(
     renderTerminalName(DEFAULT_TERMINAL_NAME_TEMPLATE, {
       name: 'Codex',
-      cwd: 'C:\\Users\\--\\repos\\codex-terminal',
+      cwd: 'C:\\Users\\dev\\repos\\codex-terminal',
       mode: 'resumeLast',
       sessionId: '1234567890abcdef',
     }),

@@ -105,7 +105,7 @@ test('session discovery extracts the first real prompt and groups by project', a
           payload: {
             id: 'conversation',
             timestamp: '2026-08-09T12:00:00.000Z',
-            cwd: 'C:\\Users\\--\\repos\\codex-terminal',
+            cwd: 'C:\\Users\\dev\\repos\\codex-terminal',
           },
         }),
         JSON.stringify({
